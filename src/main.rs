@@ -56,6 +56,9 @@ async fn main() -> anyhow::Result<()> {
         persona_text,
         org_text,
         config.agent.admin_jid.clone(),
+        config.app.timezone.clone(),
+        config.app.timezone_offset_hours,
+        config.app.locale.clone(),
     ));
 
     // 3. Instantiate Use Cases (Core Application Logic)
@@ -106,6 +109,8 @@ async fn main() -> anyhow::Result<()> {
         model: config.agent.model.clone(),
         whatsmeow_url: config.whatsmeow.base_url.clone(),
         setup_code,
+        timezone: config.app.timezone.clone(),
+        locale: config.app.locale.clone(),
     });
     let app = create_router(state);
 

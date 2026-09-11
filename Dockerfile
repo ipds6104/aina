@@ -57,6 +57,10 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 # Default environment configuration
 ENV SERVER_HOST=0.0.0.0
 ENV SERVER_PORT=8090
+ENV TZ=Asia/Jakarta
+ENV AINA_TIMEZONE=Asia/Jakarta
+ENV AINA_LOCALE=id-ID
+ENV AINA_TIMEZONE_OFFSET=7
 ENV AGENT_BINARY_PATH=/usr/local/bin/agy
 ENV AGENT_WORKSPACE=/app/workspace
 ENV DATABASE_PATH=/app/data/aina.db

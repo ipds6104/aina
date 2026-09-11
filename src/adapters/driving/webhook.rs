@@ -23,6 +23,8 @@ pub struct WebhookServerState {
     pub model: String,
     pub whatsmeow_url: String,
     pub setup_code: String,
+    pub timezone: String,
+    pub locale: String,
 }
 
 pub fn create_router(state: Arc<WebhookServerState>) -> Router {
@@ -49,6 +51,8 @@ struct ApiStatusResponse {
     pub bot_jid: String,
     pub model: String,
     pub whatsmeow_url: String,
+    pub timezone: String,
+    pub locale: String,
 }
 
 async fn api_status_handler(
@@ -61,6 +65,8 @@ async fn api_status_handler(
         bot_jid: state.bot_jid.clone(),
         model: state.model.clone(),
         whatsmeow_url: state.whatsmeow_url.clone(),
+        timezone: state.timezone.clone(),
+        locale: state.locale.clone(),
     })
 }
 
@@ -507,6 +513,8 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
                     <div class="info-item"><span class="label">WhatsApp JID</span><span class="val">{jid}</span></div>
                     <div class="info-item"><span class="label">Model AI</span><span class="val">{model}</span></div>
                     <div class="info-item"><span class="label">Whatsmeow</span><span class="val">{url}</span></div>
+                    <div class="info-item"><span class="label">Zona Waktu</span><span class="val">{timezone}</span></div>
+                    <div class="info-item"><span class="label">Locale</span><span class="val">{locale}</span></div>
                 </div>
                 <div class="helper-box">
                     <strong>Webhook Endpoint:</strong>
@@ -586,6 +594,8 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
             jid = state.bot_jid,
             model = state.model,
             url = state.whatsmeow_url,
+            timezone = state.timezone,
+            locale = state.locale,
         )
     } else {
         r#"

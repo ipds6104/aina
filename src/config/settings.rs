@@ -5,11 +5,45 @@ use std::path::Path;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct AppConfig {
+    #[serde(default)]
+    pub app: SystemConfig,
     pub server: ServerConfig,
     pub whatsmeow: WhatsmeowConfig,
     pub agent: AgentConfig,
     pub scheduler: SchedulerConfig,
     pub database: DatabaseConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SystemConfig {
+    #[serde(default = "default_timezone")]
+    pub timezone: String,
+    #[serde(default = "default_timezone_offset")]
+    pub timezone_offset_hours: i32,
+    #[serde(default = "default_locale")]
+    pub locale: String,
+}
+
+fn default_timezone() -> String {
+    "Asia/Jakarta".to_string()
+}
+
+fn default_timezone_offset() -> i32 {
+    7 // WIB (UTC+7)
+}
+
+fn default_locale() -> String {
+    "id-ID".to_string()
+}
+
+impl Default for SystemConfig {
+    fn default() -> Self {
+        Self {
+            timezone: default_timezone(),
+            timezone_offset_hours: default_timezone_offset(),
+            locale: default_locale(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -108,6 +142,7 @@ fn default_db_path() -> String {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
+            app: SystemConfig::default(),
             server: ServerConfig {
                 host: "0.0.0.0".to_string(),
                 port: 8090,
@@ -222,6 +257,23 @@ impl AppConfig {
         // Database overrides
         if let Ok(val) = env::var("DATABASE_PATH") {
             self.database.path = val;
+        }
+
+        // App / Locale / Timezone overrides (WIB default)
+        if let Ok(val) = env::var("AINA_TIMEZONE").or_else(|_| env::var("TZ")) {
+            if !val.trim().is_empty() {
+                self.app.timezone = val;
+            }
+        }
+        if let Ok(val) = env::var("AINA_TIMEZONE_OFFSET").or_else(|_| env::var("TIMEZONE_OFFSET")) {
+            if let Ok(offset) = val.parse::<i32>() {
+                self.app.timezone_offset_hours = offset;
+            }
+        }
+        if let Ok(val) = env::var("AINA_LOCALE").or_else(|_| env::var("LANG")).or_else(|_| env::var("LC_ALL")) {
+            if !val.trim().is_empty() {
+                self.app.locale = val;
+            }
         }
     }
 
