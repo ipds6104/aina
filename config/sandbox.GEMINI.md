@@ -12,6 +12,12 @@
 2. **Perlindungan Berkas Sistem & Kredensial**:
    - DILARANG KERAS membaca, memodifikasi, atau menghapus berkas di luar workspace (khususnya `/app/data/`, `/app/config/`, `/root/.gemini/`, atau berkas konfigurasi sistem).
    - Jangan pernah menuliskan token autentikasi, API Key, atau password ke dalam skrip secara *hardcoded*. Baca selalu melalui *environment variables*.
+3. **Larangan Eksekusi Terminal Interaktif (Non-Interactive Headless Environment)**:
+   - Container ini berjalan di lingkungan server tanpa TTY atau web browser GUI interaktif (*headless container*).
+   - **DILARANG KERAS** mengeksekusi perintah terminal yang memblokir stdin atau membuka browser secara interaktif (seperti `gh auth login` tanpa `--with-token`, `gh auth login --web`, `passwd`, `apt` tanpa `-y`, dsb.). Perintah interaktif seperti ini akan **terkunci (*hang/blocked*) hingga timeout 300+ detik**.
+   - Untuk operasi GitHub CLI (`gh`), autentikasi HANYA boleh dilakukan secara non-interaktif:
+     `echo "$TOKEN" | gh auth login --with-token` atau menggunakan environment variable `GH_TOKEN` / `GITHUB_TOKEN`.
+   - Jika rekan kerja meminta login GitHub / OAuth di WhatsApp, jelaskan bahwa server berjalan secara headless dan pandu mereka untuk membuat Personal Access Token (PAT) atau menambahkan `GH_TOKEN` di environment `.env` Coolify/server.
 
 ---
 

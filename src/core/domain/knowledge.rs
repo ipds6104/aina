@@ -822,6 +822,37 @@ __pycache__/
         Ok(text.trim().to_string())
     }
 
+    /// Non-interactive GitHub CLI login via Personal Access Token (PAT)
+    pub fn login_github_token(token: &str) -> anyhow::Result<String> {
+        let trimmed = token.trim();
+        if trimmed.is_empty() {
+            anyhow::bail!("GitHub Personal Access Token tidak boleh kosong.");
+        }
+        let mut child = std::process::Command::new("gh")
+            .args(["auth", "login", "--with-token"])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()?;
+
+        if let Some(mut stdin) = child.stdin.take() {
+            use std::io::Write;
+            stdin.write_all(trimmed.as_bytes())?;
+            stdin.flush()?;
+        }
+
+        let output = child.wait_with_output()?;
+        let res = format!(
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        if !output.status.success() {
+            anyhow::bail!("Gagal login GitHub CLI: {}", res.trim());
+        }
+        Ok("Berhasil login GitHub CLI menggunakan Personal Access Token!".to_string())
+    }
+
     /// Create a remote GitHub repository directly using GitHub CLI (gh)
     pub fn create_github_repo<P: AsRef<Path>>(
         workspace_dir: P,

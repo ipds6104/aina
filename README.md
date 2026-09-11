@@ -274,8 +274,9 @@ aina sync
 aina link https://github.com/ipds6104/knowledge-base.git
 # atau: aina workspace link https://github.com/ipds6104/knowledge-base.git --workspace default
 
-# 10. Buat Repositori GitHub Baru Seketika via GitHub CLI (`gh`)
+# 10. Manajemen GitHub CLI (`gh`) & Autentikasi Non-Interaktif
 aina workspace gh-status
+aina gh-login ghp_xxxxxxxxxxxxxxxxxxxx
 aina workspace gh-create knowledge-base-ipds
 aina workspace gh-create knowledge-base-public --public
 

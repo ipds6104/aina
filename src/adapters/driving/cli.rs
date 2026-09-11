@@ -64,6 +64,8 @@ SUBCOMMANDS:
 
     workspace gh-status       Periksa status autentikasi GitHub CLI (`gh`)
 
+    workspace gh-login <pat>  Login ke GitHub CLI secara non-interaktif via Personal Access Token
+
     workspace gh-create <n>   Buat repositori GitHub baru secara instan via `gh`
                               Options:
                                 --public                Buat repositori publik (default: private)
@@ -74,6 +76,8 @@ SUBCOMMANDS:
     sync                      Alias cepat untuk `workspace sync`
 
     link <git-url>            Alias cepat untuk `workspace link`
+
+    gh-login <pat>            Alias cepat untuk `workspace gh-login`
 
     help, --help, -h          Tampilkan panduan ini
 "#
@@ -98,6 +102,7 @@ SUBCOMMANDS:
             "clone" => Self::handle_workspace_clone(&args[2..]),
             "sync" => Self::handle_workspace_sync(&args[2..]),
             "link" => Self::handle_workspace_link(&args[2..]),
+            "gh-login" => Self::handle_gh_login(&args[2..]),
             "audit" => Self::handle_audit(&args[2..]),
             _ => {
                 eprintln!("Subcommand tidak dikenal: `{}`. Ketik `aina help`.", cmd);
@@ -476,6 +481,7 @@ SUBCOMMANDS:
             "sync" => Self::handle_workspace_sync(&args[1..]),
             "link" => Self::handle_workspace_link(&args[1..]),
             "gh-status" => Self::handle_gh_status(),
+            "gh-login" | "login" => Self::handle_gh_login(&args[1..]),
             "gh-create" => Self::handle_gh_create(&args[1..]),
             _ => {
                 eprintln!("Subcommand workspace tidak dikenal: `{}`", sub);
@@ -604,6 +610,19 @@ SUBCOMMANDS:
                 std::process::exit(1);
             }
         }
+        Ok(())
+    }
+
+    fn handle_gh_login(args: &[String]) -> anyhow::Result<()> {
+        if args.is_empty() {
+            eprintln!("Error: Personal Access Token (PAT) wajib disertakan.");
+            eprintln!("Contoh: aina gh-login ghp_xxxxxxxxxxxx");
+            std::process::exit(1);
+        }
+        let token = &args[0];
+        println!("🐙 Masuk ke GitHub CLI menggunakan Personal Access Token...");
+        let msg = KnowledgeEngine::login_github_token(token)?;
+        println!("✅ {}", msg);
         Ok(())
     }
 }
