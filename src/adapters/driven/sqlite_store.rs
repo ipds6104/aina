@@ -155,3 +155,18 @@ impl SessionStorePort for SqliteSessionStore {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_fts5_support() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute("CREATE VIRTUAL TABLE test_fts USING fts5(content);", []).unwrap();
+        conn.execute("INSERT INTO test_fts (content) VALUES ('halo dunia');", []).unwrap();
+        let mut stmt = conn.prepare("SELECT content FROM test_fts WHERE test_fts MATCH 'dunia'").unwrap();
+        let res: String = stmt.query_row([], |r| r.get(0)).unwrap();
+        assert_eq!(res, "halo dunia");
+    }
+}

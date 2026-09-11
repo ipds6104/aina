@@ -199,7 +199,43 @@ workspaces/<nama_workspace>/
     └── workspace_manager.py     # Utilitas manajemen workspace, kegiatan, & grooming
 ```
 
-### Perintah Manajemen Workspace, Kegiatan, & Jadwal:
+## ⚡ Unified Native Rust CLI (`aina`)
+
+Selain berfungsi sebagai HTTP Webhook server daemon, biner utama `aina` juga menyediakan antarmuka CLI (*Command-Line Interface*) deterministik berkinerja tinggi (<3ms, 0 overhead runtime Python, 0 kuota token LLM). Seluruh mesin ini terintegrasi secara **in-process** di dalam satu biner mandiri (*single self-contained binary*):
+
+```bash
+# 1. Menjalankan daemon server Aina (Default)
+aina
+# atau: aina server / aina daemon
+
+# 2. Pencarian Arsip Chat Super Cepat (SQLite FTS5 BM25 Ranking, <1ms)
+aina archive search "akreditasi" --workspace default --limit 5
+aina archive search "kurikulum" --workspace default --json
+
+# 3. Statistik Arsip Chat di Seluruh Workspace
+aina archive stats --workspace default
+
+# 4. Validasi Kerapian Basis Pengetahuan (Linter & Auto-Heal)
+aina kb lint --workspace default
+aina kb lint --workspace default --auto-heal
+
+# 5. Kompilasi Ulang Katalog `knowledge/index.md` Deterministik
+aina kb groom --workspace default
+
+# 6. Ringkasan Jadwal & Tenggat Waktu (Deadlines)
+aina kb schedule --workspace default
+
+# 7. Audit Trail Jejak Eksekusi Antigravity CLI
+aina audit --limit 10
+aina audit --query "git" --errors-only
+```
+
+> [!TIP]
+> **In-Process Scheduler**: Background scheduler Aina (`ScheduledTickUseCase`) secara otomatis menjalankan pemindaian kerapian dan *auto-healing* basis pengetahuan secara internal di memori setiap 1 jam sekali tanpa perlu melakukan *forking child process*.
+
+---
+
+### Perintah Alternatif Skrip Python (Opsional / Scripting):
 - **Lihat Seluruh Workspace**:
   ```bash
   python3 scripts/workspace_manager.py list

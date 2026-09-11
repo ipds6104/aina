@@ -14,6 +14,12 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // Check if CLI subcommands are requested (e.g. `aina archive ...`, `aina kb ...`, `aina audit ...`)
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() > 1 && args[1] != "server" && args[1] != "daemon" {
+        return adapters::driving::CliDispatcher::run(args);
+    }
+
     // Initialize structured logging
     tracing_subscriber::registry()
         .with(
@@ -77,6 +83,7 @@ async fn main() -> anyhow::Result<()> {
     let scheduled_tick_usecase = Arc::new(ScheduledTickUseCase::new(
         Arc::clone(&session_store) as _,
         Arc::clone(&whatsapp) as _,
+        Some(std::path::PathBuf::from(&config.agent.workspace_dir)),
     ));
 
     // 4. Start Scheduler if enabled (Driving Adapter)
