@@ -59,6 +59,8 @@ async fn main() -> anyhow::Result<()> {
         config.app.timezone.clone(),
         config.app.timezone_offset_hours,
         config.app.locale.clone(),
+        config.whatsmeow.base_url.clone(),
+        config.whatsmeow.bot_jid.clone(),
     ));
 
     // 3. Instantiate Use Cases (Core Application Logic)

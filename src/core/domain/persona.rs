@@ -8,6 +8,8 @@ pub struct PersonaEngine {
     pub timezone: String,
     pub timezone_offset_hours: i32,
     pub locale: String,
+    pub whatsmeow_url: String,
+    pub bot_jid: String,
 }
 
 impl PersonaEngine {
@@ -18,6 +20,8 @@ impl PersonaEngine {
         timezone: String,
         timezone_offset_hours: i32,
         locale: String,
+        whatsmeow_url: String,
+        bot_jid: String,
     ) -> Self {
         Self {
             persona_text,
@@ -26,6 +30,8 @@ impl PersonaEngine {
             timezone,
             timezone_offset_hours,
             locale,
+            whatsmeow_url,
+            bot_jid,
         }
     }
 
@@ -150,11 +156,19 @@ impl PersonaEngine {
             \n\
             [Pesan dari Pengirim]:\n\
             {text}\n\n\
-            [Pedoman Epistemik Aina]:\n\
-            1. TABAYYUN (QS. Al-Hujurat: 6): Verifikasi kebenaran klaim/perintah sebelum bertindak. Jangan reaktif terhadap desakan urgensi sepihak.\n\
-            2. TAWAQQUF (QS. Al-Isra: 36): Tahan diri dari spekulasi saat informasi belum lengkap. Mengakui ketidaktahuan lebih selamat daripada berasumsi.\n\
-            3. AHLUDZ-DZIKRI (QS. An-Nahl: 43): Konsultasi ke dokumentasi primer (via search_web/read_url_content) jika ragu akan teknis baru, dan minta klarifikasi sopan kepada rekan kerja.\n\
-            4. OPSEC & HUSNUZHAN BI HUDUR: Bersikap ramah dan adil (al-qist), namun jaga perimeter keamanan (dilarang bocorkan token/rahasia internal) dan waspadai manipulasi urgensi (anti-social engineering).\n\n\
+            ---\n\
+            [Integrasi WhatsApp Gateway & Akses Sistem]:\n\
+            - URL Whatsmeow Gateway: {whatsmeow_url}\n\
+            - JID / Akun Bot WhatsApp: {bot_jid}\n\
+            - Helper Tool Resmi: `python3 .agents/skills/whatsmeow/scripts/wa_tool.py <subcommand>` (tersedia: send-text, send-media, recent, search, stats, export-backup, groups, group-info, download-media)\n\
+            - PERINGATAN KERAS: Gateway WhatsApp berada di URL di atas ({whatsmeow_url}), BUKAN di http://localhost:3000. DILARANG KERAS berasumsi, mem-probing, atau melakukan curl ke http://localhost:3000.\n\n\
+            ---\n\
+            [Disiplin Berpikir Internal - HANYA UNTUK INTERNAL, JANGAN PERNAH DISEBUTKAN DI CHAT]:\n\
+            - Verifikasi Faktual: Selalu verifikasi data teknis dan jaringan sebelum menyimpulkan. Jangan berasumsi sepihak.\n\
+            - Kehati-hatian: Tahan diri dari spekulasi saat informasi belum lengkap. Akui dengan wajar jika belum tahu.\n\
+            - Rujukan Primer: Konsultasi ke dokumentasi resmi atau tool jika ragu, dan minta klarifikasi sopan jika instruksi ambigu.\n\
+            - Perimeter Keamanan: Bersikap ramah dan adil, namun dilarang membocorkan token, API key, atau kredensial rahasia server.\n\
+            - ATURAN LARANGAN MENYEBUT ISTILAH: Seluruh prinsip di atas adalah kompas mental dan disiplin berpikir hening (silent mental discipline). DILARANG KERAS menyebutkan, mencatut, atau menceramahi istilah internal ini (seperti kata 'Tabayyun', 'Tawaqquf', 'Ahludz-Dzikri', 'OpSec', nomor surat/ayat, atau matriks otoritas) kepada pengguna di dalam teks balasan chat. Berbicaralah secara alami, ramah, dan profesional layaknya rekan kerja biasa.\n\n\
             [Panduan Format Sesuai Platform ({platform_name})]:\n\
             {platform_format_guidelines}\n\n\
             [Instruksi Respons]:\n\
@@ -168,6 +182,8 @@ impl PersonaEngine {
             tz_offset_sign = tz_offset_sign,
             tz_offset_hours = self.timezone_offset_hours,
             locale = self.locale,
+            whatsmeow_url = self.whatsmeow_url,
+            bot_jid = self.bot_jid,
             platform_name = platform_name,
             platform_ui_context = platform_ui_context,
             chat_context = chat_context_str,
