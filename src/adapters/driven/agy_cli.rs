@@ -121,6 +121,44 @@ impl AntigravityCliAdapter {
         let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
         PathBuf::from(home).join(".gemini/antigravity-cli/antigravity-oauth-token")
     }
+
+    /// Intelligently resolves the Antigravity CLI binary across Linux, Termux, Docker, and macOS
+    pub fn resolve_binary(&self) -> PathBuf {
+        // 1. If explicit binary path exists and is an executable file
+        if self.binary_path.exists() && self.binary_path.is_file() {
+            return self.binary_path.clone();
+        }
+
+        // 2. Check AGENT_BINARY_PATH or AGY_BINARY_PATH environment variables
+        if let Ok(env_path) = std::env::var("AGENT_BINARY_PATH").or_else(|_| std::env::var("AGY_BINARY_PATH")) {
+            let p = PathBuf::from(env_path);
+            if p.exists() && p.is_file() {
+                return p;
+            }
+        }
+
+        // 3. Search standard Antigravity CLI installation paths
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+        let candidates = [
+            PathBuf::from("/usr/local/bin/agy"),
+            PathBuf::from("/root/.local/bin/agy"),
+            PathBuf::from(&home).join(".local/bin/agy"),
+            PathBuf::from("/data/data/com.termux/files/usr/bin/agy"),
+        ];
+
+        for cand in &candidates {
+            if cand.exists() && cand.is_file() {
+                return cand.clone();
+            }
+        }
+
+        // 4. Fallback to system PATH lookup
+        if let Some(file_name) = self.binary_path.file_name() {
+            PathBuf::from(file_name)
+        } else {
+            PathBuf::from("agy")
+        }
+    }
 }
 
 #[async_trait]
@@ -136,7 +174,8 @@ impl AgentEnginePort for AntigravityCliAdapter {
             _ => self.model.read().await.clone(),
         };
 
-        let mut cmd = Command::new(&self.binary_path);
+        let bin_path = self.resolve_binary();
+        let mut cmd = Command::new(&bin_path);
         
         // Ensure workspace directory exists
         if !self.workspace_dir.exists() {
@@ -159,7 +198,7 @@ impl AgentEnginePort for AntigravityCliAdapter {
 
         debug!(
             "Executing Antigravity CLI: {:?} (conv: {:?}, model: {})",
-            self.binary_path, conversation_id, active_model
+            bin_path, conversation_id, active_model
         );
 
         // Run with timeout

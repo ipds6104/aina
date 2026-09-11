@@ -74,6 +74,7 @@ fn default_presence_endpoint() -> String {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct AgentConfig {
+    #[serde(default = "default_binary_path")]
     pub binary_path: String,
     #[serde(default = "default_model")]
     pub model: String,
@@ -87,6 +88,10 @@ pub struct AgentConfig {
     pub organization_file: String,
     #[serde(default = "default_admin_jid")]
     pub admin_jid: String,
+}
+
+fn default_binary_path() -> String {
+    "agy".to_string()
 }
 
 fn default_model() -> String {
@@ -156,7 +161,7 @@ impl Default for AppConfig {
                 presence_endpoint: default_presence_endpoint(),
             },
             agent: AgentConfig {
-                binary_path: "/home/ihza/.local/bin/agy".to_string(),
+                binary_path: default_binary_path(),
                 model: default_model(),
                 workspace_dir: default_workspace(),
                 timeout_seconds: default_timeout(),

@@ -16,21 +16,23 @@ elif [ -n "$ANTIGRAVITY_OAUTH_TOKEN" ]; then
 fi
 
 # Ensure workspace, data directories, and skills exist
-mkdir -p "${AGENT_WORKSPACE:-/app/workspace}/.agents/skills"
+mkdir -p "${AGENT_WORKSPACE:-/app/workspaces/default}/.agents/skills"
+mkdir -p "${AGENT_WORKSPACE:-/app/workspaces/default}/knowledge"
+mkdir -p "${AGENT_WORKSPACE:-/app/workspaces/default}/scripts"
 mkdir -p "$(dirname "${DATABASE_PATH:-/app/data/aina.db}")"
 mkdir -p /root/.gemini/config/skills
 
 # Mount/Sync skills from image to global config and workspace
 if [ -d "/app/skills" ]; then
     cp -r /app/skills/* /root/.gemini/config/skills/ 2>/dev/null || true
-    cp -r /app/skills/* "${AGENT_WORKSPACE:-/app/workspace}/.agents/skills/" 2>/dev/null || true
+    cp -r /app/skills/* "${AGENT_WORKSPACE:-/app/workspaces/default}/.agents/skills/" 2>/dev/null || true
     chmod -R +x /root/.gemini/config/skills/*/scripts 2>/dev/null || true
-    chmod -R +x "${AGENT_WORKSPACE:-/app/workspace}/.agents/skills"/*/scripts 2>/dev/null || true
+    chmod -R +x "${AGENT_WORKSPACE:-/app/workspaces/default}/.agents/skills"/*/scripts 2>/dev/null || true
 fi
 
-# Sync runtime sandbox GEMINI.md rules into workspace
+# Sync runtime sandbox GEMINI.md rules into workspace if provided
 if [ -f "/app/config/sandbox.GEMINI.md" ]; then
-    cp /app/config/sandbox.GEMINI.md "${AGENT_WORKSPACE:-/app/workspace}/GEMINI.md" 2>/dev/null || true
+    cp /app/config/sandbox.GEMINI.md "${AGENT_WORKSPACE:-/app/workspaces/default}/GEMINI.md" 2>/dev/null || true
 fi
 
 # Make sure agy is in PATH

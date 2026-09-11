@@ -16,7 +16,7 @@ whatsmeow:
   presence_endpoint: "/api/v1/chats/presence"
 
 agent:
-  binary_path: "/home/ihza/.local/bin/agy"
+  binary_path: "agy"
   model: "gemini-3.8-flash-medium"
   workspace_dir: "./workspaces/default"
   timeout_seconds: 300

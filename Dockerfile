@@ -46,13 +46,15 @@ RUN curl -fsSL https://antigravity.google/cli/install.sh | bash && \
 COPY --from=builder /usr/src/aina/target/release/aina /usr/local/bin/aina
 
 # Create application directories
-RUN mkdir -p /app/config /app/data /app/workspace /root/.gemini/antigravity-cli
+RUN mkdir -p /app/config /app/data /app/workspaces /app/scripts /root/.gemini/antigravity-cli
 
-# Copy configuration, skills, and entrypoint
+# Copy configuration, workspaces, skills, scripts, and entrypoint
 COPY config/ /app/config/
+COPY workspaces/ /app/workspaces/
 COPY skills/ /app/skills/
+COPY scripts/ /app/scripts/
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh /app/scripts/*.py 2>/dev/null || true
 
 # Default environment configuration
 ENV SERVER_HOST=0.0.0.0
@@ -62,11 +64,11 @@ ENV AINA_TIMEZONE=Asia/Jakarta
 ENV AINA_LOCALE=id-ID
 ENV AINA_TIMEZONE_OFFSET=7
 ENV AGENT_BINARY_PATH=/usr/local/bin/agy
-ENV AGENT_WORKSPACE=/app/workspace
+ENV AGENT_WORKSPACE=/app/workspaces/default
 ENV DATABASE_PATH=/app/data/aina.db
 ENV AGENT_PERSONA_FILE=/app/config/persona.md
 ENV AGENT_ORGANIZATION_FILE=/app/config/organization.md
-ENV PATH="/root/.local/bin:/usr/local/bin:${PATH}"
+ENV PATH="/app/scripts:/root/.local/bin:/usr/local/bin:${PATH}"
 
 EXPOSE 8090
 

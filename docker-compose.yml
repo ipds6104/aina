@@ -10,13 +10,13 @@ services:
       - .env
     volumes:
       - aina_data:/app/data
-      - aina_workspace:/app/workspace
+      - aina_workspaces:/app/workspaces
       - aina_gemini:/root/.gemini
 
 volumes:
   aina_data:
     driver: local
-  aina_workspace:
+  aina_workspaces:
     driver: local
   aina_gemini:
     driver: local

@@ -1,227 +1,255 @@
-# 🌸 Aina (あいな)
+# 🌸 Aina (あいな) - Self-Hosted Agentic AI Co-Worker
 
-**Aina** adalah persona asisten AI *self-hosted* yang terintegrasi ke WhatsApp (melalui gateway Whatsmeow) dan ditenagai langsung oleh mesin agentik **Google Antigravity CLI (`agy`)**.
+[![Rust](https://img.shields.io/badge/Language-Rust_2021-orange.svg)](https://www.rust-lang.org/)
+[![Engine](https://img.shields.io/badge/Agent_Engine-Google_Antigravity_CLI_(agy)-blue.svg)](https://antigravity.google)
+[![Gateway](https://img.shields.io/badge/WhatsApp-Whatsmeow_HTTP-25D366.svg)](https://github.com/tulir/whatsmeow)
+[![Architecture](https://img.shields.io/badge/Architecture-Hexagonal_/_Clean_Architecture-9cf.svg)]()
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Aina dirancang untuk bertindak seperti **rekan kerja baru (junior engineer / tech staff)** di grup kerja maupun percakapan pribadi (DM): cekatan, solutif, ramah, to-the-point, dan proaktif meminta klarifikasi jika suatu instruksi multitafsir agar tidak salah arah.
+**Aina** adalah persona asisten AI *self-hosted* yang terintegrasi secara langsung ke WhatsApp (melalui gateway Whatsmeow) dan ditenagai oleh mesin agentik **Google Antigravity CLI (`agy`)**.
 
----
-
-## 🚀 Getting Started & Panduan Deploy ke Coolify (First Deploy)
-
-Repo ini sudah dilengkapi dengan **`Dockerfile` multi-stage**, **`docker-entrypoint.sh`**, dan dukungan penuh **Environment Variables**. Pada saat pertama kali dideploy ke **Coolify** (dengan auto-deploy GitHub App), Aina dapat langsung aktif dan berjalan lancar jika kamu telah menyiapkan konfigurasi berikut:
-
-### 1. Prasyarat Sebelum Deploy
-Pastikan kamu sudah menyiapkan:
-1. **Instance Whatsmeow**: Sudah berjalan dan memiliki:
-   - Base URL (contoh: `http://whatsmeow-host:3000`)
-   - API Key / Secret Token
-   - Nomor WhatsApp bot yang sudah tersambung (JID: `628xxxxxxxxxx@s.whatsapp.net`)
-2. **Kredensial Antigravity CLI**:
-   - Salin isi dari berkas OAuth lokal kamu di `~/.gemini/antigravity-cli/antigravity-oauth-token` (untuk diisi ke env `AINA_OAUTH_TOKEN`), **ATAU**
-   - Gunakan `GEMINI_API_KEY` jika menggunakan akses developer key.
+Aina dirancang bukan sebagai bot CS yang kaku, melainkan sebagai **rekan kerja teknis (software engineer / staf data)** di grup WhatsApp maupun percakapan pribadi:
+- ⚡ **Cekatan & Solutif**: Memberikan solusi konkret, siap pakai, dan mampu mengeksekusi kode secara nyata di terminal.
+- 💬 **Basa-Basi Seperlunya**: *Low-noise*, to-the-point, santun, dan bersahabat.
+- 🧭 **Proactive Clarification**: Bertanya dan meminta klarifikasi terarah jika instruksi multitafsir sebelum mengambil tindakan.
+- 🛡️ **Gatekeeper Cerdas**: Tidak *spamming* di grup kantor (hanya menjawab jika di-tag/disebut, dan mencatat percakapan pasif sebagai konteks).
+- 🧠 **Dynamic Model Switching**: Bawaan cepat & cerdas dengan **Google Gemini** (5–15 detik), dengan opsi eskalasi ke **Claude Opus** khusus tugas kompleks.
+- 📁 **Workspace-Agnostic & Structured Knowledge Base**: Basis pengetahuan tumbuh secara organik per proyek/instansi tanpa tercampur baur.
 
 ---
 
-### 2. Langkah Deploy di Coolify
+## 🏗️ Alur Konteks ke Knowledge Base (Pipeline Architecture)
 
-1. **Hubungkan Repository ke Coolify**:
-   - Di Dashboard Coolify, pilih **Projects** -> Pilih Environment -> Klik **+ New Resource** -> Pilih **Application**.
-   - Pilih **GitHub App**, lalu pilih repositori **`aina`** ini.
-   - Branch: `main` atau `master`.
-   - Build Pack: Pilih **Dockerfile** (Coolify akan otomatis mendeteksi [`Dockerfile`](Dockerfile) yang sudah disediakan).
+Aina memproses percakapan WhatsApp menjadi basis pengetahuan terstruktur yang rapi, terisolasi, dan mudah dicari (*high retrievability*):
 
-2. **Atur Environment Variables di Coolify**:
-   Buka tab **Environment Variables** di Coolify, lalu tambahkan variabel dasar berikut (lihat template di [`.env.example`](.env.example)):
+```text
+[WhatsApp DM / Grup / Web Simulator]
+                 │
+                 ▼
+     [1. Gatekeeper & Epistemic Filter] ──(Bukan Tag)──> [Simpan Pasif di SQLite]
+                 │ (Di-mention / Pesan Pribadi)
+                 ▼
+    [2. Dynamic Workspace Router]
+                 ├── /workspace <nama> (Eksplisit)
+                 ├── Deteksi Topik / Nama Grup (Inferensi)
+                 └── Percakapan Harian ──> [workspaces/default/]
+                 │
+                 ▼
+  [3. Antigravity Agent Execution (Tri-Track Extractor)]
+      ├── Jalur 1: Balasan Teks WhatsApp (Anti-Tabel Markdown, Ramah HP)
+      ├── Jalur 2: Kristalisasi Pengetahuan (knowledge/facts.md & procedures.md)
+      └── Jalur 3: Penyimpanan Berkas & Skrip (data/*.xlsx, *.csv & scripts/*.py)
+                 │
+                 ▼
+ [4. Knowledge Grooming Engine (scripts/workspace_manager.py groom)]
+      └── Pembaruan Indeks Otomatis (knowledge/index.md) -> Progressive Retrieval
+```
 
+---
+
+## 🚀 Panduan Memulai Cepat (Getting Started in 5 Minutes)
+
+Repositori ini sepenuhnya **Agnostic & Clone-Ready**. Anda dapat menjalankannya di Coolify, VPS Docker, maupun komputer lokal.
+
+### Opsi 1: Deploy di Coolify (Paling Direkomendasikan)
+
+1. **Buat Resource Baru di Coolify**:
+   - Pilih **Projects** -> Pilih Environment -> Klik **+ New Resource** -> **Application**.
+   - Pilih **GitHub App** -> Pilih repositori **`aina`** Anda -> Branch `main`.
+   - Build Pack: Pilih **Dockerfile** (otomatis mendeteksi [`Dockerfile`](Dockerfile)).
+2. **Atur Environment Variables** (Buka tab *Environment Variables* di Coolify):
    ```ini
    PORT=8090
    SERVER_PORT=8090
-
-   # Whatsmeow Gateway
-   WHATSMEOW_BASE_URL=http://<IP_ATAU_DOMAIN_WHATSMEOW>:3000
-   WHATSMEOW_API_KEY=<SECRET_API_KEY_KAMU>
+   WHATSMEOW_BASE_URL=https://wa.domainkamu.com
+   WHATSMEOW_API_KEY=secret_key_kamu
    WHATSMEOW_BOT_JID=628xxxxxxxxxx@s.whatsapp.net
    WHATSMEOW_BOT_NAME=Aina
-
-   # Antigravity Model & Sandbox
-   AGENT_MODEL=gemini-3.8-flash-high
-   AGENT_WORKSPACE=/app/workspace
+   AGENT_MODEL=gemini-3.8-flash-medium
+   AGENT_WORKSPACE=/app/workspaces/default
    DATABASE_PATH=/app/data/aina.db
    ```
-   *(Opsional: Kamu juga bisa langsung mengisi `AINA_OAUTH_TOKEN` di sini jika tidak ingin melewati web wizard).*
-
-3. **Atur Persistent Storage (Volumes) di Coolify**:
-   Agar riwayat chat, database SQLite, dan token sesi tidak ter-reset setiap kali ada commit/re-deploy otomatis dari GitHub, buka tab **Storages / Persistent Storage** di Coolify dan tambahkan mount volume berikut:
-
-   | Destination Path | Keterangan |
-   | :--- | :--- |
-   | `/app/data` | Menyimpan SQLite database (`aina.db`) & mapping percakapan |
-   | `/root/.gemini` | Menyimpan token autentikasi & cache sesi bawaan Antigravity |
-   | `/app/workspace` | Sandbox folder tempat Aina membuat file/skrip jika diminta koding |
-
-4. **Klik Deploy**:
-   - Klik tombol **Deploy** di Coolify. Coolify akan otomatis mengompilasi binary Rust dan menyiapkan binary Antigravity CLI.
+3. **Atur Persistent Storage (Volumes)**:
+   Di tab **Storages**, tambahkan 3 persistent storage agar data tidak hilang saat re-deploy:
+   | Volume Name | Destination Path | Keterangan |
+   | :--- | :--- | :--- |
+   | `aina_data` | `/app/data` | Database SQLite (`aina.db`) & mapping percakapan |
+   | `aina_gemini` | `/root/.gemini` | Kredensial OAuth Antigravity & cache CLI |
+   | `aina_workspaces`| `/app/workspaces` | Wadah seluruh workspace & knowledge base |
+4. **Klik Deploy**: Coolify akan mengompilasi dan menjalankan Aina secara otomatis.
 
 ---
 
-### 3. Autentikasi Pertama Kali via Web Wizard (`/setup`)
+### Opsi 2: Menggunakan Docker Compose (VPS / Server Mandiri)
 
-Setelah aplikasi Coolify selesai di-deploy dan berstatus **Healthy**:
-
-1. Buka URL aplikasi kamu di browser:
+1. **Klon Repositori**:
+   ```bash
+   git clone https://github.com/ipds6104/aina.git
+   cd aina
    ```
+2. **Salin Template Konfigurasi**:
+   ```bash
+   cp .env.example .env
+   # Edit .env dan sesuaikan URL whatsmeow serta BOT_JID Anda
+   ```
+3. **Jalankan Aplikasi**:
+   ```bash
+   docker compose up -d
+   ```
+4. Periksa log server untuk melihat status dan **Setup Code**:
+   ```bash
+   docker compose logs -f aina
+   ```
+
+---
+
+### Opsi 3: Menjalankan di Komputer Lokal (Local Development)
+
+```bash
+# 1. Pastikan Rust dan Antigravity CLI (agy) terpasang
+curl -fsSL https://antigravity.google/cli/install.sh | bash
+
+# 2. Jalankan unit test
+cargo test
+
+# 3. Jalankan server lokal
+cargo run
+```
+Akses dashboard di browser: `http://localhost:8090`.
+
+---
+
+## 🔐 Setup Autentikasi Pertama Kali (`/setup`)
+
+Setelah server Aina aktif dan sehat (*healthy*):
+
+1. Buka browser ke URL aplikasi Anda:
+   ```text
    https://aina.domainkamu.com (atau http://IP_SERVER:8090)
    ```
-2. Halaman akan menampilkan **Web Onboarding Wizard** yang dilindungi standar keamanan industri:
-   - **Lihat Kode Setup**: Buka tab **Logs** di Coolify, kamu akan melihat banner:
+2. Anda akan disambut oleh **Web Setup Onboarding Wizard**:
+   - **Cek Kode Setup**: Buka terminal log deployment Anda (di Coolify tab *Logs* atau `docker compose logs`), temukan:
      ```text
      🔐 SETUP / ADMIN CODE: AINA-XXXXXX
      ```
-     *(Atau gunakan nilai `ADMIN_KEY` jika kamu sudah mengaturnya di Environment Variables).*
-   - **Ambil Token dari Laptop**: Di terminal laptop lokalmu yang sudah login Antigravity, jalankan:
+   - **Ambil Token Antigravity**: Di terminal laptop lokal Anda yang sudah login `agy`, jalankan:
      ```bash
      cat ~/.gemini/antigravity-cli/antigravity-oauth-token
      ```
-   - Masukkan **Kode Setup** dan tempelkan seluruh teks JSON token ke form web wizard.
-   - Klik tombol **"Verifikasi & Simpan Token"**.
-3. Aina akan memverifikasi token ke Antigravity secara real-time. Jika valid, endpoint setup otomatis terkunci demi keamanan, dan dashboard langsung berubah menjadi **"ONLINE & TERAUTENTIKASI"**!
+   - Tempelkan kode setup dan seluruh JSON token pada form wizard, lalu klik **"Verifikasi & Simpan Token"**.
+3. Aina akan memverifikasi token secara *real-time*. Endpoint setup otomatis terkunci, dan dashboard berubah menjadi **"ONLINE & TERAUTENTIKASI"**!
 
 ---
 
-### 4. Uji Coba Cepat via Simulator Web (100% Real, Zero Mocks)
+## 🧪 Web Simulator (Real End-to-End Testing)
 
-Di dashboard web (`/`), terdapat fitur **Simulator Percakapan WhatsApp**:
-- Kamu bisa menguji langsung bagaimana Aina merespon pesan pribadi (DM) maupun obrolan grup kerja.
-- Uji fitur **Gatekeeper**: Coba kirim pesan grup tanpa tag (@Aina), dan lihat bagaimana Aina menyimak (*RecordOnly*) tanpa membuat kegaduhan/spam di grup.
-- Uji kemampuan koding: Minta Aina membuat script atau cek status teknis, dan perhatikan respon agentik aslinya di layar browser sebelum menghubungkannya ke nomor WhatsApp asli.
+Di dashboard web (`https://aina.domainkamu.com`), tersedia kartu **Simulator Percakapan WhatsApp (Real Test)**:
+- **Zero Mocks**: Pesan diuji melalui logika *Gatekeeper*, *Persona*, dan dieksekusi secara nyata oleh biner `agy`.
+- **Pengujian Multi-Skenario**: Uji pesan pribadi (DM), obrolan grup dengan mention `@Aina`, maupun obrolan grup tanpa tag.
+- **Pilihan Model AI Dinamis**: Pilih model per pengujian langsung dari dropdown simulator.
+- **Salin Jawaban (📋)**: Terdapat tombol salin lengkap untuk memindahkan jawaban Aina dengan format rapi.
 
 ---
 
-### 5. Hubungkan Webhook Whatsmeow ke Aina
+## 🤖 Manajemen Model AI (Gemini-First Priority)
 
-1. Buka konfigurasi instance Whatsmeow milikmu.
-2. Atur URL Webhook masuk ke:
+Aina mengutamakan efisiensi dan kecepatan respons dengan memprioritaskan keluarga model **Google Gemini** sebagai *default*:
+
+| Model | Karakteristik | Estimasi Latensi | Penggunaan Terbaik |
+| :--- | :--- | :--- | :--- |
+| **`gemini-3.8-flash-medium`** | **Default / Rekomendasi** | **5 – 15 detik** | Cepat, seimbang, pemikiran mendalam, bebas timeout. |
+| **`gemini-3.8-flash-high`** | Penalaran Tinggi | 15 – 35 detik | Arsitektur kompleks, refaktor besar, analisis data rumit. |
+| **`gemini-3.8-flash-low`** | Respons Kilat | < 3 detik | Sapaan santai, konfirmasi cepat, obrolan kasual. |
+| **`gemini-3.1-pro-high`** | Deep Coding | 20 – 45 detik | Debugging kode tingkat lanjut, penulisan script besar. |
+| **`claude-opus-4-6-thinking`** | **Khusus Eksplisit** | 60 – 120 detik | Hanya aktif jika user meminta: *"Aina, pakai model opus"*. |
+
+### Cara Mengganti Model AI:
+1. **Via Chat WhatsApp / Simulator**:
+   - Cek model aktif: `/model status` atau `/model list`
+   - Ganti model instan: `/model <nama_model>` (contoh: `/model gemini-3.8-flash-high` atau `/model opus`)
+2. **Via Web Dashboard**:
+   - Klik **⚡ Ganti** pada info *Model AI Aktif* di dashboard.
+3. **Via Skrip Terminal / Aina Otonom**:
+   ```bash
+   python3 scripts/model_control.py get
+   python3 scripts/model_control.py set gemini-3.8-flash-high
    ```
-   POST https://aina.domainkamu.com/webhook
-   ```
-3. Selesai! Coba kirim WhatsApp ke nomor bot (DM):
-   > *"Halo Aina, salam kenal!"*
-   
-   Aina akan segera membalas layaknya rekan kerja baru!
 
 ---
 
-## 🏛️ Arsitektur Sistem (Hexagonal / Ports & Adapters)
+## 📁 Agnostic Workspaces & Structured Knowledge Base
 
-Proyek ini dibangun menggunakan bahasa **Rust** dengan arsitektur heksagonal murni:
+Aina tidak membatasi pengguna pada satu struktur proyek yang kaku. Setiap proyek atau tim kerja dapat memiliki workspace dan basis pengetahuan mandiri yang tumbuh secara organik.
+
+### Struktur Standar Setiap Workspace:
+```text
+workspaces/<nama_workspace>/
+├── GEMINI.md                    # 🛡️ Aturan domain, batasan etika, format data
+├── knowledge/                   # 🧠 Knowledge Base terstruktur
+│   ├── index.md                 # Katalog ringkasan topik (diperbarui oleh grooming)
+│   ├── facts.md                 # Kumpulan fakta, keputusan rapat, parameter kunci
+│   └── procedures.md            # SOP, alur kerja, panduan langkah-demi-langkah
+├── data/                        # 💾 Penyimpanan data tabular/dokumen (.csv, .xlsx, .json)
+└── scripts/                     # ⚙️ Skrip automasi & data pipeline
+    ├── model_control.py         # Utilitas kontrol model
+    └── workspace_manager.py     # Utilitas manajemen workspace & grooming
+```
+
+### Perintah Manajemen Workspace:
+- **Lihat Seluruh Workspace**:
+  ```bash
+  python3 scripts/workspace_manager.py list
+  ```
+- **Buat Workspace Baru**:
+  ```bash
+  python3 scripts/workspace_manager.py create bps --title "Badan Pusat Statistik" --domain "Pengolahan data sensus & indikator makro"
+  ```
+- **Rapikan Knowledge Base (Grooming Routine)**:
+  ```bash
+  python3 scripts/workspace_manager.py groom bps
+  ```
+  *Skrip ini akan menyisir seluruh berkas di `knowledge/`, menghitung statistik, menyusun ringkasan eksekutif, dan memperbarui `knowledge/index.md` secara otomatis.*
+
+---
+
+## ⚙️ Ringkasan Environment Variables
+
+| Variabel | Default | Deskripsi |
+| :--- | :--- | :--- |
+| `SERVER_PORT` / `PORT` | `8090` | Port HTTP listening server Aina |
+| `SERVER_HOST` | `0.0.0.0` | Host bind server |
+| `WHATSMEOW_BASE_URL` | `http://localhost:3000`| Base URL REST API instance Whatsmeow |
+| `WHATSMEOW_API_KEY` | `default-secret` | API Key autentikasi ke Whatsmeow |
+| `WHATSMEOW_BOT_JID` | - | JID WhatsApp bot (contoh: `628xxxx@s.whatsapp.net`) |
+| `WHATSMEOW_BOT_NAME` | `Aina` | Nama panggilan bot di obrolan |
+| `AGENT_BINARY_PATH` | `agy` | Lokasi biner Antigravity CLI (otomatis mendeteksi PATH) |
+| `AGENT_MODEL` | `gemini-3.8-flash-medium` | Model AI default bawaan |
+| `AGENT_WORKSPACE` | `./workspaces/default` | Direktori kerja aktif bawaan agen |
+| `DATABASE_PATH` | `data/aina.db` | Path berkas SQLite database |
+| `ADMIN_KEY` / `AINA_ADMIN_KEY` | *(Auto-generated)* | Kunci rahasia untuk membuka kunci Web Simulator & Wizard |
+| `ADMIN_JID` | - | Nomor WhatsApp pemilik/admin berwewenang penuh |
+| `TZ` / `AINA_TIMEZONE` | `Asia/Jakarta` | Zona waktu operasional (WIB: UTC+7) |
+| `AINA_LOCALE` | `id-ID` | Standar locale bahasa |
+
+---
+
+## 🏛️ Arsitektur Kode (Clean Architecture)
 
 ```text
 src/
-├── core/                        # DOMAIN & BUSINESS LOGIC (Murni tanpa dependensi HTTP/DB)
-│   ├── domain/
-│   │   ├── message.rs           # Entitas Pesan, Pengirim, Tipe Chat (DM/Group)
-│   │   ├── gatekeeper.rs        # Logika filter: Kapan Aina harus menjawab vs menyimak
-│   │   └── persona.rs           # Prompt builder dengan penyuntikan persona & konteks
-│   ├── ports/
-│   │   ├── agent_engine.rs      # Trait: Kontrak eksekusi ke Antigravity CLI
-│   │   ├── whatsapp.rs          # Trait: Kontrak pengiriman pesan & status typing
-│   │   └── session_store.rs     # Trait: Kontrak mapping Chat JID <-> UUID percakapan
-│   └── usecases/
-│       ├── process_message.rs   # Alur orkestrator pemrosesan pesan masuk
-│       └── scheduled_tick.rs    # Rutinitas terjadwal / cron background
-│
+├── core/                        # CORE BUSINESS LOGIC (Murni, Bebas Framework)
+│   ├── domain/                  # Entitas Pesan, Pengirim, Gatekeeper, Persona
+│   ├── ports/                   # Trait Interface (AgentEnginePort, WhatsAppPort, SessionStorePort)
+│   └── usecases/                # ProcessIncomingMessageUseCase, ScheduledTickUseCase
 ├── adapters/
-│   ├── driving/                 # PRIMARY ADAPTERS
-│   │   ├── webhook.rs           # Axum HTTP Server (/webhook, /health) penerima whatsmeow
-│   │   └── scheduler.rs         # Tokio background ticker
-│   └── driven/                  # SECONDARY ADAPTERS
-│       ├── agy_cli.rs           # Tokio process runner memanggil `agy` secara headless
-│       ├── whatsmeow_http.rs    # Reqwest HTTP client ke REST API Whatsmeow
-│       └── sqlite_store.rs      # Rusqlite untuk persistensi sesi & riwayat lokal
-│
+│   ├── driving/                 # Webhook Server (Axum HTTP), Web Simulator, Scheduler
+│   └── driven/                  # Antigravity CLI Adapter, Whatsmeow Client, SQLite Store
 ├── config/                      # Pengaturan aplikasi & pemuat persona
-│   ├── config.yaml              # Konfigurasi gateway, port, dan model
-│   └── persona.md               # Definisi kepribadian Aina (dapat diubah user kapan saja)
-│
-├── workspace/                   # Sandbox folder tempat Aina membuat skrip & mengeksekusi kode
-└── main.rs                      # Composition root (Dependency Injection wiring)
+└── main.rs                      # Composition Root & Dependency Injection
 ```
 
 ---
 
-## 🧠 Pemanfaatan Fitur Native Antigravity CLI (`agy`)
+## 📜 Lisensi & Kontribusi
 
-Daripada membuat sistem memori, parser LLM, atau runtime sandbox dari nol, Aina memanfaatkan mekanisme bawaan Antigravity:
-
-1. **Native Session Memory (`--conversation <uuid>`)**:
-   Antigravity CLI menyimpan riwayat percakapan dalam SQLite di `~/.gemini/antigravity-cli/conversations/<uuid>.db`. Aina cukup memetakan `WhatsApp Chat JID -> UUID`, sehingga Antigravity secara native mengingat semua konteks obrolan masa lalu.
-2. **Headless Execution (`-p` & `--output-format json`)**:
-   Aina memanggil `agy` non-interaktif dengan `--dangerously-skip-permissions`, memungkinkan eksekusi agentik otomatis (membuat skrip, menjalankan bash, dsb.) dengan hasil JSON terstruktur.
-3. **Agentic Capabilities**:
-   Jika diminta membuat kode atau memeriksa bug, Aina dapat mengeksekusi bash dan memverifikasi script langsung di folder `workspace/`.
-
----
-
-## 🎭 Kustomisasi Personality & Konteks Multi-Workspace
-
-Pengguna dapat mengubah identitas, sektor instansi, serta kepribadian Aina **tanpa perlu mengubah kode program**:
-
-1. **Konteks Organisasi / Instansi**:
-   👉 [`config/organization.md`](config/organization.md) (atau set via env `AINA_ORGANIZATION_TEXT`)
-   - Mendefinisikan sektor instansi (misalnya: Badan Pusat Statistik / BPS, startup teknologi, instansi dinas, atau perusahaan logistik).
-   - Menentukan peran spesifik Aina (misalnya: Mitra Pengolahan Data Statistik, Junior DevOps, dsb.).
-   - Dilengkapi template adaptasi instansi yang siap digunakan.
-
-2. **Persona & Gaya Komunikasi**:
-   👉 [`config/persona.md`](config/persona.md) (atau set via env `AINA_PERSONA_TEXT`)
-   - **Cekatan & Solutif**: Memberikan solusi konkret yang siap pakai.
-   - **Basa-basi Seperlunya**: Low-noise, to-the-point, santun namun akrab.
-   - **Proactive Clarification**: Jika instruksi ambigu, meminta klarifikasi terarah sebelum bertindak.
-
----
-
-## 🧭 Hierarki Epistemik Utama & Profiling Wewenang (OpSec)
-
-Aina beroperasi di bawah 4 pilar epistemik kritis untuk menjamin kehati-hatian, mencegah *hallucination*, dan menangkal eksploitasi *social engineering*:
-
-```
-[1. TABAYYUN (QS. Al-Hujurat: 6)] ──> Filter Masuk: Verifikasi kebenaran klaim & kredibilitas sebelum bereaksi.
-         │
-         ▼
-[2. TAWAQQUF (QS. Al-Isra: 36)]   ──> Anti-Spekulasi: Tahan diri membuat asumsi jika bukti belum kuat.
-         │
-         ▼
-[3. OPSEC & PROFILING]            ──> Batas Wewenang: Identifikasi lawan bicara & batasan perintahnya.
-         │
-         ▼
-[4. AHLUDZ-DZIKRI (QS. An-Nahl: 43)] ─> Solusi Otoritatif: Konsultasi ke dokumentasi primer jika ragu.
-```
-
-### 👤 Profiling Memori Pengguna di SQLite
-Aina secara otonom mengingat lawan bicaranya ke dalam tabel `user_profiles` di SQLite:
-- **`ADMIN`** (Dapat diset via env `ADMIN_JID=628xxxx@s.whatsapp.net`): Memiliki wewenang penuh atas konfigurasi dan penugasan strategis.
-- **`STAFF`**: Rekan kerja kantor. Berhak meminta bantuan coding, pengolahan data, pembuatan script, dan monitoring.
-- **`GUEST` / `EXTERNAL`**: Pihak luar / nomor asing. Aina bersikap adil dan sopan (*al-qist*), tetapi memiliki perimeter keamanan ketat (**Strict OpSec**): dilarang keras membocorkan token rahasia, data internal kantor, kredensial, atau mengeksekusi perintah destruktif sepihak.
-
----
-
-## 🛡️ Etika Grup & Gatekeeper
-
-Aina tidak akan menjadi spammer di grup kerja Anda:
-- **Private Chat (DM)**: Selalu dijawab secara personal.
-- **Grup WhatsApp**: Hanya menjawab jika di-mention (`@Aina`), di-reply kutipannya (*quoted message*), atau namanya dipanggil secara jelas. Pesan lainnya hanya dicatat secara pasif (*ambient context*) agar Aina paham konteks tim tanpa menyela obrolan.
-
----
-
-## 💻 Pengujian Lokal (Development)
-
-Jika ingin menjalankan Aina di komputer lokal:
-
-```bash
-# 1. Jalankan unit test
-cargo test
-
-# 2. Jalankan aplikasi secara langsung
-cargo run
-```
-Endpoint lokal akan berjalan di `http://127.0.0.1:8090/health`.
+Dilisensikan di bawah lisensi [MIT](LICENSE). Kontribusi, perbaikan bug, dan *feature requests* sangat dipersilakan melalui *Pull Request* atau *Issue* di GitHub.

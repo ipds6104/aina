@@ -7,13 +7,13 @@
 /workspace/*
 !/workspace/.gitkeep
 
-# Multi-workspace rules
-/workspaces/*/*/*
-!/workspaces/**/GEMINI.md
-!/workspaces/GEMINI.md
-!/workspaces/**/scripts/**
-!/workspaces/**/.gitkeep
-!/workspaces/**/.agents/**
+# Multi-workspace rules: ignore heavy data, outputs, and python cache
+/workspaces/**/data/*
+!/workspaces/**/data/.gitkeep
+/workspaces/**/output/*
+!/workspaces/**/output/.gitkeep
+/workspaces/**/__pycache__/
+*.pyc
 
 .env
 *.log
