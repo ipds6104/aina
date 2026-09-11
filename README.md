@@ -47,17 +47,46 @@ Aina memproses percakapan WhatsApp menjadi basis pengetahuan terstruktur yang ra
 
 ---
 
-## 🚀 Panduan Memulai Cepat (Getting Started in 5 Minutes)
+### 🚀 Panduan Memulai Cepat (Getting Started in 5 Minutes)
 
-Repositori ini sepenuhnya **Agnostic & Clone-Ready**. Anda dapat menjalankannya di Coolify, VPS Docker, maupun komputer lokal.
+Repositori ini sepenuhnya **Agnostic & Clone-Ready**. Aina memisahkan secara bersih antara **Aplikasi Engine (`aina`)** dan **Penyimpanan Knowledge Base (`workspaces`)**.
 
-### Opsi 1: Deploy di Coolify (Paling Direkomendasikan)
+```text
+┌──────────────────────────────────────────────────┐        ┌──────────────────────────────────────────────────┐
+│      1. AINA ENGINE (Stateless Git Repo)         │        │    2. KNOWLEDGE BASE VAULT (Stateful Storage)    │
+│  /root/projects/aina (Kode Rust, Webhook, CLI)   │ ────►  │  /var/lib/aina/workspaces/ atau Repo Git Tim     │
+│  Bebas `git pull` kapan saja tanpa merusak data! │        │  knowledge/ (Fakta, SOP) & data/ (SQLite FTS5)   │
+└──────────────────────────────────────────────────┘        └──────────────────────────────────────────────────┘
+```
+
+---
+
+### Langkah 1: Pilih Sumber Knowledge Base Anda
+
+Sebelum menjalankan Aina, tentukan bagaimana basis pengetahuan Anda akan disimpan:
+
+#### Skenario A: Memulai dari Nol (Fresh Workspace)
+Aina secara otomatis menyiapkan starter template default (`GEMINI.md`, `facts.md`, `procedures.md`) di dalam folder workspace yang ditunjuk. Anda tidak perlu setup manual.
+
+#### Skenario B: Menghubungkan Repositori GitHub Knowledge Base yang Sudah Ada
+Jika organisasi Anda sudah memiliki repositori GitHub berisi dokumentasi/SOP (contoh: `https://github.com/ipds6104/knowledge-base.git`):
+```bash
+# Clone repositori knowledge base ke folder penyimpanan server
+aina clone https://github.com/ipds6104/knowledge-base.git /var/lib/aina/workspaces/ipds
+# Aina otomatis memvalidasi struktur dokumen dan mengompilasi katalog `knowledge/index.md`!
+```
+
+---
+
+### Langkah 2: Deploy & Jalankan Aina
+
+#### Opsi 1: Deploy di Coolify (Paling Direkomendasikan untuk Produksi)
 
 1. **Buat Resource Baru di Coolify**:
-   - Pilih **Projects** -> Pilih Environment -> Klik **+ New Resource** -> **Application**.
+   - Pilih **Projects** -> Environment -> Klik **+ New Resource** -> **Application**.
    - Pilih **GitHub App** -> Pilih repositori **`aina`** Anda -> Branch `main`.
-   - Build Pack: Pilih **Dockerfile** (otomatis mendeteksi [`Dockerfile`](Dockerfile)).
-2. **Atur Environment Variables** (Buka tab *Environment Variables* di Coolify):
+   - Build Pack: Pilih **Dockerfile**.
+2. **Atur Environment Variables** (Tab *Environment Variables* di Coolify):
    ```ini
    PORT=8090
    SERVER_PORT=8090
@@ -70,19 +99,20 @@ Repositori ini sepenuhnya **Agnostic & Clone-Ready**. Anda dapat menjalankannya 
    DATABASE_PATH=/app/data/aina.db
    ```
 3. **Atur Persistent Storage (Volumes)**:
-   Di tab **Storages**, tambahkan 3 persistent storage agar data tidak hilang saat re-deploy:
+   Di tab **Storages**, tambahkan persistent storage:
    | Volume Name | Destination Path | Keterangan |
    | :--- | :--- | :--- |
-   | `aina_data` | `/app/data` | Database SQLite (`aina.db`) & mapping percakapan |
+   | `aina_data` | `/app/data` | Database SQLite (`aina.db`) & riwayat pesan |
    | `aina_gemini` | `/root/.gemini` | Kredensial OAuth Antigravity & cache CLI |
-   | `aina_workspaces`| `/app/workspaces` | Wadah seluruh workspace & knowledge base |
+   | `aina_workspaces`| `/app/workspaces` | Wadah knowledge base & arsip obrolan |
+   *(Atau arahkan Destination Path `/app/workspaces/default` langsung ke host bind-mount dari repo knowledge base tim).*
 4. **Klik Deploy**: Coolify akan mengompilasi dan menjalankan Aina secara otomatis.
 
 ---
 
-### Opsi 2: Menggunakan Docker Compose (VPS / Server Mandiri)
+#### Opsi 2: Menggunakan Docker Compose (VPS / Server Mandiri)
 
-1. **Klon Repositori**:
+1. **Klon Repositori Engine**:
    ```bash
    git clone https://github.com/ipds6104/aina.git
    cd aina
@@ -90,32 +120,29 @@ Repositori ini sepenuhnya **Agnostic & Clone-Ready**. Anda dapat menjalankannya 
 2. **Salin Template Konfigurasi**:
    ```bash
    cp .env.example .env
-   # Edit .env dan sesuaikan URL whatsmeow serta BOT_JID Anda
+   # Sesuaikan URL whatsmeow, BOT_JID, dan AGENT_WORKSPACE Anda
    ```
 3. **Jalankan Aplikasi**:
    ```bash
    docker compose up -d
-   ```
-4. Periksa log server untuk melihat status dan **Setup Code**:
-   ```bash
    docker compose logs -f aina
    ```
 
 ---
 
-### Opsi 3: Menjalankan di Komputer Lokal (Local Development)
+#### Opsi 3: Menjalankan di Komputer Lokal (Local Development)
 
 ```bash
 # 1. Pastikan Rust dan Antigravity CLI (agy) terpasang
 curl -fsSL https://antigravity.google/cli/install.sh | bash
 
-# 2. Jalankan unit test
-cargo test
+# 2. Cek status workspace aktif
+aina workspace info
 
 # 3. Jalankan server lokal
 cargo run
 ```
-Akses dashboard di browser: `http://localhost:8090`.
+Akses dashboard lokal di browser: `http://localhost:8090`.
 
 ---
 

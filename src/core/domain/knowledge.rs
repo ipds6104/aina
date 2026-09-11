@@ -43,6 +43,19 @@ pub struct LintReport {
     pub auto_healed: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspaceInfo {
+    pub path: String,
+    pub absolute_path: String,
+    pub is_git_repo: bool,
+    pub git_remote: Option<String>,
+    pub universal_docs_count: usize,
+    pub activities_count: usize,
+    pub archives_count: usize,
+    pub has_index: bool,
+    pub is_clean: bool,
+}
+
 pub struct KnowledgeEngine;
 
 impl KnowledgeEngine {
@@ -495,6 +508,127 @@ impl KnowledgeEngine {
             auto_healed,
         }
     }
+
+    /// Inspect an external or internal workspace and return structured metadata
+    pub fn get_workspace_info<P: AsRef<Path>>(workspace_dir: P) -> WorkspaceInfo {
+        let ws = workspace_dir.as_ref();
+        let abs_path = std::fs::canonicalize(ws)
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|_| ws.to_string_lossy().to_string());
+
+        let git_dir = ws.join(".git");
+        let is_git_repo = git_dir.is_dir() || git_dir.is_file();
+
+        let mut git_remote = None;
+        if is_git_repo {
+            let config_file = if git_dir.is_dir() {
+                git_dir.join("config")
+            } else {
+                ws.join(".git")
+            };
+            if let Ok(content) = std::fs::read_to_string(&config_file) {
+                for line in content.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with("url = ") {
+                        git_remote = Some(trimmed[6..].trim().to_string());
+                        break;
+                    }
+                }
+            }
+        }
+
+        let uni = Self::scan_universal(ws);
+        let act = Self::scan_activities(ws);
+        let arc = crate::core::domain::archive::ArchiveEngine::discover_archives(ws);
+        let has_index = ws.join("knowledge").join("index.md").is_file();
+        let lint_report = Self::lint(ws, false);
+
+        WorkspaceInfo {
+            path: ws.to_string_lossy().to_string(),
+            absolute_path: abs_path,
+            is_git_repo,
+            git_remote,
+            universal_docs_count: uni.len(),
+            activities_count: act.len(),
+            archives_count: arc.len(),
+            has_index,
+            is_clean: lint_report.is_clean,
+        }
+    }
+
+    /// Initialize a new workspace directory anywhere on disk with starter templates
+    pub fn init_workspace<P: AsRef<Path>>(target_dir: P, title: Option<&str>) -> anyhow::Result<()> {
+        let dir = target_dir.as_ref();
+        let name = dir.file_name().unwrap_or_default().to_string_lossy().to_string();
+        let ws_title = title.unwrap_or(&name);
+
+        let knowledge_dir = dir.join("knowledge");
+        let universal_dir = knowledge_dir.join("universal");
+        let kegiatan_dir = knowledge_dir.join("kegiatan");
+        let archives_dir = knowledge_dir.join("archives");
+        let data_dir = dir.join("data").join("chats");
+        let scripts_dir = dir.join("scripts");
+
+        std::fs::create_dir_all(&universal_dir)?;
+        std::fs::create_dir_all(&kegiatan_dir)?;
+        std::fs::create_dir_all(&archives_dir)?;
+        std::fs::create_dir_all(&data_dir)?;
+        std::fs::create_dir_all(&scripts_dir)?;
+
+        let gemini_file = dir.join("GEMINI.md");
+        if !gemini_file.exists() {
+            let gemini_content = format!(
+                "# Workspace Context: {}\n\n> Ruang kerja khusus domain {}\n\n## Aturan & Pedoman\n1. Semua dokumentasi operasional disimpan dalam format Markdown di folder `knowledge/`.\n2. Riwayat obrolan dan data tabular disimpan di folder `data/`.\n",
+                ws_title, ws_title
+            );
+            std::fs::write(&gemini_file, gemini_content)?;
+        }
+
+        let facts_file = knowledge_dir.join("facts.md");
+        if !facts_file.exists() {
+            let facts_content = format!(
+                "# 💡 Fakta & Parameter Kunci: {}\n\n*Dokumentasikan fakta penting, parameter operasional, dan keputusan rapat di sini.*\n",
+                ws_title
+            );
+            std::fs::write(&facts_file, facts_content)?;
+        }
+
+        let proc_file = knowledge_dir.join("procedures.md");
+        if !proc_file.exists() {
+            let proc_content = format!(
+                "# 📋 SOP & Prosedur: {}\n\n*Dokumentasikan Standar Operasional Prosedur (SOP) dan alur kerja berkala di sini.*\n\n1. **Persiapan**: Periksa ketersediaan dokumen acuan.\n2. **Eksekusi**: Lakukan tindak lanjut sesuai tupoksi.\n",
+                ws_title
+            );
+            std::fs::write(&proc_file, proc_content)?;
+        }
+
+        // Groom initial index
+        Self::groom_knowledge_base(dir)?;
+        Ok(())
+    }
+
+    /// Clone an existing remote Git knowledge base repository into the target workspace
+    pub fn clone_workspace<P: AsRef<Path>>(git_url: &str, target_dir: P) -> anyhow::Result<()> {
+        let dir = target_dir.as_ref();
+        if dir.exists() && dir.read_dir()?.next().is_some() {
+            anyhow::bail!("Direktori target {:?} sudah ada dan tidak kosong.", dir);
+        }
+
+        info!("Cloning knowledge repository from {} to {:?}", git_url, dir);
+        let status = std::process::Command::new("git")
+            .arg("clone")
+            .arg(git_url)
+            .arg(dir.as_os_str())
+            .status()?;
+
+        if !status.success() {
+            anyhow::bail!("Gagal melakukan git clone dari {}", git_url);
+        }
+
+        // Auto-heal / Groom to ensure index.md exists
+        Self::lint(dir, true);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -543,6 +677,29 @@ mod tests {
         // 4. Lint should be clean
         let report_after = KnowledgeEngine::lint(&ws_dir, false);
         assert!(report_after.is_clean);
+
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn test_init_workspace_and_get_info() {
+        let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let temp_dir = std::env::temp_dir().join(format!("aina_test_ws_init_{}", id));
+
+        // 1. Initialize new external workspace
+        KnowledgeEngine::init_workspace(&temp_dir, Some("BPS Prov Kalbar")).unwrap();
+
+        // 2. Verify files created
+        assert!(temp_dir.join("GEMINI.md").is_file());
+        assert!(temp_dir.join("knowledge").join("facts.md").is_file());
+        assert!(temp_dir.join("knowledge").join("procedures.md").is_file());
+        assert!(temp_dir.join("knowledge").join("index.md").is_file());
+
+        // 3. Inspect via get_workspace_info
+        let info = KnowledgeEngine::get_workspace_info(&temp_dir);
+        assert_eq!(info.universal_docs_count, 2);
+        assert!(info.has_index);
+        assert!(info.is_clean);
 
         let _ = std::fs::remove_dir_all(temp_dir);
     }

@@ -45,6 +45,18 @@ SUBCOMMANDS:
                                 --limit, -l <n>         Batas hasil (default: 20)
                                 --json                  Output format JSON terstruktur
 
+    workspace info            Informasi status & metadata workspace aktif
+                              Options:
+                                --workspace, -w <dir>   Path workspace (default: AGENT_WORKSPACE / default)
+                                --json                  Output format JSON terstruktur
+
+    workspace init <path>     Inisialisasi direktori workspace baru (di mana saja di disk)
+                              Options:
+                                --title, -t <nama>      Judul / deskripsi domain workspace
+
+    clone <git-url> [path]    Clone repositori GitHub knowledge base yang sudah ada
+                              (Otomatis sinkronisasi, lint, dan generate katalog index.md)
+
     help, --help, -h          Tampilkan panduan ini
 "#
         );
@@ -64,6 +76,8 @@ SUBCOMMANDS:
             }
             "archive" => Self::handle_archive(&args[2..]),
             "kb" => Self::handle_kb(&args[2..]),
+            "workspace" | "ws" => Self::handle_workspace(&args[2..]),
+            "clone" => Self::handle_workspace_clone(&args[2..]),
             "audit" => Self::handle_audit(&args[2..]),
             _ => {
                 eprintln!("Subcommand tidak dikenal: `{}`. Ketik `aina help`.", cmd);
@@ -349,6 +363,102 @@ SUBCOMMANDS:
                 }
             }
         }
+        Ok(())
+    }
+
+    fn handle_workspace(args: &[String]) -> anyhow::Result<()> {
+        if args.is_empty() {
+            eprintln!("Operasi workspace belum ditentukan. Gunakan: info, init, clone");
+            std::process::exit(1);
+        }
+
+        let sub = args[0].as_str();
+        let is_json = args.iter().any(|a| a == "--json");
+
+        match sub {
+            "info" => {
+                let ws = Self::resolve_workspace(args);
+                let info = KnowledgeEngine::get_workspace_info(&ws);
+                if is_json {
+                    println!("{}", serde_json::to_string_pretty(&info)?);
+                } else {
+                    println!("🏠 Informasi Workspace Aktif:\n");
+                    println!("• Path Relatif     : {}", info.path);
+                    println!("• Path Absolut     : {}", info.absolute_path);
+                    println!("• Repositori Git   : {}", if info.is_git_repo { "Ya" } else { "Tidak (Lokal Disk)" });
+                    if let Some(ref remote) = info.git_remote {
+                        println!("• Git Remote URL   : {}", remote);
+                    }
+                    println!("• Dokumen Universal: {} berkas", info.universal_docs_count);
+                    println!("• Kegiatan / Proyek: {} entri", info.activities_count);
+                    println!("• Arsip Chat SQLite: {} basis data", info.archives_count);
+                    println!("• Status Katalog   : {}", if info.has_index { "Tersedia (index.md)" } else { "Belum dibuat (Jalankan aina kb groom)" });
+                    println!("• Kebersihan / Lint: {}\n", if info.is_clean { "✅ Bersih & Rapi" } else { "⚠️ Perlu dirapikan (Jalankan aina kb lint --auto-heal)" });
+                }
+                Ok(())
+            }
+            "init" => {
+                if args.len() < 2 {
+                    eprintln!("Error: Path target direktori workspace wajib disertakan.");
+                    eprintln!("Contoh: aina workspace init /var/lib/aina/workspaces/kantor-bps");
+                    std::process::exit(1);
+                }
+                let target_path = Path::new(&args[1]);
+                let mut title = None;
+                let mut idx = 2;
+                while idx < args.len() {
+                    if (args[idx] == "--title" || args[idx] == "-t") && idx + 1 < args.len() {
+                        title = Some(args[idx + 1].as_str());
+                        idx += 2;
+                        continue;
+                    }
+                    idx += 1;
+                }
+
+                println!("🚀 Menginisialisasi workspace baru di {:?}...", target_path);
+                KnowledgeEngine::init_workspace(target_path, title)?;
+                println!("✅ Berhasil! Workspace siap digunakan.");
+                println!("   Untuk mengaktifkannya, set environment variable:");
+                println!("   export AGENT_WORKSPACE={}", target_path.display());
+                Ok(())
+            }
+            "clone" => Self::handle_workspace_clone(&args[1..]),
+            _ => {
+                eprintln!("Subcommand workspace tidak dikenal: `{}`", sub);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    fn handle_workspace_clone(args: &[String]) -> anyhow::Result<()> {
+        if args.is_empty() {
+            eprintln!("Error: URL git repository wajib disertakan.");
+            eprintln!("Contoh: aina clone https://github.com/my-org/knowledge-base.git [target-dir]");
+            std::process::exit(1);
+        }
+
+        let git_url = &args[0];
+        let default_target = format!(
+            "workspaces/{}",
+            git_url
+                .trim_end_matches('/')
+                .trim_end_matches(".git")
+                .split('/')
+                .last()
+                .unwrap_or("cloned-kb")
+        );
+        let target_str = if args.len() > 1 && !args[1].starts_with('-') {
+            &args[1]
+        } else {
+            &default_target
+        };
+        let target_path = Path::new(target_str);
+
+        println!("📦 Meng-clone knowledge base dari {} ke {:?}...", git_url, target_path);
+        KnowledgeEngine::clone_workspace(git_url, target_path)?;
+        println!("✅ Clone selesai dan katalog `knowledge/index.md` otomatis digenerate!");
+        println!("\nUntuk menghubungkan ke Aina daemon, tambahkan ke file `.env`:");
+        println!("AGENT_WORKSPACE={}", target_path.display());
         Ok(())
     }
 }
