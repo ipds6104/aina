@@ -3,7 +3,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: aina-assistant
     restart: unless-stopped
     ports:
       - "${PORT:-8090}:8090"
@@ -13,8 +12,6 @@ services:
       - aina_data:/app/data
       - aina_workspace:/app/workspace
       - aina_gemini:/root/.gemini
-    networks:
-      - aina-network
 
 volumes:
   aina_data:
@@ -23,7 +20,3 @@ volumes:
     driver: local
   aina_gemini:
     driver: local
-
-networks:
-  aina-network:
-    driver: bridge
