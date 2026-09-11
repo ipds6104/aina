@@ -1,20 +1,24 @@
+# syntax=docker/dockerfile:1
 # ==========================================
 # Stage 1: Build binary
 # ==========================================
-FROM rust:1.85-slim-bookworm AS builder
+FROM rust:1-slim-bookworm AS builder
 
 WORKDIR /usr/src/aina
 
-# Cache dependencies
+# Cache dependencies layer
 COPY Cargo.toml Cargo.lock ./
-# Create dummy main.rs for dependency caching
-RUN mkdir src && echo "fn main() {}" > src/main.rs && \
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    mkdir src && echo "fn main() {}" > src/main.rs && \
     cargo build --release && \
-    rm -rf src
+    rm -rf src target/release/deps/aina* target/release/aina*
 
-# Copy source code and build
+# Copy actual source code and compile
 COPY src ./src
-RUN touch src/main.rs && cargo build --release
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    cargo build --release
 
 # ==========================================
 # Stage 2: Runtime image
@@ -60,6 +64,9 @@ ENV AGENT_PERSONA_FILE=/app/config/persona.md
 ENV PATH="/root/.local/bin:/usr/local/bin:${PATH}"
 
 EXPOSE 8090
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://127.0.0.1:${SERVER_PORT:-8090}/health || exit 1
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["aina"]

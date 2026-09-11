@@ -1,0 +1,11 @@
+target/
+.git/
+.github/
+.env
+.env.*
+!*.env.example
+data/
+workspace/
+*.db
+*.db-journal
+*.log
