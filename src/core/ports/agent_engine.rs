@@ -15,7 +15,23 @@ pub trait AgentEnginePort: Send + Sync {
         &self,
         conversation_id: Option<&str>,
         prompt: &str,
+    ) -> anyhow::Result<AgentResponse> {
+        self.execute_with_model(conversation_id, prompt, None).await
+    }
+
+    /// Executes a prompt through the Antigravity agent CLI with an optional model override.
+    async fn execute_with_model(
+        &self,
+        conversation_id: Option<&str>,
+        prompt: &str,
+        model_override: Option<&str>,
     ) -> anyhow::Result<AgentResponse>;
+
+    /// Gets the current active default model name.
+    async fn get_model(&self) -> String;
+
+    /// Sets the current active default model name.
+    async fn set_model(&self, model: &str) -> anyhow::Result<()>;
 
     /// Checks if the agent has a valid authentication token stored.
     async fn is_authenticated(&self) -> bool;

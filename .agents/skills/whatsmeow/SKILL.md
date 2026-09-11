@@ -1,0 +1,90 @@
+---
+name: whatsmeow
+description: >-
+  Use this skill whenever the user asks to read recent WhatsApp chat history,
+  summarize previous group conversations, inspect group participants or admins,
+  export chat backups, or send media and document files via the Whatsmeow gateway.
+---
+
+# Whatsmeow Gateway & Chat Operations Skill
+
+This skill equips Aina with procedural workflows to interact with the companion Whatsmeow WhatsApp Gateway via its REST API using the helper tool [`scripts/wa_tool.py`](./scripts/wa_tool.py).
+
+---
+
+## 1. When to Activate This Skill
+
+Activate this skill when:
+1. **Summarizing Past Conversations**: The user in a group or DM asks: *"Aina tolong rangkum diskusi tadi"*, *"Apa yang dibahas sebelum aku join?"*, or asks about recent context.
+2. **Exporting Group Chat / Backups**: The user asks for a chat export, transcript backup, or meeting minutes compilation from a WhatsApp group.
+3. **Inspecting Group Metadata**: Checking group participant list, who the admins are, or group subject/topic.
+4. **Sending Media / Generated Files**: Aina has created a file in `workspace/` (e.g., Python script, PDF report, data chart, CSV/Excel) and needs to deliver it directly to the user on WhatsApp.
+
+---
+
+## 2. Helper Script Location & Calling Convention
+
+The helper tool is located at `scripts/wa_tool.py` within this skill directory.
+It automatically reads `WHATSMEOW_BASE_URL` and `WHATSMEOW_API_KEY` from the environment.
+
+Always run it using Python 3:
+```bash
+python3 /app/workspace/.agents/skills/whatsmeow/scripts/wa_tool.py <subcommand> [flags]
+```
+*(Or relative to CWD: `python3 .agents/skills/whatsmeow/scripts/wa_tool.py <subcommand> [flags]`)*
+
+---
+
+## 3. Standard Operating Procedures (SOP)
+
+### SOP 1: Fetching Recent Messages & Context Summarization
+When asked to summarize or catch up on what was discussed:
+1. Determine the target chat JID (from the incoming message context, e.g. `120363xxx@g.us` for groups or `628xxx@s.whatsapp.net` for DM).
+2. Fetch the recent messages (e.g., 25–50 messages):
+   ```bash
+   python3 .agents/skills/whatsmeow/scripts/wa_tool.py recent --jid "<CHAT_JID>" --limit 30
+   ```
+3. Parse the returned JSON to read the sequence of messages, senders, and timestamps.
+4. Synthesize an objective, structured summary:
+   - Key topics discussed.
+   - Decisions or agreements made.
+   - Action items / pending tasks (and who is assigned).
+
+### SOP 2: Exporting Group Chat Backups
+When an authorized user requests a chat backup or comprehensive audit log:
+1. Execute the backup command:
+   ```bash
+   python3 .agents/skills/whatsmeow/scripts/wa_tool.py export-backup --jid "<GROUP_JID>" --limit 1000 --out "/app/workspace/backup_<GROUP_JID>.json"
+   ```
+2. Verify that the file was created in `workspace/`.
+3. Inform the user that the backup has been compiled, provide summary metrics (total messages, date range), and offer to deliver or analyze the file.
+
+### SOP 3: Inspecting Group Participants & Authority
+To verify if someone claiming to be an admin really has admin privileges in a WhatsApp group:
+1. Run:
+   ```bash
+   python3 .agents/skills/whatsmeow/scripts/wa_tool.py group-info --jid "<GROUP_JID>"
+   ```
+2. Check the `participants` array for `is_admin` or `is_superadmin` flags.
+
+### SOP 4: Delivering Files & Media to WhatsApp
+If the user asked Aina to generate a report, script, or image:
+1. Ensure the file is saved in the workspace.
+2. Send the file to the recipient:
+   ```bash
+   python3 .agents/skills/whatsmeow/scripts/wa_tool.py send-media \
+     --to "<RECIPIENT_JID>" \
+     --file "/app/workspace/laporan.pdf" \
+     --type "document" \
+     --caption "Berikut berkas laporan yang Anda minta."
+   ```
+
+---
+
+## 4. OpSec & Authority Policy (Strict Enforcement)
+
+In accordance with the **OpSec** and **Tabayyun** guidelines:
+- **ADMIN** and **STAFF**: Authorized to read chat history, inspect group metadata, and trigger backups.
+- **GUEST / EXTERNAL**: **STRICTLY FORBIDDEN** from exporting group chat history, querying previous messages of other members, or extracting member phone numbers.
+  - *Response for GUEST*: Politely refuse citing office privacy policy:
+    > *"Mohon maaf, demi menjaga privasi dan keamanan data tim, fitur penarikan riwayat percakapan hanya dapat diakses oleh staf internal yang terverifikasi."*

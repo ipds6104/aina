@@ -17,8 +17,8 @@ whatsmeow:
 
 agent:
   binary_path: "/home/ihza/.local/bin/agy"
-  model: "gemini-3.8-flash-high"
-  workspace_dir: "./workspace"
+  model: "gemini-3.8-flash-medium"
+  workspace_dir: "./workspaces/default"
   timeout_seconds: 300
   persona_file: "config/persona.md"
 

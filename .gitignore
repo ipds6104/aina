@@ -2,7 +2,18 @@
 /data/*.db
 /data/*.db-shm
 /data/*.db-wal
+
+# Legacy single workspace
 /workspace/*
 !/workspace/.gitkeep
+
+# Multi-workspace rules
+/workspaces/*/*/*
+!/workspaces/**/GEMINI.md
+!/workspaces/GEMINI.md
+!/workspaces/**/scripts/**
+!/workspaces/**/.gitkeep
+!/workspaces/**/.agents/**
+
 .env
 *.log

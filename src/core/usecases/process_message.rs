@@ -62,6 +62,45 @@ impl ProcessIncomingMessageUseCase {
                     .record_message(&msg.chat_jid, &msg.sender.jid, &msg.text, false)
                     .await?;
 
+                // Check for built-in quick command: /model
+                let trimmed_text = msg.text.trim();
+                if trimmed_text.starts_with("/model") {
+                    let parts: Vec<&str> = trimmed_text.split_whitespace().collect();
+                    if parts.len() == 1 || (parts.len() >= 2 && (parts[1] == "status" || parts[1] == "list")) {
+                        let current = self.agent_engine.get_model().await;
+                        let reply = format!(
+                            "🤖 *Status Model AI Aina*\n\nModel aktif saat ini: *{}*\n\n*Pilihan Model Tersedia:*\n• `gemini-3.8-flash-medium` (Default Cepat & Seimbang)\n• `gemini-3.8-flash-high` (Penalaran Tinggi / Deep Thinking)\n• `gemini-3.8-flash-low` (Respons Kilat & Kasual)\n• `gemini-3.1-pro-high` (Deep Coding & Arsitektur)\n• `claude-opus-4-6-thinking` (Claude Opus Thinking - Khusus Eksplisit)\n• `claude-sonnet-4-6` (Claude Sonnet 4.6)\n\n_Untuk mengganti model, ketik:_ `/model <nama_model>`",
+                            current
+                        );
+                        self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
+                        self.whatsapp.send_text(&msg.chat_jid, &reply, Some(&msg.id)).await?;
+                        return Ok(());
+                    } else if parts.len() >= 2 {
+                        let target_model = parts[1];
+                        match self.agent_engine.set_model(target_model).await {
+                            Ok(_) => {
+                                let new_model = self.agent_engine.get_model().await;
+                                let reply = format!(
+                                    "✅ *Model AI Berhasil Diubah*\n\nAina sekarang menggunakan model: *{}*.\nRespons berikutnya akan diproses menggunakan mesin ini.",
+                                    new_model
+                                );
+                                self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
+                                self.whatsapp.send_text(&msg.chat_jid, &reply, Some(&msg.id)).await?;
+                                return Ok(());
+                            }
+                            Err(e) => {
+                                let reply = format!(
+                                    "⚠️ *Gagal Mengganti Model*\n\n{}\n\nContoh: `/model gemini-3.8-flash-medium`",
+                                    e
+                                );
+                                self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
+                                self.whatsapp.send_text(&msg.chat_jid, &reply, Some(&msg.id)).await?;
+                                return Ok(());
+                            }
+                        }
+                    }
+                }
+
                 // 2. Send 'typing...' indicator immediately
                 if let Err(e) = self
                     .whatsapp

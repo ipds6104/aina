@@ -90,11 +90,11 @@ pub struct AgentConfig {
 }
 
 fn default_model() -> String {
-    "gemini-3.8-flash-high".to_string()
+    "gemini-3.8-flash-medium".to_string()
 }
 
 fn default_workspace() -> String {
-    "./workspace".to_string()
+    "./workspaces/default".to_string()
 }
 
 fn default_timeout() -> u64 {

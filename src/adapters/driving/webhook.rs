@@ -47,6 +47,7 @@ pub struct WebhookServerState {
     pub persona_engine: Arc<PersonaEngine>,
     pub bot_name: String,
     pub bot_jid: String,
+    #[allow(dead_code)]
     pub model: String,
     pub whatsmeow_url: String,
     pub setup_code: String,
@@ -61,6 +62,8 @@ pub fn create_router(state: Arc<WebhookServerState>) -> Router {
         .route("/setup", get(setup_page_handler))
         .route("/health", get(health_handler))
         .route("/api/status", get(api_status_handler))
+        .route("/api/models", get(api_get_models_handler))
+        .route("/api/model", post(api_set_model_handler))
         .route("/api/setup", post(api_setup_handler))
         .route("/api/auth/verify", post(api_verify_admin_handler))
         .route("/api/simulate", post(simulate_handler))
@@ -88,15 +91,89 @@ async fn api_status_handler(
     State(state): State<Arc<WebhookServerState>>,
 ) -> impl IntoResponse {
     let auth = state.agent_engine.is_authenticated().await;
+    let live_model = state.agent_engine.get_model().await;
     Json(ApiStatusResponse {
         authenticated: auth,
         bot_name: state.bot_name.clone(),
         bot_jid: state.bot_jid.clone(),
-        model: state.model.clone(),
+        model: live_model,
         whatsmeow_url: state.whatsmeow_url.clone(),
         timezone: state.timezone.clone(),
         locale: state.locale.clone(),
     })
+}
+
+#[derive(Debug, Serialize)]
+struct ModelOption {
+    pub id: &'static str,
+    pub name: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct ApiModelsResponse {
+    pub current: String,
+    pub available: Vec<ModelOption>,
+}
+
+async fn api_get_models_handler(
+    State(state): State<Arc<WebhookServerState>>,
+) -> impl IntoResponse {
+    let current = state.agent_engine.get_model().await;
+    let available = crate::adapters::driven::get_available_models()
+        .into_iter()
+        .map(|(id, name)| ModelOption { id, name })
+        .collect();
+
+    Json(ApiModelsResponse { current, available })
+}
+
+#[derive(Debug, Deserialize)]
+struct SetModelRequest {
+    pub model: String,
+    pub admin_key: Option<String>,
+}
+
+async fn api_set_model_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
+    Json(payload): Json<SetModelRequest>,
+) -> impl IntoResponse {
+    let authorized = is_admin_authorized(&headers, &state.setup_code)
+        || payload.admin_key.as_deref().map(|k| k.trim() == state.setup_code.trim()).unwrap_or(false);
+
+    if !authorized {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "success": false,
+                "error": "Akses ditolak. Masukkan Admin Key / Setup Code yang valid."
+            })),
+        );
+    }
+
+    match state.agent_engine.set_model(&payload.model).await {
+        Ok(_) => {
+            let active = state.agent_engine.get_model().await;
+            info!("Aina default model updated to: {}", active);
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "success": true,
+                    "model": active,
+                    "message": format!("Model aktif berhasil diubah ke {}", active)
+                })),
+            )
+        }
+        Err(e) => {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "success": false,
+                    "error": format!("{}", e)
+                })),
+            )
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -203,6 +280,7 @@ struct SimulateRequest {
     pub chat_type: Option<String>,
     pub is_mention: Option<bool>,
     pub text: String,
+    pub model_override: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -239,6 +317,66 @@ async fn simulate_handler(
                 "error": "Aina belum terautentikasi ke Google Antigravity. Silakan lakukan setup terlebih dahulu."
             })),
         );
+    }
+
+    // Built-in quick command in simulator: /model
+    let trimmed_text = payload.text.trim();
+    if trimmed_text.starts_with("/model") {
+        let parts: Vec<&str> = trimmed_text.split_whitespace().collect();
+        if parts.len() == 1 || (parts.len() >= 2 && (parts[1] == "status" || parts[1] == "list")) {
+            let current = state.agent_engine.get_model().await;
+            let reply = format!(
+                "🤖 *Status Model AI Aina*\n\nModel aktif saat ini: *{}*\n\n*Pilihan Model Tersedia:*\n• `gemini-3.8-flash-medium` (Default Cepat & Seimbang)\n• `gemini-3.8-flash-high` (Penalaran Tinggi / Deep Thinking)\n• `gemini-3.8-flash-low` (Respons Kilat & Kasual)\n• `gemini-3.1-pro-high` (Deep Coding & Arsitektur)\n• `claude-opus-4-6-thinking` (Claude Opus Thinking - Khusus Eksplisit)\n• `claude-sonnet-4-6` (Claude Sonnet 4.6)\n\n_Untuk mengganti model, ketik:_ `/model <nama_model>`",
+                current
+            );
+            return (
+                StatusCode::OK,
+                Json(json!(SimulateResponse {
+                    decision: "Respond".to_string(),
+                    reason: "Quick /model status command".to_string(),
+                    response_text: Some(reply),
+                    duration_seconds: Some(0.01),
+                    conversation_id: None,
+                })),
+            );
+        } else if parts.len() >= 2 {
+            let target_model = parts[1];
+            match state.agent_engine.set_model(target_model).await {
+                Ok(_) => {
+                    let new_model = state.agent_engine.get_model().await;
+                    let reply = format!(
+                        "✅ *Model AI Berhasil Diubah*\n\nAina sekarang menggunakan model: *{}*.\nPengujian berikutnya akan diproses menggunakan mesin ini.",
+                        new_model
+                    );
+                    return (
+                        StatusCode::OK,
+                        Json(json!(SimulateResponse {
+                            decision: "Respond".to_string(),
+                            reason: "Quick /model switch command".to_string(),
+                            response_text: Some(reply),
+                            duration_seconds: Some(0.01),
+                            conversation_id: None,
+                        })),
+                    );
+                }
+                Err(e) => {
+                    let reply = format!(
+                        "⚠️ *Gagal Mengganti Model*\n\n{}\n\nContoh: `/model gemini-3.8-flash-medium`",
+                        e
+                    );
+                    return (
+                        StatusCode::OK,
+                        Json(json!(SimulateResponse {
+                            decision: "Respond".to_string(),
+                            reason: "Quick /model error".to_string(),
+                            response_text: Some(reply),
+                            duration_seconds: Some(0.01),
+                            conversation_id: None,
+                        })),
+                    );
+                }
+            }
+        }
     }
 
     let sender_name = payload.sender_name.unwrap_or_else(|| "Pengguna Tester".to_string());
@@ -346,10 +484,14 @@ async fn simulate_handler(
             let state_clone = Arc::clone(&state);
             let job_id_clone = job_id.clone();
             let msg_chat_jid = msg.chat_jid.clone();
+            let model_override = payload.model_override.clone();
 
             tokio::spawn(async move {
-                info!("Starting async agent execution for job {}", job_id_clone);
-                let exec_res = state_clone.agent_engine.execute(conv_id.as_deref(), &prompt).await;
+                info!("Starting async agent execution for job {} (model override: {:?})", job_id_clone, model_override);
+                let exec_res = state_clone
+                    .agent_engine
+                    .execute_with_model(conv_id.as_deref(), &prompt, model_override.as_deref())
+                    .await;
                 let fin_time = chrono_now_secs();
 
                 let mut jobs = state_clone.sim_jobs.write().await;
@@ -474,14 +616,16 @@ async fn dashboard_or_setup_handler(
     State(state): State<Arc<WebhookServerState>>,
 ) -> impl IntoResponse {
     let is_auth = state.agent_engine.is_authenticated().await;
-    Html(render_html(is_auth, &state))
+    let live_model = state.agent_engine.get_model().await;
+    Html(render_html(is_auth, &state, &live_model))
 }
 
 async fn setup_page_handler(
     State(state): State<Arc<WebhookServerState>>,
 ) -> impl IntoResponse {
     let is_auth = state.agent_engine.is_authenticated().await;
-    Html(render_html(is_auth, &state))
+    let live_model = state.agent_engine.get_model().await;
+    Html(render_html(is_auth, &state, &live_model))
 }
 
 async fn webhook_handler(
@@ -638,7 +782,7 @@ fn chrono_now_secs() -> i64 {
         .unwrap_or(0)
 }
 
-fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
+fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model: &str) -> String {
     let (badge_class, badge_text, badge_bg) = if is_authenticated {
         ("badge-success", "ONLINE & TERAUTENTIKASI", "#10b981")
     } else {
@@ -657,7 +801,13 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
                 <div class="info-grid">
                     <div class="info-item"><span class="label">Nama Bot</span><span class="val">{name}</span></div>
                     <div class="info-item"><span class="label">WhatsApp JID</span><span class="val">{jid}</span></div>
-                    <div class="info-item"><span class="label">Model AI</span><span class="val">{model}</span></div>
+                    <div class="info-item">
+                        <span class="label">Model AI Aktif</span>
+                        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                            <span class="val" id="active-model-display">{model}</span>
+                            <a href="javascript:void(0)" onclick="openModelModal()" style="font-size: 0.75rem; color: var(--primary); text-decoration: none; font-weight: 600;">⚡ Ganti</a>
+                        </div>
+                    </div>
                     <div class="info-item"><span class="label">Whatsmeow</span><span class="val">{url}</span></div>
                     <div class="info-item"><span class="label">Zona Waktu</span><span class="val">{timezone}</span></div>
                     <div class="info-item"><span class="label">Locale</span><span class="val">{locale}</span></div>
@@ -713,6 +863,19 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
                     </div>
                 </div>
 
+                <div style="margin-bottom: 12px;">
+                    <label class="form-label">Pilihan Model AI (Sesi Simulasi Ini)</label>
+                    <select id="sim-model-select" class="form-input">
+                        <option value="default">Mengikuti Model Aktif Default ({model})</option>
+                        <option value="gemini-3.8-flash-medium">Gemini 3.8 Flash (Medium) - Default Cepat &amp; Seimbang (5-15s)</option>
+                        <option value="gemini-3.8-flash-high">Gemini 3.8 Flash (High) - Penalaran Tinggi / Deep Thinking</option>
+                        <option value="gemini-3.8-flash-low">Gemini 3.8 Flash (Low) - Respons Kilat &amp; Kasual (&lt;3s)</option>
+                        <option value="gemini-3.1-pro-high">Gemini 3.1 Pro (High) - Deep Coding &amp; Arsitektur Sistem</option>
+                        <option value="claude-opus-4-6-thinking">Claude Opus 4.6 (Thinking) - Khusus Tugas Sangat Kompleks (Eksplisit)</option>
+                        <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (Thinking)</option>
+                    </select>
+                </div>
+
                 <div id="mention-toggle-wrapper" style="display: none; margin-bottom: 12px;">
                     <label style="font-size: 0.85rem; color: #94a3b8; display: flex; align-items: center; gap: 8px; cursor: pointer;">
                         <input type="checkbox" id="sim-is-mention" />
@@ -743,7 +906,7 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
             badge_bg = badge_bg,
             name = state.bot_name,
             jid = state.bot_jid,
-            model = state.model,
+            model = current_model,
             url = state.whatsmeow_url,
             timezone = state.timezone,
             locale = state.locale,
@@ -1216,6 +1379,41 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
             checkAdminAuth();
         }}
 
+        async function openModelModal() {{
+            const key = localStorage.getItem('aina_admin_key');
+            if (!key) {{
+                alert('Silakan masukkan Admin Key / Setup Code terlebih dahulu pada kartu simulator di bawah.');
+                return;
+            }}
+            const currentEl = document.getElementById('active-model-display');
+            const current = currentEl ? currentEl.innerText.trim() : '';
+            const choice = prompt(
+                `Pilih Model AI Default untuk Aina:\n\nModel aktif saat ini: ${{current}}\n\nPilihan Model Tersedia:\n• gemini-3.8-flash-medium (Default Cepat & Seimbang)\n• gemini-3.8-flash-high (Penalaran Tinggi / Deep Thinking)\n• gemini-3.8-flash-low (Respons Kilat & Kasual)\n• gemini-3.1-pro-high (Deep Coding & Arsitektur)\n• claude-opus-4-6-thinking (Claude Opus Thinking - Khusus Eksplisit)\n• claude-sonnet-4-6 (Claude Sonnet 4.6)\n\nMasukkan nama model baru:`,
+                current
+            );
+            if (!choice || choice.trim() === current || choice.trim() === '') return;
+
+            try {{
+                const res = await fetch('/api/model', {{
+                    method: 'POST',
+                    headers: {{
+                        'Content-Type': 'application/json',
+                        'X-Admin-Key': key
+                    }},
+                    body: JSON.stringify({{ model: choice.trim() }})
+                }});
+                const data = await res.json();
+                if (res.ok && data.success) {{
+                    alert(`✅ Sukses! Model default Aina sekarang: ${{data.model}}`);
+                    if (currentEl) currentEl.innerText = data.model;
+                }} else {{
+                    alert(`⚠️ Gagal mengganti model: ${{data.error || data.message || 'Error'}}`);
+                }}
+            }} catch(e) {{
+                alert(`Koneksi error: ${{e.message}}`);
+            }}
+        }}
+
         function onChatTypeChange(val) {{
             const el = document.getElementById('mention-toggle-wrapper');
             if (el) el.style.display = (val === 'group') ? 'block' : 'none';
@@ -1226,6 +1424,10 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
             const chatType = document.getElementById('sim-chat-type').value;
             const senderName = document.getElementById('sim-sender-name').value.trim();
             const isMention = document.getElementById('sim-is-mention') ? document.getElementById('sim-is-mention').checked : false;
+            const modelSelectEl = document.getElementById('sim-model-select');
+            const selectedModel = modelSelectEl ? modelSelectEl.value : 'default';
+            const modelOverride = (selectedModel !== 'default') ? selectedModel : null;
+
             const btn = document.getElementById('sim-btn');
             const resBox = document.getElementById('sim-result-box');
             const metaEl = document.getElementById('sim-meta');
@@ -1258,7 +1460,8 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
                         text: text,
                         chat_type: chatType,
                         sender_name: senderName,
-                        is_mention: isMention
+                        is_mention: isMention,
+                        model_override: modelOverride
                     }})
                 }});
 

@@ -6,6 +6,9 @@ use std::time::Duration;
 use tokio::process::Command;
 use tracing::{debug, error, info, warn};
 
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
 #[derive(Debug, Deserialize)]
 struct AgyJsonOutput {
     pub conversation_id: String,
@@ -15,9 +18,81 @@ struct AgyJsonOutput {
     pub duration_seconds: f64,
 }
 
+/// Normalizes and resolves model name aliases, strictly prioritizing Gemini as default
+/// and allowing Claude Opus ONLY when explicitly requested.
+pub fn resolve_model_name(raw: &str) -> anyhow::Result<String> {
+    let lower = raw.trim().to_lowercase();
+    match lower.as_str() {
+        // Gemini 3.8 Family (Recommended Defaults)
+        "gemini-3.8-flash-medium" | "flash-medium" | "medium" | "gemini-medium" | "gemini-flash-medium" | "default" => {
+            Ok("gemini-3.8-flash-medium".to_string())
+        }
+        "gemini-3.8-flash-high" | "flash-high" | "high" | "gemini-high" | "gemini-flash-high" => {
+            Ok("gemini-3.8-flash-high".to_string())
+        }
+        "gemini-3.8-flash-low" | "flash-low" | "low" | "gemini-low" | "gemini-flash-low" => {
+            Ok("gemini-3.8-flash-low".to_string())
+        }
+        "flash" | "gemini-flash" => {
+            Ok("gemini-3.8-flash-medium".to_string())
+        }
+
+        // Gemini 3.7 Family
+        "gemini-3.7-flash-high" => Ok("gemini-3.7-flash-high".to_string()),
+        "gemini-3.7-flash-medium" => Ok("gemini-3.7-flash-medium".to_string()),
+        "gemini-3.7-flash-low" => Ok("gemini-3.7-flash-low".to_string()),
+
+        // Gemini 3.6 Family
+        "gemini-3.6-flash-high" => Ok("gemini-3.6-flash-high".to_string()),
+        "gemini-3.6-flash-medium" => Ok("gemini-3.6-flash-medium".to_string()),
+        "gemini-3.6-flash-low" => Ok("gemini-3.6-flash-low".to_string()),
+
+        // Gemini 3.1 Pro (Deep Coding & Architecture)
+        "gemini-3.1-pro-high" | "pro-high" | "pro" | "gemini-pro" => {
+            Ok("gemini-3.1-pro-high".to_string())
+        }
+        "gemini-3.1-pro-low" | "pro-low" => {
+            Ok("gemini-3.1-pro-low".to_string())
+        }
+
+        // Claude Sonnet
+        "claude-sonnet-4-6" | "claude-sonnet" | "sonnet" => {
+            Ok("claude-sonnet-4-6".to_string())
+        }
+
+        // Claude Opus (Strictly opt-in / explicitly requested)
+        "claude-opus-4-6-thinking" | "claude-opus" | "opus" | "opus-thinking" => {
+            Ok("claude-opus-4-6-thinking".to_string())
+        }
+
+        // GPT-OSS
+        "gpt-oss-120b-medium" | "gpt-oss" => {
+            Ok("gpt-oss-120b-medium".to_string())
+        }
+
+        other => {
+            anyhow::bail!(
+                "Model '{}' tidak didukung. Pilihan: gemini-3.8-flash-medium (default), gemini-3.8-flash-high, gemini-3.8-flash-low, gemini-3.1-pro-high, claude-opus-4-6-thinking, claude-sonnet-4-6.",
+                other
+            )
+        }
+    }
+}
+
+pub fn get_available_models() -> Vec<(&'static str, &'static str)> {
+    vec![
+        ("gemini-3.8-flash-medium", "Gemini 3.8 Flash (Medium) - Default Cepat & Seimbang"),
+        ("gemini-3.8-flash-high", "Gemini 3.8 Flash (High) - Penalaran Tinggi / Deep Thinking"),
+        ("gemini-3.8-flash-low", "Gemini 3.8 Flash (Low) - Respons Kilat & Kasual"),
+        ("gemini-3.1-pro-high", "Gemini 3.1 Pro (High) - Deep Coding & Arsitektur"),
+        ("claude-opus-4-6-thinking", "Claude Opus 4.6 (Thinking) - Khusus Tugas Kompleks Eksplisit"),
+        ("claude-sonnet-4-6", "Claude Sonnet 4.6 (Thinking)"),
+    ]
+}
+
 pub struct AntigravityCliAdapter {
     binary_path: PathBuf,
-    model: String,
+    model: Arc<RwLock<String>>,
     workspace_dir: PathBuf,
     timeout_duration: Duration,
 }
@@ -29,9 +104,11 @@ impl AntigravityCliAdapter {
         workspace_dir: impl Into<PathBuf>,
         timeout_seconds: u64,
     ) -> Self {
+        let raw_model = model.into();
+        let initial_model = resolve_model_name(&raw_model).unwrap_or(raw_model);
         Self {
             binary_path: binary_path.into(),
-            model: model.into(),
+            model: Arc::new(RwLock::new(initial_model)),
             workspace_dir: workspace_dir.into(),
             timeout_duration: Duration::from_secs(timeout_seconds),
         }
@@ -48,11 +125,17 @@ impl AntigravityCliAdapter {
 
 #[async_trait]
 impl AgentEnginePort for AntigravityCliAdapter {
-    async fn execute(
+    async fn execute_with_model(
         &self,
         conversation_id: Option<&str>,
         prompt: &str,
+        model_override: Option<&str>,
     ) -> anyhow::Result<AgentResponse> {
+        let active_model = match model_override {
+            Some(m) if !m.trim().is_empty() => resolve_model_name(m)?,
+            _ => self.model.read().await.clone(),
+        };
+
         let mut cmd = Command::new(&self.binary_path);
         
         // Ensure workspace directory exists
@@ -72,11 +155,11 @@ impl AgentEnginePort for AntigravityCliAdapter {
         cmd.arg("-p").arg(prompt);
         cmd.arg("--output-format").arg("json");
         cmd.arg("--dangerously-skip-permissions");
-        cmd.arg("--model").arg(&self.model);
+        cmd.arg("--model").arg(&active_model);
 
         debug!(
-            "Executing Antigravity CLI: {:?} (conv: {:?})",
-            self.binary_path, conversation_id
+            "Executing Antigravity CLI: {:?} (conv: {:?}, model: {})",
+            self.binary_path, conversation_id, active_model
         );
 
         // Run with timeout
@@ -130,8 +213,8 @@ impl AgentEnginePort for AntigravityCliAdapter {
             Some(payload) => {
                 let parsed: AgyJsonOutput = serde_json::from_str(payload)?;
                 info!(
-                    "Agent turn finished: conv={}, status={}",
-                    parsed.conversation_id, parsed.status
+                    "Agent turn finished: conv={}, status={}, model={}",
+                    parsed.conversation_id, parsed.status, active_model
                 );
                 Ok(AgentResponse {
                     conversation_id: parsed.conversation_id,
@@ -148,6 +231,17 @@ impl AgentEnginePort for AntigravityCliAdapter {
                 })
             }
         }
+    }
+
+    async fn get_model(&self) -> String {
+        self.model.read().await.clone()
+    }
+
+    async fn set_model(&self, model: &str) -> anyhow::Result<()> {
+        let validated = resolve_model_name(model)?;
+        let mut lock = self.model.write().await;
+        *lock = validated;
+        Ok(())
     }
 
     async fn is_authenticated(&self) -> bool {
