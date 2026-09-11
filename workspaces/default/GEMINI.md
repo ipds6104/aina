@@ -20,7 +20,11 @@
 - Gunakan `python3 scripts/workspace_manager.py schedule` untuk melihat jadwal agenda kantor.
 - Jalankan `python3 scripts/workspace_manager.py groom default` untuk memperbarui indeks pengetahuan.
 
-## 4. Eksekusi Perintah Non-Interaktif (Headless Environment)
+## 4. Eksekusi Perintah Non-Interaktif & GitHub Auth
 - Dilarang keras mengeksekusi perintah CLI interaktif yang memblokir stdin (seperti `gh auth login` interaktif/web, `passwd`, `apt` tanpa `-y`, dll.) karena akan hang hingga timeout 300+ detik.
-- Untuk autentikasi GitHub CLI, gunakan Personal Access Token via `echo "$TOKEN" | gh auth login --with-token` atau minta user menambahkan `GH_TOKEN` di file `.env`.
+- Untuk login/otorisasi GitHub CLI:
+  1. Jalankan `aina gh-device` untuk mendapatkan kode verifikasi 8-digit dan link `https://github.com/login/device`.
+  2. Kirimkan link dan kode tersebut ke pengguna WhatsApp.
+  3. Setelah pengguna membalas konfirmasi sudah klik Authorize, jalankan `aina gh-poll` untuk menyelesaikan otorisasi.
+  4. Pengguna juga dapat menggunakan Personal Access Token (PAT) via `aina gh-login <pat>`.
 

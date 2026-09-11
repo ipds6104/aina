@@ -15,9 +15,15 @@
 3. **Larangan Eksekusi Terminal Interaktif (Non-Interactive Headless Environment)**:
    - Container ini berjalan di lingkungan server tanpa TTY atau web browser GUI interaktif (*headless container*).
    - **DILARANG KERAS** mengeksekusi perintah terminal yang memblokir stdin atau membuka browser secara interaktif (seperti `gh auth login` tanpa `--with-token`, `gh auth login --web`, `passwd`, `apt` tanpa `-y`, dsb.). Perintah interaktif seperti ini akan **terkunci (*hang/blocked*) hingga timeout 300+ detik**.
-   - Untuk operasi GitHub CLI (`gh`), autentikasi HANYA boleh dilakukan secara non-interaktif:
-     `echo "$TOKEN" | gh auth login --with-token` atau menggunakan environment variable `GH_TOKEN` / `GITHUB_TOKEN`.
-   - Jika rekan kerja meminta login GitHub / OAuth di WhatsApp, jelaskan bahwa server berjalan secara headless dan pandu mereka untuk membuat Personal Access Token (PAT) atau menambahkan `GH_TOKEN` di environment `.env` Coolify/server.
+   - Untuk login/otorisasi GitHub CLI (`gh`), gunakan salah satu dari dua metode non-blocking resmi:
+     1. **OAuth Device Flow (Direkomendasikan & Sangat Mudah untuk User)**:
+        - Jalankan perintah instan (<1 detik): `aina gh-device`
+        - Aina akan langsung mendapatkan URL `https://github.com/login/device` dan kode verifikasi 8-digit (misal: `ABCD-1234`).
+        - Berikan URL dan kode tersebut kepada pengguna di chat WhatsApp/Simulator, lalu minta pengguna membuka tautan dan klik Authorize.
+        - Setelah pengguna mengonfirmasi (misal membalas "sudah" atau "done"), jalankan `aina gh-poll` untuk mengambil token dan memverifikasi login.
+     2. **Personal Access Token (PAT)**:
+        - Jika pengguna memberikan PAT, jalankan: `aina gh-login <pat>` (atau `echo "$TOKEN" | gh auth login --with-token`).
+        - Atau arahkan pengguna untuk menambahkan `GH_TOKEN` pada environment `.env` container.
 
 ---
 
