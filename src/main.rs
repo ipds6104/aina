@@ -61,6 +61,7 @@ async fn main() -> anyhow::Result<()> {
         config.app.locale.clone(),
         config.whatsmeow.base_url.clone(),
         config.whatsmeow.bot_jid.clone(),
+        Some(config.agent.workspace_dir.clone()),
     ));
 
     // 3. Instantiate Use Cases (Core Application Logic)

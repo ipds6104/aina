@@ -10,6 +10,7 @@ pub struct PersonaEngine {
     pub locale: String,
     pub whatsmeow_url: String,
     pub bot_jid: String,
+    pub workspace_dir: Option<String>,
 }
 
 impl PersonaEngine {
@@ -22,6 +23,7 @@ impl PersonaEngine {
         locale: String,
         whatsmeow_url: String,
         bot_jid: String,
+        workspace_dir: Option<String>,
     ) -> Self {
         Self {
             persona_text,
@@ -32,7 +34,28 @@ impl PersonaEngine {
             locale,
             whatsmeow_url,
             bot_jid,
+            workspace_dir,
         }
+    }
+
+    /// Reads the concise knowledge base catalog index (index.md) if available.
+    pub fn load_knowledge_index(&self) -> Option<String> {
+        let ws_dir = self.workspace_dir.as_deref().unwrap_or("./workspaces/default");
+        let index_path = std::path::Path::new(ws_dir).join("knowledge").join("index.md");
+        if index_path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&index_path) {
+                let trimmed = content.trim();
+                if !trimmed.is_empty() {
+                    // Limit up to 2500 chars to maintain progressive disclosure & zero token bloat
+                    return Some(if trimmed.len() > 2500 {
+                        format!("{}...\n(Ringkasan dipotong untuk efisiensi konteks)", &trimmed[..2500])
+                    } else {
+                        trimmed.to_string()
+                    });
+                }
+            }
+        }
+        None
     }
 
     pub fn current_local_time_string(&self) -> String {
@@ -134,6 +157,14 @@ impl PersonaEngine {
         let current_time_str = self.current_local_time_string();
         let tz_offset_sign = if self.timezone_offset_hours >= 0 { "+" } else { "" };
 
+        let knowledge_context = match self.load_knowledge_index() {
+            Some(idx) => format!(
+                "\n---\n[Katalog Knowledge Base Aktif]:\n{}\n- Catatan Pengambilan (Retrieval): Gunakan katalog di atas untuk langsung mengetahui dokumen umum dan kegiatan aktif. Jika pengguna menanyakan detail lebih lanjut, baca berkas rujukan spesifik yang tertaut di katalog.\n",
+                idx
+            ),
+            None => String::new(),
+        };
+
         format!(
             "{persona}\n\n\
             ---\n\
@@ -155,7 +186,8 @@ impl PersonaEngine {
             {quoted_context}\
             \n\
             [Pesan dari Pengirim]:\n\
-            {text}\n\n\
+            {text}\n\
+            {knowledge_context}\n\
             ---\n\
             [Integrasi WhatsApp Gateway & Akses Sistem]:\n\
             - URL Whatsmeow Gateway: {whatsmeow_url}\n\
@@ -194,6 +226,7 @@ impl PersonaEngine {
             authority_guidance = authority_guidance,
             quoted_context = quoted_context,
             text = msg.text,
+            knowledge_context = knowledge_context,
             platform_format_guidelines = platform_format_guidelines
         )
     }
