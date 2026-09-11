@@ -89,11 +89,12 @@ impl Gatekeeper {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::domain::message::{Sender, ChatType};
+    use crate::core::domain::message::{Sender, ChatType, Platform};
 
     fn make_msg(chat_type: ChatType, text: &str, is_from_me: bool) -> IncomingMessage {
         IncomingMessage {
             id: "msg-1".to_string(),
+            platform: Platform::WhatsApp,
             chat_jid: "group-123@g.us".to_string(),
             chat_type,
             sender: Sender {

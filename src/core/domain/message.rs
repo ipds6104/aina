@@ -19,9 +19,36 @@ pub struct QuotedMessage {
     pub text: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Platform {
+    WhatsApp,
+    WebSimulator,
+    Discord,
+    Telegram,
+    Custom(String),
+}
+
+impl std::fmt::Display for Platform {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Platform::WhatsApp => write!(f, "WhatsApp"),
+            Platform::WebSimulator => write!(f, "Web Dashboard / Simulator"),
+            Platform::Discord => write!(f, "Discord"),
+            Platform::Telegram => write!(f, "Telegram"),
+            Platform::Custom(s) => write!(f, "{}", s),
+        }
+    }
+}
+
+fn default_platform() -> Platform {
+    Platform::WhatsApp
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IncomingMessage {
     pub id: String,
+    #[serde(default = "default_platform")]
+    pub platform: Platform,
     pub chat_jid: String,
     pub chat_type: ChatType,
     pub sender: Sender,

@@ -231,6 +231,7 @@ async fn simulate_handler(
 
     let msg = IncomingMessage {
         id: format!("sim-{}", chrono_now_secs()),
+        platform: crate::core::domain::Platform::WebSimulator,
         chat_jid: chat_jid.clone(),
         chat_type,
         sender: Sender {
@@ -463,6 +464,7 @@ fn parse_whatsmeow_message(val: &Value) -> Option<IncomingMessage> {
 
     Some(IncomingMessage {
         id: msg_id,
+        platform: crate::core::domain::Platform::WhatsApp,
         chat_jid,
         chat_type,
         sender: Sender {
