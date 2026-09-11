@@ -19,6 +19,13 @@ impl SqliteSessionStore {
 
         let conn = Connection::open(path_ref)?;
         
+        // Resilience against power cuts & high concurrency: Enable Write-Ahead Logging (WAL)
+        conn.execute_batch(
+            "PRAGMA journal_mode = WAL;
+             PRAGMA synchronous = NORMAL;
+             PRAGMA busy_timeout = 5000;"
+        )?;
+        
         // Initialize tables
         conn.execute(
             "CREATE TABLE IF NOT EXISTS chats (

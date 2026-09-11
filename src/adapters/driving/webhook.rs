@@ -1,6 +1,6 @@
 use axum::{
     extract::State,
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{Html, IntoResponse},
     routing::{get, post},
     Json, Router,
@@ -32,6 +32,7 @@ pub fn create_router(state: Arc<WebhookServerState>) -> Router {
         .route("/health", get(health_handler))
         .route("/api/status", get(api_status_handler))
         .route("/api/setup", post(api_setup_handler))
+        .route("/api/auth/verify", post(api_verify_admin_handler))
         .route("/api/simulate", post(simulate_handler))
         .route("/webhook", post(webhook_handler))
         .with_state(state)
@@ -110,6 +111,57 @@ async fn api_setup_handler(
 }
 
 #[derive(Debug, Deserialize)]
+struct VerifyAdminRequest {
+    pub admin_key: String,
+}
+
+fn is_admin_authorized(headers: &HeaderMap, expected_code: &str) -> bool {
+    let expected = expected_code.trim();
+    if expected.is_empty() {
+        return true;
+    }
+
+    if let Some(key) = headers.get("X-Admin-Key").and_then(|v| v.to_str().ok()) {
+        if key.trim() == expected {
+            return true;
+        }
+    }
+
+    if let Some(auth) = headers.get("Authorization").and_then(|v| v.to_str().ok()) {
+        if let Some(bearer) = auth.strip_prefix("Bearer ") {
+            if bearer.trim() == expected {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
+async fn api_verify_admin_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    Json(payload): Json<VerifyAdminRequest>,
+) -> impl IntoResponse {
+    if payload.admin_key.trim() == state.setup_code.trim() {
+        (
+            StatusCode::OK,
+            Json(json!({
+                "success": true,
+                "message": "Autentikasi admin berhasil!"
+            })),
+        )
+    } else {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "success": false,
+                "message": "Admin Key / Setup Code salah! Periksa log server Anda."
+            })),
+        )
+    }
+}
+
+#[derive(Debug, Deserialize)]
 struct SimulateRequest {
     pub sender_name: Option<String>,
     pub sender_jid: Option<String>,
@@ -129,8 +181,19 @@ struct SimulateResponse {
 
 async fn simulate_handler(
     State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
     Json(payload): Json<SimulateRequest>,
 ) -> impl IntoResponse {
+    // 1. Enforce Admin Authentication
+    if !is_admin_authorized(&headers, &state.setup_code) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "error": "Akses simulator ditolak. Harap masukkan Admin Key / Setup Code yang valid."
+            })),
+        );
+    }
+
     info!("Running real end-to-end WhatsApp simulation");
 
     let is_auth = state.agent_engine.is_authenticated().await;
@@ -445,8 +508,28 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
                 </div>
             </div>
 
+            <!-- ADMIN LOCK CARD -->
+            <div id="sim-lock-card" class="card" style="border-color: #f59e0b; display: none;">
+                <div class="card-header">
+                    <span style="font-size: 1.2rem;">🔒</span>
+                    <h2>Akses Simulator Terproteksi</h2>
+                </div>
+                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 14px;">
+                    Untuk mencegah orang luar mengeksekusi agen AI di server Anda, fitur simulator dilindungi. Masukkan <strong>Setup Code / Admin Key</strong> server Anda untuk membuka sesi.
+                </p>
+                <div style="display: flex; gap: 8px;">
+                    <input id="admin-passcode-input" class="form-input" type="password" placeholder="Masukkan Admin Key / Setup Code..." style="margin-bottom: 0;" />
+                    <button id="unlock-btn" class="btn" style="white-space: nowrap;" onclick="unlockAdminSession()">Buka Kunci</button>
+                </div>
+                <div id="unlock-error" style="display: none; color: #ef4444; font-size: 0.85rem; margin-top: 8px;"></div>
+            </div>
+
             <!-- SIMULATOR CHAT REAL END-TO-END -->
-            <div class="card simulator-card">
+            <div id="simulator-card" class="card simulator-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding: 6px 12px; background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.2); border-radius: 6px; font-size: 0.8rem; color: #10b981;">
+                    <span>🛡️ Sesi Admin Terverifikasi</span>
+                    <a href="javascript:void(0)" onclick="lockAdminSession()" style="color: #f87171; text-decoration: none; font-weight: 600;">Kunci Dashboard</a>
+                </div>
                 <div class="card-header">
                     <span style="font-size: 1.2rem;">🧪</span>
                     <h2>Simulator Percakapan WhatsApp (Real Test)</h2>
@@ -725,6 +808,63 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
     </div>
 
     <script>
+        function checkAdminAuth() {{
+            const key = localStorage.getItem('aina_admin_key');
+            const simCard = document.getElementById('simulator-card');
+            const lockCard = document.getElementById('sim-lock-card');
+            if (!simCard || !lockCard) return;
+
+            if (key) {{
+                simCard.style.display = 'block';
+                lockCard.style.display = 'none';
+            }} else {{
+                simCard.style.display = 'none';
+                lockCard.style.display = 'block';
+            }}
+        }}
+
+        async function unlockAdminSession() {{
+            const input = document.getElementById('admin-passcode-input');
+            const errEl = document.getElementById('unlock-error');
+            const btn = document.getElementById('unlock-btn');
+            const val = input.value.trim();
+            if (!val) {{
+                errEl.innerText = 'Harap masukkan Setup Code / Admin Key.';
+                errEl.style.display = 'block';
+                return;
+            }}
+            errEl.style.display = 'none';
+            btn.disabled = true;
+            btn.innerText = 'Memverifikasi...';
+
+            try {{
+                const res = await fetch('/api/auth/verify', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ admin_key: val }})
+                }});
+                const data = await res.json();
+                if (res.ok && data.success) {{
+                    localStorage.setItem('aina_admin_key', val);
+                    checkAdminAuth();
+                }} else {{
+                    errEl.innerText = data.message || 'Admin Key tidak valid!';
+                    errEl.style.display = 'block';
+                }}
+            }} catch(e) {{
+                errEl.innerText = 'Koneksi error: ' + e.message;
+                errEl.style.display = 'block';
+            }} finally {{
+                btn.disabled = false;
+                btn.innerText = 'Buka Kunci';
+            }}
+        }}
+
+        function lockAdminSession() {{
+            localStorage.removeItem('aina_admin_key');
+            checkAdminAuth();
+        }}
+
         function onChatTypeChange(val) {{
             const el = document.getElementById('mention-toggle-wrapper');
             if (el) el.style.display = (val === 'group') ? 'block' : 'none';
@@ -739,6 +879,7 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
             const resBox = document.getElementById('sim-result-box');
             const metaEl = document.getElementById('sim-meta');
             const textEl = document.getElementById('sim-response-text');
+            const adminKey = localStorage.getItem('aina_admin_key') || '';
 
             if (!text) {{
                 alert('Tolong ketik pesan chat terlebih dahulu.');
@@ -752,7 +893,10 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
             try {{
                 const res = await fetch('/api/simulate', {{
                     method: 'POST',
-                    headers: {{ 'Content-Type': 'application/json' }},
+                    headers: {{
+                        'Content-Type': 'application/json',
+                        'X-Admin-Key': adminKey
+                    }},
                     body: JSON.stringify({{
                         text: text,
                         chat_type: chatType,
@@ -760,6 +904,12 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
                         is_mention: isMention
                     }})
                 }});
+
+                if (res.status === 401) {{
+                    alert('Sesi kedaluwarsa atau Admin Key tidak valid. Harap buka kunci kembali.');
+                    lockAdminSession();
+                    return;
+                }}
 
                 const data = await res.json();
                 resBox.style.display = 'block';
@@ -815,6 +965,7 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
 
                 const data = await res.json();
                 if (res.ok && data.success) {{
+                    localStorage.setItem('aina_admin_key', setupCode);
                     showAlert(data.message + ' Halaman akan dimuat ulang...', true);
                     setTimeout(() => window.location.reload(), 2000);
                 }} else {{
@@ -834,6 +985,10 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
             alertBox.className = 'alert ' + (isSuccess ? 'alert-success' : 'alert-error');
             alertBox.innerText = msg;
         }}
+
+        // Run check on page load
+        document.addEventListener('DOMContentLoaded', checkAdminAuth);
+        checkAdminAuth();
     </script>
 </body>
 </html>
