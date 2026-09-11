@@ -44,3 +44,16 @@ Tersedia skrip utilitas di `scripts/model_control.py`:
 - `python3 scripts/model_control.py get` : Cek model AI yang aktif saat ini.
 - `python3 scripts/model_control.py list`: Lihat daftar seluruh model yang didukung.
 - `python3 scripts/model_control.py set <model_name>`: Alihkan model aktif (prioritas keluarga Gemini, Opus hanya bila diminta eksplisit).
+
+---
+
+## 5. Tata Kelola Knowledge Base & Pelacakan Kegiatan (Temporal Activity)
+
+1. **Struktur Pengetahuan Terisolasi**:
+   - `knowledge/facts.md`: Catat fakta, kesepakatan, dan parameter penting umum yang bersifat permanen.
+   - `knowledge/procedures.md`: Catat SOP dan panduan alur kerja universal.
+   - `knowledge/kegiatan/<slug>/<periode>/README.md`: Untuk kegiatan/survei/proyek berbasis waktu, simpan terpisah dengan metadata YAML frontmatter (`nama`, `kategori`, `rutinitas`, `frekuensi`, `status`, `deadlines`).
+2. **Pelacakan Agenda & Deadlines**:
+   - Gunakan `python3 scripts/workspace_manager.py schedule [--week | --month | --overdue]` untuk menjawab agenda kerja secara faktual dan tepat waktu tanpa spekulasi.
+3. **Merapikan Indeks (Grooming)**:
+   - Jalankan `python3 scripts/workspace_manager.py groom <workspace>` secara berkala agar ringkasan terkompilasi di `knowledge/index.md` selalu mutakhir untuk progressive retrieval.

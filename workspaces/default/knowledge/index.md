@@ -1,12 +1,31 @@
-# 📚 Indeks Knowledge Base: DEFAULT
+# 📚 Indeks Terpadu Knowledge Base: DEFAULT
 
-> Terakhir dirapikan: 2026-09-11 21:19 WIB | Total berkas: 2 | Total baris: 10
+> Terakhir dirapikan: **2026-09-11 21:35 WIB** | Berkas Dokumen: **2** | Kegiatan Aktif: **1** | Agenda Tertunda: **2**
 
-## 📑 Katalog Berkas Pengetahuan
+---
+
+## 📑 1. Pengetahuan Umum & Pedoman Dasar (Universal Knowledge)
 
 - [**💡 Fakta & Parameter Umum: Workspace Default**](facts.md) — `6 baris`
 - [**📋 Standar Operasional & Alur Kerja Default**](procedures.md) — `4 baris`
 
-## 🔍 Panduan Pengambilan Pengetahuan (Retrieval)
-1. Agen dapat membaca berkas indeks ini terlebih dahulu untuk memetakan topik yang tersedia.
-2. Gunakan pembacaan file terarah ke berkas spesifik di atas untuk menjawab pertanyaan teknis mendalam rekan kerja.
+---
+
+## 🗓️ 2. Matriks Kegiatan & Proyek Berdasarkan Waktu
+
+| Nama Kegiatan | Periode | Kategori | Status | Berkas Rujukan |
+| :--- | :--- | :--- | :--- | :--- |
+| **Persiapan Peluncuran Aina** | `2026-09` | proyek | 🟡 Aktif | [`README.md`](kegiatan/persiapan-peluncuran-aina/2026-09/README.md) |
+
+---
+
+## ⏰ 3. Sorotan Agenda & Deadline Terdekat
+
+- **12 Sep 2026** (1 hari lagi): Uji Coba WhatsApp Gateway — *Persiapan Peluncuran Aina (2026-09)* [`Rujukan`](kegiatan/persiapan-peluncuran-aina/2026-09/README.md)
+- **15 Sep 2026** (4 hari lagi): Rilis Publik Repositori — *Persiapan Peluncuran Aina (2026-09)* [`Rujukan`](kegiatan/persiapan-peluncuran-aina/2026-09/README.md)
+
+---
+
+## 🔍 Panduan Pengambilan Pengetahuan (Progressive Retrieval)
+1. **Peta Konteks Awal**: Asisten AI membaca berkas `index.md` ini di awal sesi untuk memetakan dokumen umum, kegiatan yang sedang berjalan, dan tenggat waktu terdekat.
+2. **Penyelaman Konteks Spesifik**: Saat pengguna menanyakan detail SOP atau kegiatan tertentu, agen **hanya** membuka berkas target (misal `kegiatan/<slug>/<periode>/README.md`) tanpa membaca seluruh repositori, sehingga menghemat konsumsi token dan menjaga kecepatan berpikir (5–15 detik).

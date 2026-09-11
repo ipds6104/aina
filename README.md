@@ -188,14 +188,18 @@ workspaces/<nama_workspace>/
 ├── knowledge/                   # 🧠 Knowledge Base terstruktur
 │   ├── index.md                 # Katalog ringkasan topik (diperbarui oleh grooming)
 │   ├── facts.md                 # Kumpulan fakta, keputusan rapat, parameter kunci
-│   └── procedures.md            # SOP, alur kerja, panduan langkah-demi-langkah
+│   ├── procedures.md            # SOP, alur kerja, panduan langkah-demi-langkah
+│   └── kegiatan/                # 🗓️ Arsip proyek & kegiatan berkala (berbasis waktu)
+│       └── [nama-kegiatan]/
+│           └── [periode]/       # Contoh: 2026-09, 2026-Q3, 2026
+│               └── README.md    # Metadata YAML frontmatter (status, deadlines)
 ├── data/                        # 💾 Penyimpanan data tabular/dokumen (.csv, .xlsx, .json)
 └── scripts/                     # ⚙️ Skrip automasi & data pipeline
     ├── model_control.py         # Utilitas kontrol model
-    └── workspace_manager.py     # Utilitas manajemen workspace & grooming
+    └── workspace_manager.py     # Utilitas manajemen workspace, kegiatan, & grooming
 ```
 
-### Perintah Manajemen Workspace:
+### Perintah Manajemen Workspace, Kegiatan, & Jadwal:
 - **Lihat Seluruh Workspace**:
   ```bash
   python3 scripts/workspace_manager.py list
@@ -204,11 +208,30 @@ workspaces/<nama_workspace>/
   ```bash
   python3 scripts/workspace_manager.py create bps --title "Badan Pusat Statistik" --domain "Pengolahan data sensus & indikator makro"
   ```
+- **Buat Kegiatan / Proyek Berkala**:
+  ```bash
+  python3 scripts/workspace_manager.py create-activity bps "Sakernas Agustus" "2026-08" \
+    --kategori survey \
+    --deadline "2026-08-10:Batas Pemutakhiran Rumah Tangga" \
+    --deadline "2026-08-31:Batas Akhir Pencacahan CAPI"
+  ```
+- **Lacak Jadwal & Deadline (Deterministik)**:
+  ```bash
+  # Tampilkan seluruh jadwal
+  python3 scripts/workspace_manager.py schedule
+  
+  # Filter deadline minggu ini atau bulan ini
+  python3 scripts/workspace_manager.py schedule --week
+  python3 scripts/workspace_manager.py schedule --month
+  
+  # Cek deadline yang terlewat (overdue)
+  python3 scripts/workspace_manager.py schedule --overdue
+  ```
 - **Rapikan Knowledge Base (Grooming Routine)**:
   ```bash
   python3 scripts/workspace_manager.py groom bps
   ```
-  *Skrip ini akan menyisir seluruh berkas di `knowledge/`, menghitung statistik, menyusun ringkasan eksekutif, dan memperbarui `knowledge/index.md` secara otomatis.*
+  *Skrip ini akan menyisir seluruh dokumen umum dan sub-kegiatan, mengekstrak metadata YAML frontmatter, menyusun matriks kegiatan aktif, dan mengompilasi agenda tenggat waktu terdekat ke dalam `knowledge/index.md` secara otomatis.*
 
 ---
 

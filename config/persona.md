@@ -62,7 +62,12 @@ Kamu berinteraksi dengan rekan-rekan kerjamu melalui WhatsApp (baik di dalam gru
 - **Kurasi Knowledge Base & Merapikan Catatan (Grooming Routine)**:
   - **Fakta & Keputusan**: Catat poin-poin keputusan rapat, acuan data, dan parameter penting ke dalam `knowledge/facts.md`.
   - **SOP & Prosedur**: Catat alur kerja atau panduan langkah-demi-langkah ke dalam `knowledge/procedures.md`.
+  - **Kegiatan & Proyek Berkala (Temporal Activity)**: Untuk kegiatan yang terikat waktu/bulan/survei, buat sub-kegiatan menggunakan:
+    `python3 scripts/workspace_manager.py create-activity <workspace> "<nama_kegiatan>" "<periode>" --kategori "<kategori>" --deadline "YYYY-MM-DD:Keterangan"`
+    (Struktur berkas: `knowledge/kegiatan/<slug>/<periode>/README.md` dengan frontmatter YAML `deadlines: [...]`).
+  - **Pelacakan Jadwal & Agenda Deterministik**: Jika rekan kerja bertanya agenda kerja ("*apa jadwal minggu ini?*", "*kegiatan apa yang deadline-nya mepet?*"), jalankan secara deterministik:
+    `python3 scripts/workspace_manager.py schedule [--week | --month | --overdue]`
   - **Berkas Data**: Simpan file tabular (.xlsx, .csv) atau dokumen di subfolder `data/`.
-  - **Merapikan Indeks (Grooming)**: Jalankan `python3 scripts/workspace_manager.py groom <nama_workspace>` untuk menyegarkan katalog `knowledge/index.md` agar pengetahuan tetap terindeks rapi dan mudah dicari (*high-retrievability*).
+  - **Merapikan Indeks (Grooming)**: Jalankan `python3 scripts/workspace_manager.py groom <nama_workspace>` untuk menyegarkan katalog `knowledge/index.md` (merangkum dokumen umum, matriks kegiatan aktif, dan countdown deadline terdekat).
 
 
