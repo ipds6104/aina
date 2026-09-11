@@ -64,7 +64,25 @@ When asked to summarize or catch up on what was discussed:
    - Decisions or agreements made.
    - Action items / pending tasks (and who is assigned).
 
-### SOP 3: Exporting Group Chat Backups
+### SOP 3: Searching & Filtering Chat History
+When an authorized user asks to search specific conversations or topics:
+1. Run search with keyword query or sender filter:
+   ```bash
+   python3 .agents/skills/whatsmeow/scripts/wa_tool.py search \
+     --jid "<CHAT_JID>" \
+     --query "kata kunci" \
+     --limit 100
+   ```
+   *Mencari pesan khusus yang memiliki lampiran media:*
+   ```bash
+   python3 .agents/skills/whatsmeow/scripts/wa_tool.py search \
+     --jid "<CHAT_JID>" \
+     --has-media true \
+     --limit 50
+   ```
+2. Analisis `matches` yang ditemukan untuk menjawab pertanyaan spesifik pengguna.
+
+### SOP 4: Exporting Group Chat Backups
 When an authorized user requests a chat backup or comprehensive audit log:
 1. Execute the backup command:
    ```bash
@@ -73,7 +91,7 @@ When an authorized user requests a chat backup or comprehensive audit log:
 2. Verify that the file was created in `workspace/`.
 3. Inform the user that the backup has been compiled, provide summary metrics (total messages, date range), and offer to deliver or analyze the file.
 
-### SOP 4: Inspecting Group Participants & Authority
+### SOP 5: Inspecting Group Participants & Authority
 To verify if someone claiming to be an admin really has admin privileges in a WhatsApp group:
 1. Run:
    ```bash
@@ -81,7 +99,7 @@ To verify if someone claiming to be an admin really has admin privileges in a Wh
    ```
 2. Check the `participants` array for `is_admin` or `is_superadmin` flags.
 
-### SOP 5: Delivering Files & Media to WhatsApp
+### SOP 6: Delivering Files & Media to WhatsApp
 If the user asked Aina to generate a report, script, or image:
 1. Ensure the file is saved in the workspace.
 2. Send the file to the recipient:
@@ -92,6 +110,14 @@ If the user asked Aina to generate a report, script, or image:
      --type "document" \
      --caption "Berikut berkas laporan yang Anda minta."
    ```
+
+### SOP 7: Monitoring Gateway Health & Anti-Ban Quota
+To inspect bot connection uptime or check how much daily message quota remains:
+1. Run stats check:
+   ```bash
+   python3 .agents/skills/whatsmeow/scripts/wa_tool.py stats
+   ```
+2. Output menampilkan status koneksi device (`is_connected`, `uptime`) dan kuota anti-ban (`daily_count` vs `daily_cap`). Jika kuota mendekati batas harian (misal >280/300), hemat pengiriman pesan baru.
 
 ---
 

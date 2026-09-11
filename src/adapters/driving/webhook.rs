@@ -583,7 +583,12 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
 
                 <div id="sim-result-box" style="display: none; margin-top: 18px;">
                     <div class="chat-bubble">
-                        <div style="font-size: 0.75rem; color: var(--primary); font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;" id="sim-meta"></div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 8px;">
+                            <div style="font-size: 0.75rem; color: var(--primary); font-weight: 700; display: flex; align-items: center; gap: 6px;" id="sim-meta"></div>
+                            <button id="copy-full-btn" type="button" class="copy-btn" onclick="copyFullResponse(this)" style="display: inline-flex; align-items: center; gap: 5px; font-weight: 600; padding: 4px 10px;" title="Salin seluruh jawaban Aina">
+                                <span>📋 Salin Jawaban</span>
+                            </button>
+                        </div>
                         <div id="sim-response-text" class="markdown-body"></div>
                     </div>
                 </div>
@@ -1006,6 +1011,8 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
     </div>
 
     <script>
+        let lastSimulationResponseText = '';
+
         function checkAdminAuth() {{
             const key = localStorage.getItem('aina_admin_key');
             const simCard = document.getElementById('simulator-card');
@@ -1137,11 +1144,17 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
                 resBox.style.display = 'block';
 
                 if (data.decision === 'Respond') {{
+                    lastSimulationResponseText = data.response_text || '';
                     metaEl.innerText = `Aina membalas (${{data.duration_seconds.toFixed(2)}}s) - Alasan: ${{data.reason}}`;
                     textEl.innerHTML = renderMarkdownToHtml(data.response_text || '');
+                    const copyBtn = document.getElementById('copy-full-btn');
+                    if (copyBtn) copyBtn.style.display = 'inline-flex';
                 }} else {{
+                    lastSimulationResponseText = '';
                     metaEl.innerText = `Gatekeeper: ${{data.decision}} (${{data.reason}})`;
                     textEl.innerHTML = `<em>(Aina menyimak/mengabaikan pesan ini sesuai etika grup kantor tanpa membalas chat)</em>`;
+                    const copyBtn = document.getElementById('copy-full-btn');
+                    if (copyBtn) copyBtn.style.display = 'none';
                 }}
             }} catch(err) {{
                 alert('Gagal menjalankan simulasi: ' + err.message);
@@ -1242,6 +1255,25 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
                 }}, 2000);
             }}).catch(e => {{
                 console.error('Clipboard copy failed:', e);
+            }});
+        }}
+
+        function copyFullResponse(btn) {{
+            const textToCopy = lastSimulationResponseText || (document.getElementById('sim-response-text') ? document.getElementById('sim-response-text').innerText : '');
+            if (!textToCopy) return;
+
+            navigator.clipboard.writeText(textToCopy).then(() => {{
+                const orig = btn.innerHTML;
+                btn.innerHTML = '<span>✓ Jawaban Tersalin!</span>';
+                btn.style.color = '#10b981';
+                btn.style.borderColor = '#10b981';
+                setTimeout(() => {{
+                    btn.innerHTML = orig;
+                    btn.style.color = '';
+                    btn.style.borderColor = '';
+                }}, 2000);
+            }}).catch(e => {{
+                console.error('Copy full response failed:', e);
             }});
         }}
 
