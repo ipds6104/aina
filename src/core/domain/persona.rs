@@ -73,17 +73,25 @@ impl PersonaEngine {
         let platform_name = msg.platform.to_string();
         let (platform_format_guidelines, platform_ui_context) = match msg.platform {
             super::message::Platform::WhatsApp => (
-                "- Gunakan format teks khas WhatsApp: *tebal* (bintang tunggal, BUKAN **ganda**), _miring_ (garis bawah tunggal), ~coret~, `monospace`, dan ```blok kode```.\n\
-                 - Tampilan Layar HP: Buat paragraf ringkas, gunakan bullet point bila menyampaikan banyak poin, dan jangan membanjiri chat dengan kode ribuan baris sekaligus (tawarkan menyimpan file ke workspace jika kode panjang).",
-                "Pengguna membaca via aplikasi WhatsApp di smartphone / WhatsApp Web."
+                "- DIKSI & TONE: Santun, ramah, hangat rekan kerja kantor yang cekatan, to-the-point, dan low-noise (hindari basa-basi panjang).\n\
+                 - PANJANG PESAN: SINGKAT & RINGKAS (2-4 paragraf pendek atau bullet points). Sangat dilarang membuat 'wall of text' yang melelahkan di layar smartphone.\n\
+                 - FORMAT WA NATIVE: Gunakan *tebal* (bintang tunggal, BUKAN **ganda**), _miring_ (garis bawah tunggal), ~coret~, `inline monospace`, dan ```blok kode```.\n\
+                 - ATURAN TERLARANG WA:\n\
+                   * DILARANG menggunakan heading Markdown `#`, `##`, `###` (WhatsApp tidak merender heading, hanya menampilkan tanda pagar jelek). Gunakan teks *TEBAL KAPITAL* sebagai gantinya.\n\
+                   * DILARANG menggunakan tabel Markdown `| a | b |` (tabel hancur dan terpotong di layar HP). Ganti tabel dengan daftar butir `• Item: Keterangan`.\n\
+                   * DILARANG menggunakan link Markdown `[teks](url)` (WhatsApp tidak mendukung hyperlink). Tulis URL mentah langsung agar WhatsApp otomatis membuatnya dapat diklik.\n\
+                 - PENANGANAN KODE: Jika kode pendek (<20 baris), tampilkan dalam ```kode```. Jika kode panjang (>25 baris), simpan ke file di workspace/ dan berikan cuplikan inti serta cara menjalankannya.",
+                "Pengguna membaca via smartphone / WhatsApp Web."
             ),
             super::message::Platform::WebSimulator => (
-                "- Gunakan format Markdown lengkap (headings, bullet points, syntax-highlighted code blocks, tables).\n\
-                 - Jawaban akan dirender langsung di antarmuka Web Dashboard.",
+                "- DIKSI & TONE: Komprehensif, profesional, terstruktur rapi layaknya dokumentasi teknis atau asisten AI web modern (ChatGPT / Claude / Gemini Web).\n\
+                 - PANJANG PESAN: FLEKSIBEL & ELABORATIF. Sajikan penjelasan mendalam, komparasi tabel, langkah rinci, dan blok kode lengkap bila relevan.\n\
+                 - FORMAT MARKDOWN KAYA: Gunakan GitHub Flavored Markdown lengkap (Headings #/##/###, Bullet lists, Tables, Callout alert boxes seperti `> [!NOTE]` atau `> [!TIP]`, dan syntax-highlighted code blocks).\n\
+                 - TAMPILAN: Jawaban akan dirender langsung di antarmuka Web Dashboard dengan font Google Sans dan syntax highlighting.",
                 "Pengguna berinteraksi via Web Browser / Dashboard Simulator."
             ),
             _ => (
-                "- Gunakan format teks standar yang didukung oleh platform terkait.",
+                "- DIKSI & FORMAT: Sesuaikan format teks standar dan etika komunikasi yang didukung oleh platform terkait.",
                 "Pengguna berinteraksi via platform pihak ketiga."
             ),
         };
