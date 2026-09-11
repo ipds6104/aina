@@ -62,8 +62,22 @@ impl ProcessIncomingMessageUseCase {
                     .record_message(&msg.chat_jid, &msg.sender.jid, &msg.text, false)
                     .await?;
 
-                // Check for built-in quick command: /model
+                // Check for built-in quick command: /reset, /clear, /new
                 let trimmed_text = msg.text.trim();
+                if trimmed_text.eq_ignore_ascii_case("/reset")
+                    || trimmed_text.eq_ignore_ascii_case("/clear")
+                    || trimmed_text.eq_ignore_ascii_case("/new")
+                    || trimmed_text.eq_ignore_ascii_case("/restart")
+                {
+                    let _ = self.session_store.delete_conversation_id(&msg.chat_jid).await;
+                    let _ = std::fs::remove_file(std::env::temp_dir().join("aina_gh_device_session.json"));
+                    let reply = "🔄 *Sesi Percakapan Berhasil Direset*\n\nMemori konteks percakapan untuk ruang obrolan ini telah dibersihkan. Sesi berikutnya akan dimulai sebagai percakapan baru yang segar. Silakan ajukan pertanyaan atau instruksi baru Anda!".to_string();
+                    self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
+                    self.whatsapp.send_text(&msg.chat_jid, &reply, Some(&msg.id)).await?;
+                    return Ok(());
+                }
+
+                // Check for built-in quick command: /model
                 if trimmed_text.starts_with("/model") {
                     let parts: Vec<&str> = trimmed_text.split_whitespace().collect();
                     if parts.len() == 1 || (parts.len() >= 2 && (parts[1] == "status" || parts[1] == "list")) {

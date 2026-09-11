@@ -13,7 +13,10 @@ use tokio::sync::RwLock;
 struct AgyJsonOutput {
     pub conversation_id: String,
     pub status: String,
+    #[serde(default)]
     pub response: String,
+    #[serde(default)]
+    pub error: Option<String>,
     #[serde(default)]
     pub duration_seconds: f64,
 }
@@ -191,8 +194,10 @@ impl AgentEnginePort for AntigravityCliAdapter {
         }
 
         // Add headless execution flags
+        let print_timeout_sec = self.timeout_duration.as_secs().saturating_sub(5).max(30);
         cmd.arg("-p").arg(prompt);
         cmd.arg("--output-format").arg("json");
+        cmd.arg("--print-timeout").arg(format!("{}s", print_timeout_sec));
         cmd.arg("--dangerously-skip-permissions");
         cmd.arg("--model").arg(&active_model);
 
@@ -255,9 +260,17 @@ impl AgentEnginePort for AntigravityCliAdapter {
                     "Agent turn finished: conv={}, status={}, model={}",
                     parsed.conversation_id, parsed.status, active_model
                 );
+                let response_text = if !parsed.response.trim().is_empty() {
+                    parsed.response.trim().to_string()
+                } else if let Some(ref err) = parsed.error {
+                    format!("⚠️ Mohon maaf, terjadi kendala saat memproses permintaan: {}", err)
+                } else {
+                    "(Tidak ada respons dari agen AI)".to_string()
+                };
+
                 Ok(AgentResponse {
                     conversation_id: parsed.conversation_id,
-                    response_text: parsed.response.trim().to_string(),
+                    response_text,
                     duration_seconds: parsed.duration_seconds,
                 })
             }

@@ -18,6 +18,9 @@ pub trait SessionStorePort: Send + Sync {
     /// Saves the mapping of a WhatsApp chat JID to an Antigravity conversation UUID.
     async fn save_conversation_id(&self, chat_jid: &str, conv_uuid: &str) -> anyhow::Result<()>;
 
+    /// Deletes the mapping of a WhatsApp chat JID, resetting the active conversation.
+    async fn delete_conversation_id(&self, chat_jid: &str) -> anyhow::Result<()>;
+
     /// Records an incoming or outgoing message for local logging or future recall.
     async fn record_message(
         &self,

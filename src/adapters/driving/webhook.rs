@@ -67,6 +67,7 @@ pub fn create_router(state: Arc<WebhookServerState>) -> Router {
         .route("/api/setup", post(api_setup_handler))
         .route("/api/auth/verify", post(api_verify_admin_handler))
         .route("/api/simulate", post(simulate_handler))
+        .route("/api/simulate/reset", post(simulate_reset_handler))
         .route("/api/simulate/job/{id}", get(simulate_job_status_handler))
         .route("/webhook", post(webhook_handler))
         .with_state(state)
@@ -292,6 +293,32 @@ struct SimulateResponse {
     pub conversation_id: Option<String>,
 }
 
+async fn simulate_reset_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if !is_admin_authorized(&headers, &state.setup_code) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "error": "Akses simulator ditolak. Harap masukkan Admin Key / Setup Code yang valid."
+            })),
+        );
+    }
+
+    let _ = state.session_store.delete_conversation_id("628999888777@s.whatsapp.net").await;
+    let _ = state.session_store.delete_conversation_id("120363999999999@g.us").await;
+    let _ = std::fs::remove_file(std::env::temp_dir().join("aina_gh_device_session.json"));
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "message": "Sesi percakapan simulator berhasil direset!"
+        })),
+    )
+}
+
 async fn simulate_handler(
     State(state): State<Arc<WebhookServerState>>,
     headers: HeaderMap,
@@ -319,8 +346,32 @@ async fn simulate_handler(
         );
     }
 
-    // Built-in quick command in simulator: /model
+    // Built-in quick commands in simulator: /reset, /clear, /new
     let trimmed_text = payload.text.trim();
+    if trimmed_text.eq_ignore_ascii_case("/reset")
+        || trimmed_text.eq_ignore_ascii_case("/clear")
+        || trimmed_text.eq_ignore_ascii_case("/new")
+        || trimmed_text.eq_ignore_ascii_case("/restart")
+    {
+        let chat_jid = if payload.chat_type.as_deref().unwrap_or("dm").to_lowercase() == "group" {
+            "120363999999999@g.us"
+        } else {
+            "628999888777@s.whatsapp.net"
+        };
+        let _ = state.session_store.delete_conversation_id(chat_jid).await;
+        let _ = std::fs::remove_file(std::env::temp_dir().join("aina_gh_device_session.json"));
+        let reply = "🔄 *Sesi Percakapan Simulator Berhasil Direset*\n\nMemori percakapan untuk sesi ini telah dibersihkan. Pesan berikutnya akan dimulai sebagai percakapan baru yang segar.".to_string();
+        return (
+            StatusCode::OK,
+            Json(json!(SimulateResponse {
+                decision: "Respond".to_string(),
+                reason: "Quick /reset command".to_string(),
+                response_text: Some(reply),
+                duration_seconds: Some(0.01),
+                conversation_id: None,
+            })),
+        );
+    }
     if trimmed_text.starts_with("/model") {
         let parts: Vec<&str> = trimmed_text.split_whitespace().collect();
         if parts.len() == 1 || (parts.len() >= 2 && (parts[1] == "status" || parts[1] == "list")) {
@@ -883,23 +934,26 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
                     </label>
                 </div>
 
-                <label class="form-label">Isi Pesan Chat</label>
-                <textarea id="sim-text" class="form-input" style="height: 80px;" placeholder="Contoh: Aina, tolong buatkan script python untuk cek koneksi..."></textarea>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; margin-bottom: 8px;">
+                    <label class="form-label" style="margin-bottom: 0; font-weight: 600;">💬 Alur Percakapan Interaktif (Multi-Turn)</label>
+                    <button type="button" class="btn-outline" style="font-size: 0.78rem; padding: 4px 10px; border-radius: 6px; cursor: pointer;" onclick="resetSimulationChat()">
+                        🔄 Reset Percakapan Baru
+                    </button>
+                </div>
 
-                <button id="sim-btn" class="btn" style="width: 100%; margin-top: 8px;" onclick="runSimulation()">
-                    Kirim & Uji Respon Aina
-                </button>
-
-                <div id="sim-result-box" style="display: none; margin-top: 18px;">
-                    <div class="chat-bubble">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 8px;">
-                            <div style="font-size: 0.75rem; color: var(--primary); font-weight: 700; display: flex; align-items: center; gap: 6px;" id="sim-meta"></div>
-                            <button id="copy-full-btn" type="button" class="copy-btn" onclick="copyFullResponse(this)" style="display: inline-flex; align-items: center; gap: 5px; font-weight: 600; padding: 4px 10px;" title="Salin seluruh jawaban Aina">
-                                <span>📋 Salin Jawaban</span>
-                            </button>
-                        </div>
-                        <div id="sim-response-text" class="markdown-body"></div>
+                <!-- SCROLLABLE CHAT THREAD -->
+                <div id="sim-chat-thread" class="chat-thread-container">
+                    <div id="sim-thread-empty" class="chat-bubble-system">
+                        Belum ada pesan. Mulai obrolan dengan Aina di bawah. Anda bisa membalas chat secara berkelanjutan layaknya di WhatsApp!
                     </div>
+                </div>
+
+                <label class="form-label">Ketik Pesan Chat (Tekan Enter untuk kirim, Shift+Enter untuk baris baru):</label>
+                <div style="display: flex; gap: 8px; align-items: flex-start;">
+                    <textarea id="sim-text" class="form-input" style="height: 60px; margin-bottom: 0; resize: none;" placeholder="Ketik pesan atau balasan Anda ke Aina (contoh: 'Sudah ku-authorize ya')..."></textarea>
+                    <button id="sim-btn" class="btn" style="min-width: 130px; height: 60px; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600;" onclick="runSimulation()">
+                        <span>Kirim</span> 🚀
+                    </button>
                 </div>
             </div>
             "#,
@@ -1127,7 +1181,72 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
         .alert-success {{ background: rgba(16,185,129,0.15); border: 1px solid var(--success); color: var(--success); }}
         .alert-error {{ background: rgba(239,68,68,0.15); border: 1px solid var(--danger); color: var(--danger); }}
         
-        /* Modern Chat Bubble & Trending Markdown Styling */
+        /* Modern Chat Bubble & Multi-Turn Thread Styling */
+        .chat-thread-container {{
+            min-height: 140px;
+            max-height: 480px;
+            overflow-y: auto;
+            background: #080c14;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            scroll-behavior: smooth;
+        }}
+        .chat-row-user {{
+            display: flex;
+            justify-content: flex-end;
+            width: 100%;
+        }}
+        .chat-bubble-user {{
+            background: #1e3a8a;
+            border: 1px solid #2563eb;
+            color: #ffffff;
+            padding: 10px 16px;
+            border-radius: 14px 14px 2px 14px;
+            max-width: 82%;
+            font-size: 0.92rem;
+            line-height: 1.5;
+            word-break: break-word;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+        }}
+        .chat-row-bot {{
+            display: flex;
+            justify-content: flex-start;
+            width: 100%;
+        }}
+        .chat-bubble-bot {{
+            background: #0f2427;
+            border: 1px solid #14532d;
+            padding: 14px 18px;
+            border-radius: 14px 14px 14px 2px;
+            max-width: 92%;
+            width: 100%;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+        }}
+        .chat-bubble-typing {{
+            background: rgba(255,255,255,0.04);
+            border: 1px dashed var(--primary);
+            padding: 10px 16px;
+            border-radius: 12px;
+            color: var(--primary);
+            font-size: 0.85rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }}
+        .chat-bubble-system {{
+            align-self: center;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: var(--text-muted);
+            padding: 6px 14px;
+            border-radius: 999px;
+            font-size: 0.78rem;
+        }}
         .chat-bubble {{
             background: #0f2427;
             border: 1px solid #14532d;
@@ -1419,19 +1538,63 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
             if (el) el.style.display = (val === 'group') ? 'block' : 'none';
         }}
 
+        function escapeHtml(str) {{
+            if (!str) return '';
+            return str
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }}
+
+        async function resetSimulationChat() {{
+            const adminKey = localStorage.getItem('aina_admin_key') || '';
+            const threadEl = document.getElementById('sim-chat-thread');
+            try {{
+                await fetch('/api/simulate/reset', {{
+                    method: 'POST',
+                    headers: {{ 'X-Admin-Key': adminKey }}
+                }});
+                if (threadEl) {{
+                    threadEl.innerHTML = `
+                        <div class="chat-bubble-system">
+                            🔄 Sesi percakapan direset. Anda dapat memulai obrolan atau pengujian topik baru dari awal.
+                        </div>
+                    `;
+                }}
+                const textEl = document.getElementById('sim-text');
+                if (textEl) {{
+                    textEl.value = '';
+                    textEl.focus();
+                }}
+            }} catch(e) {{
+                alert('Gagal mereset sesi percakapan: ' + e.message);
+            }}
+        }}
+
+        function copySnippetText(encoded) {{
+            try {{
+                const decoded = decodeURIComponent(encoded);
+                navigator.clipboard.writeText(decoded);
+                alert('Teks jawaban Aina berhasil disalin ke clipboard!');
+            }} catch(e) {{
+                console.error(e);
+            }}
+        }}
+
         async function runSimulation() {{
-            const text = document.getElementById('sim-text').value.trim();
+            const textInput = document.getElementById('sim-text');
+            const text = textInput.value.trim();
             const chatType = document.getElementById('sim-chat-type').value;
-            const senderName = document.getElementById('sim-sender-name').value.trim();
+            const senderName = document.getElementById('sim-sender-name').value.trim() || 'Ihza';
             const isMention = document.getElementById('sim-is-mention') ? document.getElementById('sim-is-mention').checked : false;
             const modelSelectEl = document.getElementById('sim-model-select');
             const selectedModel = modelSelectEl ? modelSelectEl.value : 'default';
             const modelOverride = (selectedModel !== 'default') ? selectedModel : null;
 
             const btn = document.getElementById('sim-btn');
-            const resBox = document.getElementById('sim-result-box');
-            const metaEl = document.getElementById('sim-meta');
-            const textEl = document.getElementById('sim-response-text');
+            const threadEl = document.getElementById('sim-chat-thread');
             const adminKey = localStorage.getItem('aina_admin_key') || '';
 
             if (!text) {{
@@ -1439,17 +1602,48 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
                 return;
             }}
 
+            // 1. Remove initial empty placeholder if present
+            const emptyEl = document.getElementById('sim-thread-empty');
+            if (emptyEl) emptyEl.remove();
+
+            // 2. Append User Message Bubble
+            const userRow = document.createElement('div');
+            userRow.className = 'chat-row-user';
+            userRow.innerHTML = `
+                <div class="chat-bubble-user">
+                    <div style="font-size: 0.72rem; opacity: 0.8; margin-bottom: 3px; font-weight: 600;">${{escapeHtml(senderName)}}</div>
+                    <div style="white-space: pre-wrap;">${{escapeHtml(text)}}</div>
+                </div>
+            `;
+            threadEl.appendChild(userRow);
+
+            // 3. Clear text input immediately for fast reply DX
+            textInput.value = '';
+
+            // 4. Append Typing Indicator Bubble
+            const botRow = document.createElement('div');
+            botRow.className = 'chat-row-bot';
+            botRow.innerHTML = `
+                <div class="chat-bubble-typing">
+                    <span class="pulse" style="width: 8px; height: 8px;"></span>
+                    <span class="typing-text">Aina sedang berpikir dan mengeksekusi... (0s)</span>
+                </div>
+            `;
+            threadEl.appendChild(botRow);
+            threadEl.scrollTop = threadEl.scrollHeight;
+
             btn.disabled = true;
             let secondsElapsed = 0;
-            btn.innerText = 'Memulai simulasi... (0s)';
+            btn.innerText = 'Memproses (0s)...';
             const timerInterval = setInterval(() => {{
                 secondsElapsed++;
-                btn.innerText = `Aina sedang berpikir dan mengeksekusi... (${{secondsElapsed}}s)`;
+                btn.innerText = `Memproses (${{secondsElapsed}}s)...`;
+                const typingSpan = botRow.querySelector('.typing-text');
+                if (typingSpan) typingSpan.innerText = `Aina sedang berpikir dan mengeksekusi... (${{secondsElapsed}}s)`;
             }}, 1000);
-            resBox.style.display = 'none';
 
             try {{
-                // 1. Submit simulation job (<5ms response, completely immune to proxy timeout)
+                // Submit simulation job
                 const res = await fetch('/api/simulate', {{
                     method: 'POST',
                     headers: {{
@@ -1468,6 +1662,7 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
                 if (res.status === 401) {{
                     alert('Sesi kedaluwarsa atau Admin Key tidak valid. Harap buka kunci kembali.');
                     lockAdminSession();
+                    botRow.remove();
                     return;
                 }}
 
@@ -1487,23 +1682,34 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
 
                 // If Gatekeeper answered immediately (e.g. Ignore or RecordOnly)
                 if (initialData.decision && initialData.decision !== 'Respond') {{
-                    resBox.style.display = 'block';
-                    lastSimulationResponseText = '';
-                    metaEl.innerText = `Gatekeeper: ${{initialData.decision}} (${{initialData.reason}})`;
-                    textEl.innerHTML = `<em>(Aina menyimak/mengabaikan pesan ini sesuai etika grup kantor tanpa membalas chat)</em>`;
-                    const copyBtn = document.getElementById('copy-full-btn');
-                    if (copyBtn) copyBtn.style.display = 'none';
+                    botRow.innerHTML = `
+                        <div class="chat-bubble-system">
+                            🛡️ Gatekeeper: ${{escapeHtml(initialData.decision)}} (${{escapeHtml(initialData.reason)}}) - <em>(Aina menyimak tanpa membalas chat sesuai etika grup)</em>
+                        </div>
+                    `;
+                    threadEl.scrollTop = threadEl.scrollHeight;
                     return;
                 }}
 
                 // If sync response was returned directly
                 if (initialData.decision === 'Respond') {{
-                    resBox.style.display = 'block';
-                    lastSimulationResponseText = initialData.response_text || '';
-                    metaEl.innerText = `Aina membalas (${{initialData.duration_seconds ? initialData.duration_seconds.toFixed(2) : secondsElapsed}}s) - Alasan: ${{initialData.reason}}`;
-                    textEl.innerHTML = renderMarkdownToHtml(initialData.response_text || '');
-                    const copyBtn = document.getElementById('copy-full-btn');
-                    if (copyBtn) copyBtn.style.display = 'inline-flex';
+                    const replyText = initialData.response_text || '';
+                    lastSimulationResponseText = replyText;
+                    botRow.innerHTML = `
+                        <div class="chat-bubble-bot">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 6px;">
+                                <div style="font-size: 0.75rem; color: var(--primary); font-weight: 700; display: flex; align-items: center; gap: 6px;">
+                                    <span>🌸 Aina</span>
+                                    <span style="color: #94a3b8; font-weight: 400;">• ${{initialData.duration_seconds ? initialData.duration_seconds.toFixed(1) : secondsElapsed}}s</span>
+                                    <span style="color: #64748b; font-weight: 400;">(${{escapeHtml(initialData.reason)}})</span>
+                                </div>
+                                <button type="button" class="copy-btn" onclick="copySnippetText('${{encodeURIComponent(replyText)}}')" style="padding: 2px 8px; font-size: 0.72rem;">Salin</button>
+                            </div>
+                            <div class="markdown-body">${{renderMarkdownToHtml(replyText)}}</div>
+                        </div>
+                    `;
+                    threadEl.scrollTop = threadEl.scrollHeight;
+                    textInput.focus();
                     return;
                 }}
 
@@ -1512,7 +1718,7 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
                     throw new Error(initialData.error || 'Gagal memulai pekerjaan simulasi.');
                 }}
 
-                // 2. Poll job status (each poll takes ~2ms, completely immune to Cloudflare 100s timeout!)
+                // Poll job status
                 let isFinished = false;
                 while (!isFinished) {{
                     await new Promise(r => setTimeout(r, 1500));
@@ -1534,23 +1740,39 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
                         continue;
                     }} else if (jobData.status === 'completed') {{
                         isFinished = true;
-                        resBox.style.display = 'block';
-                        lastSimulationResponseText = jobData.response_text || '';
-                        metaEl.innerText = `Aina membalas (${{jobData.duration_seconds ? jobData.duration_seconds.toFixed(2) : secondsElapsed}}s) - Alasan: ${{jobData.reason}}`;
-                        textEl.innerHTML = renderMarkdownToHtml(jobData.response_text || '');
-                        const copyBtn = document.getElementById('copy-full-btn');
-                        if (copyBtn) copyBtn.style.display = 'inline-flex';
+                        const replyText = jobData.response_text || '';
+                        lastSimulationResponseText = replyText;
+                        botRow.innerHTML = `
+                            <div class="chat-bubble-bot">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 6px;">
+                                    <div style="font-size: 0.75rem; color: var(--primary); font-weight: 700; display: flex; align-items: center; gap: 6px;">
+                                        <span>🌸 Aina</span>
+                                        <span style="color: #94a3b8; font-weight: 400;">• ${{jobData.duration_seconds ? jobData.duration_seconds.toFixed(1) : secondsElapsed}}s</span>
+                                        <span style="color: #64748b; font-weight: 400;">(${{escapeHtml(jobData.reason)}})</span>
+                                    </div>
+                                    <button type="button" class="copy-btn" onclick="copySnippetText('${{encodeURIComponent(replyText)}}')" style="padding: 2px 8px; font-size: 0.72rem;">Salin</button>
+                                </div>
+                                <div class="markdown-body">${{renderMarkdownToHtml(replyText)}}</div>
+                            </div>
+                        `;
+                        threadEl.scrollTop = threadEl.scrollHeight;
+                        textInput.focus();
                     }} else if (jobData.status === 'failed') {{
                         isFinished = true;
                         throw new Error(jobData.error || 'Eksekusi agen AI gagal.');
                     }}
                 }}
             }} catch(err) {{
-                alert('Gagal menjalankan simulasi: ' + err.message);
+                botRow.innerHTML = `
+                    <div class="chat-bubble-system" style="border-color: rgba(239,68,68,0.4); color: #f87171;">
+                        ⚠️ Gagal memproses simulasi: ${{escapeHtml(err.message)}}
+                    </div>
+                `;
+                threadEl.scrollTop = threadEl.scrollHeight;
             }} finally {{
                 clearInterval(timerInterval);
                 btn.disabled = false;
-                btn.innerText = 'Kirim & Uji Respon Aina';
+                btn.innerHTML = '<span>Kirim</span> 🚀';
             }}
         }}
 
@@ -1723,9 +1945,22 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
             alertBox.innerText = msg;
         }}
 
-        // Run check on page load
-        document.addEventListener('DOMContentLoaded', checkAdminAuth);
-        checkAdminAuth();
+        // Run check on page load and attach Enter key handler
+        function initPage() {{
+            checkAdminAuth();
+            const textEl = document.getElementById('sim-text');
+            if (textEl && !textEl.dataset.bound) {{
+                textEl.dataset.bound = 'true';
+                textEl.addEventListener('keydown', function(e) {{
+                    if (e.key === 'Enter' && !e.shiftKey) {{
+                        e.preventDefault();
+                        runSimulation();
+                    }}
+                }});
+            }}
+        }}
+        document.addEventListener('DOMContentLoaded', initPage);
+        initPage();
     </script>
 </body>
 </html>

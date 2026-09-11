@@ -97,6 +97,15 @@ impl SessionStorePort for SqliteSessionStore {
         Ok(())
     }
 
+    async fn delete_conversation_id(&self, chat_jid: &str) -> anyhow::Result<()> {
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "DELETE FROM chats WHERE chat_jid = ?1",
+            params![chat_jid],
+        )?;
+        Ok(())
+    }
+
     async fn record_message(
         &self,
         chat_jid: &str,
