@@ -28,6 +28,11 @@ if [ -d "/app/skills" ]; then
     chmod -R +x "${AGENT_WORKSPACE:-/app/workspace}/.agents/skills"/*/scripts 2>/dev/null || true
 fi
 
+# Sync runtime sandbox GEMINI.md rules into workspace
+if [ -f "/app/config/sandbox.GEMINI.md" ]; then
+    cp /app/config/sandbox.GEMINI.md "${AGENT_WORKSPACE:-/app/workspace}/GEMINI.md" 2>/dev/null || true
+fi
+
 # Make sure agy is in PATH
 export PATH="/root/.local/bin:/usr/local/bin:$PATH"
 
