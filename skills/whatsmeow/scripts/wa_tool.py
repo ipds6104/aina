@@ -111,6 +111,21 @@ def cmd_export_backup(args):
 
     print(json.dumps(res, indent=2, ensure_ascii=False))
 
+def cmd_send_text(args):
+    recipient = args.to.strip()
+    text = args.text
+    payload = {
+        "recipient": recipient,
+        "content": text,
+        "to": recipient,
+        "message": text
+    }
+    res = make_request("POST", "/api/v1/messages/send-text", payload)
+    if res.get("error") and res.get("status_code") == 404:
+        # Fallback to legacy endpoint /send/message
+        res = make_request("POST", "/send/message", payload)
+    print(json.dumps(res, indent=2, ensure_ascii=False))
+
 def cmd_send_media(args):
     base_url, api_key = get_config()
     endpoint = f"{base_url}/api/v1/messages/send-media"
@@ -171,6 +186,12 @@ def main():
     p_backup.add_argument("--include-media", action="store_true", help="Include media metadata")
     p_backup.add_argument("--out", help="Optional output filepath to save JSON backup")
     p_backup.set_defaults(func=cmd_export_backup)
+
+    # send-text
+    p_send_text = subparsers.add_parser("send-text", help="Send a WhatsApp text message")
+    p_send_text.add_argument("--to", required=True, help="Recipient JID (e.g. 628xxx@s.whatsapp.net or 120363xxx@g.us)")
+    p_send_text.add_argument("--text", required=True, help="Message text content")
+    p_send_text.set_defaults(func=cmd_send_text)
 
     # send-media
     p_media = subparsers.add_parser("send-media", help="Send media or document file")

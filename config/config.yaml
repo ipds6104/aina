@@ -12,8 +12,8 @@ whatsmeow:
   api_key: "default-secret-key"
   bot_jid: "628123456789@s.whatsapp.net"
   bot_name: "Aina"
-  send_endpoint: "/send/message"
-  presence_endpoint: "/send/presence"
+  send_endpoint: "/api/v1/messages/send-text"
+  presence_endpoint: "/api/v1/chats/presence"
 
 agent:
   binary_path: "/home/ihza/.local/bin/agy"

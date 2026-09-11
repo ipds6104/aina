@@ -1085,7 +1085,12 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
             }}
 
             btn.disabled = true;
-            btn.innerText = 'Aina sedang berpikir dan mengetik...';
+            let secondsElapsed = 0;
+            btn.innerText = 'Aina sedang berpikir dan mengetik... (0s)';
+            const timerInterval = setInterval(() => {{
+                secondsElapsed++;
+                btn.innerText = `Aina sedang berpikir dan mengetik... (${{secondsElapsed}}s)`;
+            }}, 1000);
             resBox.style.display = 'none';
 
             try {{
@@ -1109,6 +1114,25 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
                     return;
                 }}
 
+                const contentType = res.headers.get('content-type') || '';
+                if (!res.ok || !contentType.includes('application/json')) {{
+                    const rawBody = await res.text();
+                    let errMsg = `Server HTTP error ${{res.status}}`;
+                    if (res.status === 524 || res.status === 504) {{
+                        errMsg = `Gateway Timeout (${{res.status}}): Antigravity AI membutuhkan waktu proses lebih lama dari batas timeout proxy Cloudflare/Coolify. Jika Anda meminta aksi pengiriman pesan ke WhatsApp, periksa apakah pesan tersebut sudah sampai di WhatsApp target.`;
+                    }} else if (rawBody.toLowerCase().includes('<!doctype') || rawBody.toLowerCase().includes('<html')) {{
+                        errMsg = `Proxy/Web Server Error (${{res.status}}): Server mengembalikan halaman HTML. Biasanya ini terjadi saat proses agen AI melampaui batas waktu gateway proxy (504/524).`;
+                    }} else {{
+                        try {{
+                            const errJson = JSON.parse(rawBody);
+                            errMsg = errJson.error || errJson.message || errMsg;
+                        }} catch (_) {{
+                            errMsg = rawBody.slice(0, 200) || errMsg;
+                        }}
+                    }}
+                    throw new Error(errMsg);
+                }}
+
                 const data = await res.json();
                 resBox.style.display = 'block';
 
@@ -1122,6 +1146,7 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
             }} catch(err) {{
                 alert('Gagal menjalankan simulasi: ' + err.message);
             }} finally {{
+                clearInterval(timerInterval);
                 btn.disabled = false;
                 btn.innerText = 'Kirim & Uji Respon Aina';
             }}

@@ -1,9 +1,9 @@
 ---
 name: whatsmeow
 description: >-
-  Use this skill whenever the user asks to read recent WhatsApp chat history,
-  summarize previous group conversations, inspect group participants or admins,
-  export chat backups, or send media and document files via the Whatsmeow gateway.
+  Use this skill whenever the user asks to send WhatsApp messages or test sending messages,
+  read recent WhatsApp chat history, summarize previous group conversations,
+  inspect group participants or admins, export chat backups, or send media and document files via the Whatsmeow gateway.
 ---
 
 # Whatsmeow Gateway & Chat Operations Skill
@@ -15,10 +15,11 @@ This skill equips Aina with procedural workflows to interact with the companion 
 ## 1. When to Activate This Skill
 
 Activate this skill when:
-1. **Summarizing Past Conversations**: The user in a group or DM asks: *"Aina tolong rangkum diskusi tadi"*, *"Apa yang dibahas sebelum aku join?"*, or asks about recent context.
-2. **Exporting Group Chat / Backups**: The user asks for a chat export, transcript backup, or meeting minutes compilation from a WhatsApp group.
-3. **Inspecting Group Metadata**: Checking group participant list, who the admins are, or group subject/topic.
-4. **Sending Media / Generated Files**: Aina has created a file in `workspace/` (e.g., Python script, PDF report, data chart, CSV/Excel) and needs to deliver it directly to the user on WhatsApp.
+1. **Sending Direct / Self-Test Messages**: The user asks to send a WhatsApp message, or test sending a message to themselves or another contact/group (e.g. *"Aina, tes kirim pesan ke diri sendiri di WhatsApp"*).
+2. **Summarizing Past Conversations**: The user in a group or DM asks: *"Aina tolong rangkum diskusi tadi"*, *"Apa yang dibahas sebelum aku join?"*, or asks about recent context.
+3. **Exporting Group Chat / Backups**: The user asks for a chat export, transcript backup, or meeting minutes compilation from a WhatsApp group.
+4. **Inspecting Group Metadata**: Checking group participant list, who the admins are, or group subject/topic.
+5. **Sending Media / Generated Files**: Aina has created a file in `workspace/` (e.g., Python script, PDF report, data chart, CSV/Excel) and needs to deliver it directly to the user on WhatsApp.
 
 ---
 
@@ -37,7 +38,20 @@ python3 /app/workspace/.agents/skills/whatsmeow/scripts/wa_tool.py <subcommand> 
 
 ## 3. Standard Operating Procedures (SOP)
 
-### SOP 1: Fetching Recent Messages & Context Summarization
+### SOP 1: Sending Direct WhatsApp Text Messages & Self-Test
+When an authorized user asks to send a WhatsApp message, or test sending a message to themselves or another contact/group:
+1. Identify the target recipient JID (e.g. `$WHATSMEOW_BOT_JID` or specific phone number JID `628xxx@s.whatsapp.net` or group `120363xxx@g.us`).
+2. Send the message immediately via `send-text`:
+   ```bash
+   python3 .agents/skills/whatsmeow/scripts/wa_tool.py send-text --to "<RECIPIENT_JID>" --text "<PESAN>"
+   ```
+   *Contoh tes kirim ke diri sendiri:*
+   ```bash
+   python3 .agents/skills/whatsmeow/scripts/wa_tool.py send-text --to "${WHATSMEOW_BOT_JID:-6289625345646@s.whatsapp.net}" --text "Halo! Ini pesan tes verifikasi dari Aina di WhatsApp."
+   ```
+3. Konfirmasikan bahwa output JSON mengembalikan `"status": "sent"` dan sertakan ID pesan ke user.
+
+### SOP 2: Fetching Recent Messages & Context Summarization
 When asked to summarize or catch up on what was discussed:
 1. Determine the target chat JID (from the incoming message context, e.g. `120363xxx@g.us` for groups or `628xxx@s.whatsapp.net` for DM).
 2. Fetch the recent messages (e.g., 25–50 messages):
@@ -50,7 +64,7 @@ When asked to summarize or catch up on what was discussed:
    - Decisions or agreements made.
    - Action items / pending tasks (and who is assigned).
 
-### SOP 2: Exporting Group Chat Backups
+### SOP 3: Exporting Group Chat Backups
 When an authorized user requests a chat backup or comprehensive audit log:
 1. Execute the backup command:
    ```bash
@@ -59,7 +73,7 @@ When an authorized user requests a chat backup or comprehensive audit log:
 2. Verify that the file was created in `workspace/`.
 3. Inform the user that the backup has been compiled, provide summary metrics (total messages, date range), and offer to deliver or analyze the file.
 
-### SOP 3: Inspecting Group Participants & Authority
+### SOP 4: Inspecting Group Participants & Authority
 To verify if someone claiming to be an admin really has admin privileges in a WhatsApp group:
 1. Run:
    ```bash
@@ -67,7 +81,7 @@ To verify if someone claiming to be an admin really has admin privileges in a Wh
    ```
 2. Check the `participants` array for `is_admin` or `is_superadmin` flags.
 
-### SOP 4: Delivering Files & Media to WhatsApp
+### SOP 5: Delivering Files & Media to WhatsApp
 If the user asked Aina to generate a report, script, or image:
 1. Ensure the file is saved in the workspace.
 2. Send the file to the recipient:

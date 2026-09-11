@@ -65,7 +65,7 @@ pub struct WhatsmeowConfig {
 }
 
 fn default_send_endpoint() -> String {
-    "/send/message".to_string()
+    "/api/v1/messages/send-text".to_string()
 }
 
 fn default_presence_endpoint() -> String {

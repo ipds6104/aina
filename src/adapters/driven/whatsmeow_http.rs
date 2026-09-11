@@ -41,6 +41,8 @@ impl WhatsAppPort for WhatsmeowHttpAdapter {
         let url = format!("{}{}", self.base_url.trim_end_matches('/'), self.send_endpoint);
         
         let mut body = json!({
+            "recipient": to_jid,
+            "content": text,
             "to": to_jid,
             "receiver": to_jid,
             "chat_jid": to_jid,
@@ -73,6 +75,39 @@ impl WhatsAppPort for WhatsmeowHttpAdapter {
                 if status.is_success() {
                     debug!("WhatsApp message sent successfully: {}", body_text);
                     Ok(())
+                } else if status == reqwest::StatusCode::NOT_FOUND {
+                    let fallback_endpoint = if self.send_endpoint == "/api/v1/messages/send-text" {
+                        "/send/message"
+                    } else {
+                        "/api/v1/messages/send-text"
+                    };
+                    let fallback_url = format!("{}{}", self.base_url.trim_end_matches('/'), fallback_endpoint);
+                    info!("Endpoint {} returned 404, falling back to {}", url, fallback_url);
+                    let fb_res = self
+                        .client
+                        .post(&fallback_url)
+                        .header("Authorization", format!("Bearer {}", self.api_key))
+                        .header("X-API-Key", &self.api_key)
+                        .json(&body)
+                        .send()
+                        .await;
+                    match fb_res {
+                        Ok(fb_resp) => {
+                            let fb_status = fb_resp.status();
+                            let fb_body = fb_resp.text().await.unwrap_or_default();
+                            if fb_status.is_success() {
+                                debug!("WhatsApp message sent successfully via fallback: {}", fb_body);
+                                Ok(())
+                            } else {
+                                error!("Fallback endpoint also failed. Status: {}, Body: {}", fb_status, fb_body);
+                                anyhow::bail!("Whatsmeow HTTP error {}: {}", fb_status, fb_body);
+                            }
+                        }
+                        Err(e) => {
+                            error!("Fallback connection error: {}", e);
+                            anyhow::bail!("Whatsmeow connection failed: {}", e);
+                        }
+                    }
                 } else {
                     error!(
                         "Failed to send WhatsApp message. Status: {}, Body: {}",
@@ -96,6 +131,7 @@ impl WhatsAppPort for WhatsmeowHttpAdapter {
         };
 
         let body = json!({
+            "recipient": to_jid,
             "to": to_jid,
             "receiver": to_jid,
             "presence": state_str,
