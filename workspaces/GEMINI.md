@@ -61,3 +61,6 @@ Tersedia skrip utilitas di `scripts/model_control.py`:
    - Jalankan `python3 scripts/kb_linter.py <workspace> [--auto-heal]` untuk memverifikasi kerapian struktur folder, metadata frontmatter, dan integritas tanggal tanpa mengonsumsi kuota token LLM.
 5. **Audit Jejak Aksi Mandiri**:
    - Jalankan `python3 scripts/audit_agent.py [--since <durasi> | --query <kata_kunci>]` untuk memeriksa riwayat perintah bash dan pengeditan berkas yang pernah dilakukan.
+6. **Penyimpanan & Pencarian Arsip Chat (.zip / .txt)**:
+   - Simpan berkas ekspor chat jangka panjang di `data/chats/<slug>/`.
+   - Gunakan `python3 scripts/chat_importer.py search <slug> -q "<query>"` untuk melakukan pencarian full-text deterministik tanpa membanjiri konteks LLM.

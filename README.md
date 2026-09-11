@@ -293,6 +293,29 @@ python3 scripts/audit_agent.py --since 24h --json > audit_harian.json
 
 ---
 
+## 📦 Engine Arsip & Ekspor Chat WhatsApp (`chat_importer.py`)
+
+Karena batasan protokol resmi Meta yang hanya menyinkronkan pesan-pesan terkini ke perangkat pendamping (*linked device*), riwayat percakapan bertahun-tahun (1 s.d. 3+ tahun) dari grup kantor sering kali diekspor langsung dari ponsel berupa berkas `.zip` atau `.txt`.
+
+Aina menyediakan engine impor berkinerja tinggi (*streaming regex* & SQLite FTS5) tanpa dependensi eksternal untuk membedah ratusan ribu baris pesan dalam beberapa detik saja:
+
+```bash
+# 1. Impor berkas ekspor chat WhatsApp (.zip / .txt) ke workspace
+python3 scripts/chat_importer.py import /path/ke/chat.zip --workspace default --name "ipds-6104"
+
+# 2. Pencarian teks super cepat (<10ms) menggunakan SQLite FTS5 (0 Token LLM)
+python3 scripts/chat_importer.py search "ipds-6104" --query "reimbursement"
+python3 scripts/chat_importer.py search "ipds-6104" --query "SOP" --since 2024-01-01
+
+# 3. Ekstrak seluruh tautan (Google Sheets, Drive, OneDrive) yang pernah dibagikan
+python3 scripts/chat_importer.py links "ipds-6104" --domain "sheets"
+
+# 4. Tampilkan statistik & anggota grup teraktif selama bertahun-tahun
+python3 scripts/chat_importer.py stats "ipds-6104"
+```
+
+---
+
 ## ⚙️ Ringkasan Environment Variables
 
 | Variabel | Default | Deskripsi |
