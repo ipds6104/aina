@@ -57,3 +57,7 @@ Tersedia skrip utilitas di `scripts/model_control.py`:
    - Gunakan `python3 scripts/workspace_manager.py schedule [--week | --month | --overdue]` untuk menjawab agenda kerja secara faktual dan tepat waktu tanpa spekulasi.
 3. **Merapikan Indeks (Grooming)**:
    - Jalankan `python3 scripts/workspace_manager.py groom <workspace>` secara berkala agar ringkasan terkompilasi di `knowledge/index.md` selalu mutakhir untuk progressive retrieval.
+4. **Pendeteksi Ketidakrapian Deterministik (Linter)**:
+   - Jalankan `python3 scripts/kb_linter.py <workspace> [--auto-heal]` untuk memverifikasi kerapian struktur folder, metadata frontmatter, dan integritas tanggal tanpa mengonsumsi kuota token LLM.
+5. **Audit Jejak Aksi Mandiri**:
+   - Jalankan `python3 scripts/audit_agent.py [--since <durasi> | --query <kata_kunci>]` untuk memeriksa riwayat perintah bash dan pengeditan berkas yang pernah dilakukan.

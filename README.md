@@ -235,6 +235,64 @@ workspaces/<nama_workspace>/
 
 ---
 
+## 🧹 Linter Kerapian & Closed-Loop Auto-Healing (`kb_linter.py`)
+
+Aina dilengkapi detektor deterministik ultra-cepat (<50ms, **0 kuota token LLM**) untuk memvalidasi kriteria kerapian basis pengetahuan:
+- ✅ Format penamaan folder kegiatan & periode (`kegiatan/<slug>/<periode>/`)
+- ✅ Kelengkapan frontmatter YAML & validitas tanggal `deadlines`
+- ✅ Deteksi keusangan indeks (`knowledge/index.md` stale check)
+- ✅ Deteksi file nyasar/berkas sampah (`*.tmp`, `.DS_Store`, file biner di luar `data/`)
+
+```bash
+# Periksa kepatuhan kerapian seluruh workspace
+python3 scripts/kb_linter.py
+
+# Periksa workspace tertentu
+python3 scripts/kb_linter.py default
+
+# Jalankan dengan mode Closed-Loop Auto-Healing
+# (Jika ada inkonsistensi, otomatis memicu grooming lalu verifikasi ulang hingga 100% rapi)
+python3 scripts/kb_linter.py --auto-heal
+```
+
+> [!TIP]
+> **Rekomendasi Cron Otomatis (Tiap 1 Jam)**:
+> Anda dapat memasang cron job di server untuk menjalankan deteksi berkala tanpa membebani LLM:
+> ```cron
+> 0 * * * * python3 /app/scripts/kb_linter.py --auto-heal > /dev/null 2>&1
+> ```
+
+---
+
+## 🛡️ Audit Trail CLI Antigravity (`audit_agent.py`)
+
+Seluruh tindakan fisik Antigravity CLI (eksekusi perintah shell, pengeditan berkas, pencarian web) dicatat secara presisi di log native sistem (`transcript.jsonl` dan SQLite). Gunakan skrip `audit_agent.py` untuk mengaudit seluruh aktivitas Aina melalui terminal:
+
+```bash
+# 1. Tampilkan 20 aksi terakhir secara kronologis
+python3 scripts/audit_agent.py --limit 20
+
+# 2. Cari aksi berdasarkan kata kunci (perintah shell, path berkas, dsb.)
+python3 scripts/audit_agent.py --query "git"
+python3 scripts/audit_agent.py --query "workspace"
+
+# 3. Filter berdasarkan jenis alat (run_command, replace_file_content, write_to_file)
+python3 scripts/audit_agent.py --type run_command
+python3 scripts/audit_agent.py --type replace_file_content
+
+# 4. Filter rentang waktu (misal: 30 menit terakhir atau 24 jam terakhir)
+python3 scripts/audit_agent.py --since 30m
+python3 scripts/audit_agent.py --since 24h
+
+# 5. Filter kegagalan / error saja
+python3 scripts/audit_agent.py --errors-only
+
+# 6. Ekspor hasil ke JSON untuk integrasi SIEM / dashboard pemantauan
+python3 scripts/audit_agent.py --since 24h --json > audit_harian.json
+```
+
+---
+
 ## ⚙️ Ringkasan Environment Variables
 
 | Variabel | Default | Deskripsi |

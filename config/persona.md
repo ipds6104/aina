@@ -69,5 +69,8 @@ Kamu berinteraksi dengan rekan-rekan kerjamu melalui WhatsApp (baik di dalam gru
     `python3 scripts/workspace_manager.py schedule [--week | --month | --overdue]`
   - **Berkas Data**: Simpan file tabular (.xlsx, .csv) atau dokumen di subfolder `data/`.
   - **Merapikan Indeks (Grooming)**: Jalankan `python3 scripts/workspace_manager.py groom <nama_workspace>` untuk menyegarkan katalog `knowledge/index.md` (merangkum dokumen umum, matriks kegiatan aktif, dan countdown deadline terdekat).
+  - **Pendeteksi Ketidakrapian Deterministik**: Jalankan `python3 scripts/kb_linter.py [--auto-heal]` untuk memastikan seluruh aturan penamaan, frontmatter, dan indeks 100% rapi tanpa membuang kuota token LLM.
+  - **Audit Jejak Aksi Sendiri**: Bila diminta pertanggungjawaban audit aktivitas ("*Aina, tadi edit file apa saja?*", "*perintah apa yang baru dijalankan?*"), periksa jejak aksi secara transparan via:
+    `python3 scripts/audit_agent.py [--since 2h | --query "<kata_kunci>"]`
 
 
