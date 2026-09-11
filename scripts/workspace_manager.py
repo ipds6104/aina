@@ -26,7 +26,79 @@ def find_repo_root() -> Path:
     return current
 
 REPO_ROOT = find_repo_root()
-WORKSPACES_ROOT = REPO_ROOT / "workspaces"
+
+def get_workspaces_root() -> Path:
+    """
+    Menemukan direktori induk kumpulan workspace dengan hierarki:
+    1. AINA_WORKSPACES_DIR (variabel environment eksplisit)
+    2. Parent directory dari AGENT_WORKSPACE jika diset
+    3. REPO_ROOT / 'workspaces'
+    4. CWD / 'workspaces'
+    """
+    if os.environ.get("AINA_WORKSPACES_DIR"):
+        p = Path(os.environ["AINA_WORKSPACES_DIR"]).resolve()
+        if p.exists():
+            return p
+
+    if os.environ.get("AGENT_WORKSPACE"):
+        p = Path(os.environ["AGENT_WORKSPACE"]).resolve()
+        if p.is_dir() and (p / "knowledge").exists():
+            return p.parent
+        elif p.exists() and p.is_dir():
+            return p
+
+    repo_ws = REPO_ROOT / "workspaces"
+    if repo_ws.exists():
+        return repo_ws
+
+    return Path.cwd() / "workspaces"
+
+def resolve_workspace_dir(ws_input: str | None = None) -> Path:
+    """
+    Menyelesaikan path workspace target secara cerdas & agnostik:
+    1. Jika ws_input adalah path absolut/relatif yang ada di disk -> kembalikan langsung.
+    2. Jika ws_input adalah nama folder di dalam get_workspaces_root() -> kembalikan path tersebut.
+    3. Jika ws_input None:
+       - Cek AGENT_WORKSPACE
+       - Cek jika CWD adalah workspace (memiliki 'knowledge/' atau 'GEMINI.md')
+       - Cek get_workspaces_root() / 'default'
+    """
+    if ws_input and ws_input.strip():
+        val = ws_input.strip()
+        raw_path = Path(val)
+        if raw_path.is_dir():
+            return raw_path.resolve()
+
+        # Cek relatif ke CWD
+        cwd_cand = (Path.cwd() / val).resolve()
+        if cwd_cand.is_dir():
+            return cwd_cand
+
+        # Cek di dalam root workspaces
+        root = get_workspaces_root()
+        slug_cand = root / val
+        if slug_cand.is_dir():
+            return slug_cand.resolve()
+
+        lower_cand = root / val.lower()
+        if lower_cand.is_dir():
+            return lower_cand.resolve()
+
+        # Jika user memasukkan slug baru untuk pembuatan atau operasi
+        return slug_cand
+
+    if os.environ.get("AGENT_WORKSPACE"):
+        p = Path(os.environ["AGENT_WORKSPACE"]).resolve()
+        if p.is_dir():
+            return p
+
+    cwd = Path.cwd()
+    if (cwd / "knowledge").is_dir():
+        return cwd.resolve()
+
+    return (get_workspaces_root() / "default").resolve()
+
+WORKSPACES_ROOT = get_workspaces_root()
 
 # ─── PURE-PYTHON YAML FRONTMATTER PARSER & SERIALIZER ────────────────────────
 
@@ -129,22 +201,35 @@ def dump_yaml_frontmatter(metadata: dict, body: str) -> str:
 # ─── WORKSPACE SUBCOMMANDS ───────────────────────────────────────────────────
 
 def get_workspace_dir(ws_name: str) -> Path:
-    ws_dir = WORKSPACES_ROOT / ws_name.strip().lower()
-    return ws_dir
+    return resolve_workspace_dir(ws_name)
 
 def cmd_list(args):
-    if not WORKSPACES_ROOT.exists():
-        print("Direktori workspaces/ belum dibuat.")
+    ws_root = get_workspaces_root()
+    found_map = {}
+
+    if ws_root.exists() and ws_root.is_dir():
+        for p in ws_root.iterdir():
+            if p.is_dir() and not p.name.startswith("."):
+                found_map[str(p.resolve())] = p
+
+    # Also check if AGENT_WORKSPACE is set and points elsewhere
+    if os.environ.get("AGENT_WORKSPACE"):
+        agent_p = Path(os.environ["AGENT_WORKSPACE"]).resolve()
+        if agent_p.is_dir() and str(agent_p) not in found_map:
+            found_map[str(agent_p)] = agent_p
+
+    workspaces = list(found_map.values())
+    if not workspaces:
+        print(f"Direktori workspace belum ditemukan di {ws_root}.")
         return
 
-    workspaces = [p for p in WORKSPACES_ROOT.iterdir() if p.is_dir() and not p.name.startswith(".")]
     print(f"\n📁 DAFTAR WORKSPACE TERDAFTAR ({len(workspaces)}):")
     divider = "-" * 85
     print(divider)
     print(f"| {'Workspace':<16} | {'Kegiatan':<10} | {'Dokumen':<9} | {'Data':<6} | {'Deskripsi':<32} |")
     print(divider)
 
-    for ws in sorted(workspaces):
+    for ws in sorted(workspaces, key=lambda p: p.name):
         gemini_file = ws / "GEMINI.md"
         desc = "Tanpa deskripsi"
         if gemini_file.exists():
@@ -164,8 +249,14 @@ def cmd_list(args):
     print(divider)
 
 def cmd_create(args):
-    name = slugify(args.name)
-    ws_dir = WORKSPACES_ROOT / name
+    input_name = args.name.strip()
+    if "/" in input_name or "\\" in input_name:
+        ws_dir = Path(input_name).resolve()
+        name = ws_dir.name
+    else:
+        name = slugify(input_name)
+        ws_dir = get_workspaces_root() / name
+
     if ws_dir.exists():
         print(f"⚠️ Workspace '{name}' sudah ada di {ws_dir}")
         return
@@ -368,13 +459,23 @@ def cmd_schedule(args):
     """Menampilkan timeline dan deadline jadwal kegiatan deterministik."""
     workspaces_to_scan = []
     if args.workspace:
-        ws_dir = get_workspace_dir(args.workspace)
+        ws_dir = resolve_workspace_dir(args.workspace)
         if not ws_dir.exists():
-            print(f"❌ Workspace '{args.workspace}' tidak ditemukan.")
+            print(f"❌ Workspace '{args.workspace}' tidak ditemukan di {ws_dir}.")
             return
         workspaces_to_scan.append(ws_dir)
     else:
-        workspaces_to_scan = [p for p in WORKSPACES_ROOT.iterdir() if p.is_dir() and not p.name.startswith(".")]
+        root = get_workspaces_root()
+        seen = set()
+        if root.exists() and root.is_dir():
+            for p in root.iterdir():
+                if p.is_dir() and not p.name.startswith("."):
+                    workspaces_to_scan.append(p)
+                    seen.add(str(p.resolve()))
+        if os.environ.get("AGENT_WORKSPACE"):
+            aw = Path(os.environ["AGENT_WORKSPACE"]).resolve()
+            if aw.is_dir() and str(aw) not in seen:
+                workspaces_to_scan.append(aw)
 
     all_deadlines = []
     today = datetime.date.today()
@@ -473,15 +574,15 @@ def cmd_schedule(args):
 # ─── ENHANCED KNOWLEDGE BASE GROOMING ────────────────────────────────────────
 
 def cmd_groom(args):
-    ws_name = slugify(args.name)
-    ws_dir = get_workspace_dir(ws_name)
+    ws_dir = resolve_workspace_dir(args.name)
+    ws_name = ws_dir.name
     if not ws_dir.exists():
-        print(f"❌ Workspace '{ws_name}' tidak ditemukan di {WORKSPACES_ROOT}")
+        print(f"❌ Workspace '{ws_name}' tidak ditemukan di {ws_dir}")
         return
 
     knowledge_dir = ws_dir / "knowledge"
     if not knowledge_dir.exists():
-        print(f"❌ Folder knowledge/ tidak ditemukan di workspace '{ws_name}'")
+        print(f"❌ Folder knowledge/ tidak ditemukan di workspace '{ws_name}' ({ws_dir})")
         return
 
     print(f"🧹 Merapikan (grooming) knowledge base pada workspace '{ws_name}'...")
@@ -634,7 +735,7 @@ def main():
 
     # groom
     p_groom = subparsers.add_parser("groom", help="Rapikan (groom) knowledge base di workspace")
-    p_groom.add_argument("name", help="Nama workspace yang akan dirapikan")
+    p_groom.add_argument("name", nargs="?", help="Nama atau path workspace yang akan dirapikan (opsional, default: aktif)")
 
     args = parser.parse_args()
 

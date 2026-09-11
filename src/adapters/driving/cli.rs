@@ -54,8 +54,26 @@ SUBCOMMANDS:
                               Options:
                                 --title, -t <nama>      Judul / deskripsi domain workspace
 
+    workspace sync            Tarik perubahan, kompilasi index, commit, dan push ke Git
+                              Options:
+                                --workspace, -w <dir>   Path workspace
+                                --message, -m <text>    Custom commit message
+                                --json                  Output format JSON
+
+    workspace link <git-url>  Hubungkan workspace ke Git origin remote (auto .gitignore)
+
+    workspace gh-status       Periksa status autentikasi GitHub CLI (`gh`)
+
+    workspace gh-create <n>   Buat repositori GitHub baru secara instan via `gh`
+                              Options:
+                                --public                Buat repositori publik (default: private)
+
     clone <git-url> [path]    Clone repositori GitHub knowledge base yang sudah ada
                               (Otomatis sinkronisasi, lint, dan generate katalog index.md)
+
+    sync                      Alias cepat untuk `workspace sync`
+
+    link <git-url>            Alias cepat untuk `workspace link`
 
     help, --help, -h          Tampilkan panduan ini
 "#
@@ -78,6 +96,8 @@ SUBCOMMANDS:
             "kb" => Self::handle_kb(&args[2..]),
             "workspace" | "ws" => Self::handle_workspace(&args[2..]),
             "clone" => Self::handle_workspace_clone(&args[2..]),
+            "sync" => Self::handle_workspace_sync(&args[2..]),
+            "link" => Self::handle_workspace_link(&args[2..]),
             "audit" => Self::handle_audit(&args[2..]),
             _ => {
                 eprintln!("Subcommand tidak dikenal: `{}`. Ketik `aina help`.", cmd);
@@ -90,12 +110,20 @@ SUBCOMMANDS:
         let mut idx = 0;
         while idx < args.len() {
             if (args[idx] == "--workspace" || args[idx] == "-w") && idx + 1 < args.len() {
-                let p = PathBuf::from(&args[idx + 1]);
+                let val = &args[idx + 1];
+                let p = PathBuf::from(val);
                 if p.is_dir() {
                     return p;
                 }
+                // Check if relative to AINA_WORKSPACES_DIR
+                if let Ok(root_env) = std::env::var("AINA_WORKSPACES_DIR") {
+                    let cand = Path::new(&root_env).join(val);
+                    if cand.is_dir() {
+                        return cand;
+                    }
+                }
                 // Check if relative to workspaces/
-                let candidate = Path::new("workspaces").join(&args[idx + 1]);
+                let candidate = Path::new("workspaces").join(val);
                 if candidate.is_dir() {
                     return candidate;
                 }
@@ -104,17 +132,39 @@ SUBCOMMANDS:
             idx += 1;
         }
 
-        // Fallback checks
-        let candidates = [
-            PathBuf::from(std::env::var("AGENT_WORKSPACE").unwrap_or_default()),
-            PathBuf::from("workspaces/default"),
-            PathBuf::from("."),
-        ];
-        for c in candidates {
-            if c.join("knowledge").is_dir() || c.is_dir() {
-                return c;
+        // 1. Check AGENT_WORKSPACE / AINA_WORKSPACE environment variable
+        for env_key in &["AGENT_WORKSPACE", "AINA_WORKSPACE"] {
+            if let Ok(val) = std::env::var(env_key) {
+                if !val.trim().is_empty() {
+                    let p = PathBuf::from(val);
+                    if p.is_dir() {
+                        return p;
+                    }
+                }
             }
         }
+
+        // 2. Check AINA_WORKSPACES_DIR/default
+        if let Ok(root_env) = std::env::var("AINA_WORKSPACES_DIR") {
+            if !root_env.trim().is_empty() {
+                let p = Path::new(&root_env).join("default");
+                if p.is_dir() {
+                    return p;
+                }
+            }
+        }
+
+        // 3. Check if current working directory (CWD) is a workspace (has knowledge/)
+        let cwd = PathBuf::from(".");
+        if cwd.join("knowledge").is_dir() {
+            return cwd;
+        }
+
+        // 4. Check repo's workspaces/default
+        if Path::new("workspaces/default").is_dir() {
+            return PathBuf::from("workspaces/default");
+        }
+
         PathBuf::from("workspaces/default")
     }
 
@@ -423,6 +473,10 @@ SUBCOMMANDS:
                 Ok(())
             }
             "clone" => Self::handle_workspace_clone(&args[1..]),
+            "sync" => Self::handle_workspace_sync(&args[1..]),
+            "link" => Self::handle_workspace_link(&args[1..]),
+            "gh-status" => Self::handle_gh_status(),
+            "gh-create" => Self::handle_gh_create(&args[1..]),
             _ => {
                 eprintln!("Subcommand workspace tidak dikenal: `{}`", sub);
                 std::process::exit(1);
@@ -459,6 +513,97 @@ SUBCOMMANDS:
         println!("✅ Clone selesai dan katalog `knowledge/index.md` otomatis digenerate!");
         println!("\nUntuk menghubungkan ke Aina daemon, tambahkan ke file `.env`:");
         println!("AGENT_WORKSPACE={}", target_path.display());
+        Ok(())
+    }
+
+    fn handle_workspace_sync(args: &[String]) -> anyhow::Result<()> {
+        let ws = Self::resolve_workspace(args);
+        let mut msg = None;
+        let mut idx = 0;
+        let is_json = args.iter().any(|a| a == "--json");
+
+        while idx < args.len() {
+            if (args[idx] == "--message" || args[idx] == "-m") && idx + 1 < args.len() {
+                msg = Some(args[idx + 1].as_str());
+                idx += 2;
+                continue;
+            }
+            idx += 1;
+        }
+
+        println!("🔄 Mensinkronisasikan workspace {:?} dengan remote Git...", ws);
+        let result = KnowledgeEngine::sync_workspace(&ws, msg)?;
+
+        if is_json {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
+            println!("\n✅ SINKRONISASI BERHASIL!");
+            println!("• Pull Status  : {}", if result.pulled { "Berhasil (Up to date / rebased)" } else { "Gagal / Konflik" });
+            if !result.pull_summary.is_empty() {
+                println!("  Output       : {}", result.pull_summary.lines().next().unwrap_or(""));
+            }
+            println!("• Commit Status: {}", if result.committed { format!("Tersimpan ({})", result.commit_message.as_deref().unwrap_or("-")) } else { "Tidak ada perubahan baru".to_string() });
+            println!("• Push Status  : {}", if result.pushed { "Berhasil dikirim ke origin" } else { "Tidak dikirim / gagal" });
+            if !result.push_summary.is_empty() {
+                println!("  Output       : {}", result.push_summary.lines().next().unwrap_or(""));
+            }
+        }
+        Ok(())
+    }
+
+    fn handle_workspace_link(args: &[String]) -> anyhow::Result<()> {
+        if args.is_empty() {
+            eprintln!("Error: URL git repository wajib disertakan.");
+            eprintln!("Contoh: aina workspace link https://github.com/my-org/knowledge-base.git [--workspace <dir>]");
+            std::process::exit(1);
+        }
+        let git_url = &args[0];
+        let ws = Self::resolve_workspace(&args[1..]);
+
+        println!("🔗 Menghubungkan workspace {:?} ke remote Git: {}...", ws, git_url);
+        KnowledgeEngine::link_workspace(&ws, git_url)?;
+        println!("✅ Berhasil! Workspace telah terhubung ke Git origin.");
+        println!("   Jalankan `aina sync` untuk sinkronisasi otomatis.");
+        Ok(())
+    }
+
+    fn handle_gh_status() -> anyhow::Result<()> {
+        println!("🐙 Memeriksa status autentikasi GitHub CLI (`gh`)...");
+        match KnowledgeEngine::check_gh_status() {
+            Ok(status) => {
+                println!("✅ GitHub CLI aktif dan terhubung:\n");
+                println!("{}\n", status);
+            }
+            Err(e) => {
+                eprintln!("⚠️ {}", e);
+            }
+        }
+        Ok(())
+    }
+
+    fn handle_gh_create(args: &[String]) -> anyhow::Result<()> {
+        if args.is_empty() {
+            eprintln!("Error: Nama repositori GitHub wajib disertakan.");
+            eprintln!("Contoh: aina workspace gh-create my-org/knowledge-base [--private]");
+            std::process::exit(1);
+        }
+
+        let repo_name = &args[0];
+        let ws = Self::resolve_workspace(&args[1..]);
+        let private = !args.iter().any(|a| a == "--public");
+
+        println!("🐙 Membuat repositori GitHub `{}` via gh CLI...", repo_name);
+        match KnowledgeEngine::create_github_repo(&ws, repo_name, private) {
+            Ok(res) => {
+                println!("🎉 Repositori GitHub berhasil dibuat dan di-push:\n");
+                println!("{}\n", res);
+                println!("Workspace {:?} kini terhubung ke GitHub!", ws);
+            }
+            Err(e) => {
+                eprintln!("❌ {}", e);
+                std::process::exit(1);
+            }
+        }
         Ok(())
     }
 }

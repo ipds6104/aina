@@ -56,6 +56,17 @@ pub struct WorkspaceInfo {
     pub is_clean: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncResult {
+    pub is_git: bool,
+    pub pulled: bool,
+    pub pull_summary: String,
+    pub committed: bool,
+    pub commit_message: Option<String>,
+    pub pushed: bool,
+    pub push_summary: String,
+}
+
 pub struct KnowledgeEngine;
 
 impl KnowledgeEngine {
@@ -628,6 +639,246 @@ impl KnowledgeEngine {
         // Auto-heal / Groom to ensure index.md exists
         Self::lint(dir, true);
         Ok(())
+    }
+
+    /// Synchronize a git-backed workspace: pull updates, groom index, commit changes, and push
+    pub fn sync_workspace<P: AsRef<Path>>(
+        workspace_dir: P,
+        custom_commit_msg: Option<&str>,
+    ) -> anyhow::Result<SyncResult> {
+        let ws = workspace_dir.as_ref();
+        let git_dir = ws.join(".git");
+        if !git_dir.exists() {
+            anyhow::bail!(
+                "Workspace {:?} bukan repositori Git. Gunakan `aina workspace link <remote-url>` terlebih dahulu.",
+                ws
+            );
+        }
+
+        // 1. Pull latest changes from remote origin
+        let pull_output = std::process::Command::new("git")
+            .current_dir(ws)
+            .args(["pull", "--rebase", "--autostash"])
+            .output();
+
+        let (pulled, pull_summary) = match pull_output {
+            Ok(out) => {
+                let msg = String::from_utf8_lossy(if out.status.success() { &out.stdout } else { &out.stderr }).to_string();
+                (out.status.success(), msg.trim().to_string())
+            }
+            Err(e) => (false, format!("Gagal mengeksekusi git pull: {}", e)),
+        };
+
+        // 2. Groom knowledge index to integrate any pulled changes
+        let _ = Self::groom_knowledge_base(ws);
+
+        // 3. Stage safe whitelisted documentation files only (Anti-Leak)
+        let _ = std::process::Command::new("git")
+            .current_dir(ws)
+            .args(["add", "knowledge/", "GEMINI.md", "README.md", ".gitignore"])
+            .output();
+
+        // 4. Check if there are staged changes
+        let status_output = std::process::Command::new("git")
+            .current_dir(ws)
+            .args(["status", "--porcelain"])
+            .output();
+
+        let mut committed = false;
+        let mut final_commit_msg = None;
+
+        if let Ok(st) = status_output {
+            let changes = String::from_utf8_lossy(&st.stdout);
+            if !changes.trim().is_empty() {
+                let msg = custom_commit_msg
+                    .map(String::from)
+                    .unwrap_or_else(|| "docs(kb): auto-sync knowledge updates via Aina [skip ci]".to_string());
+
+                let commit_res = std::process::Command::new("git")
+                    .current_dir(ws)
+                    .args(["commit", "-m", &msg])
+                    .output();
+
+                if let Ok(c_out) = commit_res {
+                    if c_out.status.success() {
+                        committed = true;
+                        final_commit_msg = Some(msg);
+                    }
+                }
+            }
+        }
+
+        // 5. Push to remote origin
+        let push_output = std::process::Command::new("git")
+            .current_dir(ws)
+            .args(["push", "origin", "HEAD"])
+            .output();
+
+        let (pushed, push_summary) = match push_output {
+            Ok(out) => {
+                let msg = String::from_utf8_lossy(if out.status.success() { &out.stdout } else { &out.stderr }).to_string();
+                (out.status.success(), msg.trim().to_string())
+            }
+            Err(e) => (false, format!("Gagal mengeksekusi git push: {}", e)),
+        };
+
+        Ok(SyncResult {
+            is_git: true,
+            pulled,
+            pull_summary,
+            committed,
+            commit_message: final_commit_msg,
+            pushed,
+            push_summary,
+        })
+    }
+
+    /// Link an existing workspace to a remote Git repository
+    pub fn link_workspace<P: AsRef<Path>>(workspace_dir: P, git_url: &str) -> anyhow::Result<()> {
+        let ws = workspace_dir.as_ref();
+        let git_dir = ws.join(".git");
+
+        // 1. Initialize git if not present
+        if !git_dir.exists() {
+            let init_status = std::process::Command::new("git")
+                .current_dir(ws)
+                .args(["init", "-b", "main"])
+                .status()?;
+            if !init_status.success() {
+                anyhow::bail!("Gagal menjalankan git init di {:?}", ws);
+            }
+        }
+
+        // 2. Ensure default .gitignore exists
+        let gitignore_file = ws.join(".gitignore");
+        if !gitignore_file.exists() {
+            let gitignore_content = "\
+# Ignored workspace runtime data
+/data/*
+!/data/.gitkeep
+/output/*
+!/output/.gitkeep
+*.db
+*.db-shm
+*.db-wal
+.env
+__pycache__/
+*.pyc
+";
+            std::fs::write(&gitignore_file, gitignore_content)?;
+        }
+
+        // 3. Set or update remote origin
+        let remote_check = std::process::Command::new("git")
+            .current_dir(ws)
+            .args(["remote"])
+            .output()?;
+
+        let remotes = String::from_utf8_lossy(&remote_check.stdout);
+        if remotes.contains("origin") {
+            std::process::Command::new("git")
+                .current_dir(ws)
+                .args(["remote", "set-url", "origin", git_url])
+                .status()?;
+        } else {
+            std::process::Command::new("git")
+                .current_dir(ws)
+                .args(["remote", "add", "origin", git_url])
+                .status()?;
+        }
+
+        // 4. Initial commit of documentation
+        let _ = std::process::Command::new("git")
+            .current_dir(ws)
+            .args(["add", "knowledge/", "GEMINI.md", "README.md", ".gitignore"])
+            .output();
+
+        let _ = std::process::Command::new("git")
+            .current_dir(ws)
+            .args(["commit", "-m", "chore: initialize workspace knowledge vault"])
+            .output();
+
+        info!("Linked workspace {:?} to remote origin {}", ws, git_url);
+        Ok(())
+    }
+
+    /// Check GitHub CLI (gh) authentication and version status
+    pub fn check_gh_status() -> anyhow::Result<String> {
+        let which_gh = std::process::Command::new("which").arg("gh").output();
+        if which_gh.is_err() || !which_gh.unwrap().status.success() {
+            anyhow::bail!("GitHub CLI (`gh`) belum terpasang di sistem. Pasang via `apt install gh` atau https://cli.github.com");
+        }
+
+        let auth_output = std::process::Command::new("gh")
+            .args(["auth", "status"])
+            .output()?;
+
+        let text = format!(
+            "{}\n{}",
+            String::from_utf8_lossy(&auth_output.stdout),
+            String::from_utf8_lossy(&auth_output.stderr)
+        );
+
+        Ok(text.trim().to_string())
+    }
+
+    /// Create a remote GitHub repository directly using GitHub CLI (gh)
+    pub fn create_github_repo<P: AsRef<Path>>(
+        workspace_dir: P,
+        repo_name: &str,
+        private: bool,
+    ) -> anyhow::Result<String> {
+        let ws = workspace_dir.as_ref();
+        let git_dir = ws.join(".git");
+        if !git_dir.exists() {
+            let _ = std::process::Command::new("git")
+                .current_dir(ws)
+                .args(["init", "-b", "main"])
+                .status();
+        }
+
+        // Ensure safe gitignore and initial commit
+        let gitignore_file = ws.join(".gitignore");
+        if !gitignore_file.exists() {
+            let _ = std::fs::write(
+                &gitignore_file,
+                "/data/*\n!/data/.gitkeep\n/output/*\n!/output/.gitkeep\n*.db\n*.db-shm\n*.db-wal\n.env\n",
+            );
+        }
+        let _ = std::process::Command::new("git")
+            .current_dir(ws)
+            .args(["add", "knowledge/", "GEMINI.md", "README.md", ".gitignore"])
+            .output();
+        let _ = std::process::Command::new("git")
+            .current_dir(ws)
+            .args(["commit", "-m", "chore: initial knowledge base vault"])
+            .output();
+
+        let visibility_flag = if private { "--private" } else { "--public" };
+        info!("Creating GitHub repository {} via gh CLI...", repo_name);
+
+        let output = std::process::Command::new("gh")
+            .current_dir(ws)
+            .args([
+                "repo",
+                "create",
+                repo_name,
+                visibility_flag,
+                "--source",
+                ".",
+                "--remote",
+                "origin",
+                "--push",
+            ])
+            .output()?;
+
+        if !output.status.success() {
+            let err = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("Gagal membuat repositori GitHub via gh: {}", err.trim());
+        }
+
+        let success_msg = String::from_utf8_lossy(&output.stdout);
+        Ok(success_msg.trim().to_string())
     }
 }
 

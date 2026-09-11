@@ -69,11 +69,21 @@ Sebelum menjalankan Aina, tentukan bagaimana basis pengetahuan Anda akan disimpa
 Aina secara otomatis menyiapkan starter template default (`GEMINI.md`, `facts.md`, `procedures.md`) di dalam folder workspace yang ditunjuk. Anda tidak perlu setup manual.
 
 #### Skenario B: Menghubungkan Repositori GitHub Knowledge Base yang Sudah Ada
-Jika organisasi Anda sudah memiliki repositori GitHub berisi dokumentasi/SOP (contoh: `https://github.com/ipds6104/knowledge-base.git`):
+Jika tim/organisasi Anda sudah memiliki repositori GitHub berisi dokumentasi/SOP (contoh: `https://github.com/ipds6104/knowledge-base.git`):
 ```bash
 # Clone repositori knowledge base ke folder penyimpanan server
 aina clone https://github.com/ipds6104/knowledge-base.git /var/lib/aina/workspaces/ipds
 # Aina otomatis memvalidasi struktur dokumen dan mengompilasi katalog `knowledge/index.md`!
+```
+
+#### Skenario C: Workspace Lokal Di-publish ke GitHub Baru via GitHub CLI (`gh`)
+Jika Anda sudah memiliki workspace lokal dan ingin langsung membuat repositori GitHub pribadi/organisasi dengan 1 perintah:
+```bash
+# Cek autentikasi GitHub CLI
+aina workspace gh-status
+
+# Buat repo GitHub baru dari workspace aktif dan otomatis push
+aina workspace gh-create knowledge-base-ipds
 ```
 
 ---
@@ -255,6 +265,22 @@ aina kb schedule --workspace default
 # 7. Audit Trail Jejak Eksekusi Antigravity CLI
 aina audit --limit 10
 aina audit --query "git" --errors-only
+
+# 8. Sinkronisasi Git Dua Arah Otomatis (Pull Rebase + Safe Push)
+aina sync
+# atau: aina workspace sync --workspace default --message "docs: update SOP cuti"
+
+# 9. Hubungkan Workspace ke Git Remote (GitHub/GitLab)
+aina link https://github.com/ipds6104/knowledge-base.git
+# atau: aina workspace link https://github.com/ipds6104/knowledge-base.git --workspace default
+
+# 10. Buat Repositori GitHub Baru Seketika via GitHub CLI (`gh`)
+aina workspace gh-status
+aina workspace gh-create knowledge-base-ipds
+aina workspace gh-create knowledge-base-public --public
+
+# 11. Clone Knowledge Base Repositori Luar & Auto-Groom
+aina clone https://github.com/ipds6104/knowledge-base.git /var/lib/aina/workspaces/ipds
 ```
 
 > [!TIP]

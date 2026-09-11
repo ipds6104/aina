@@ -30,7 +30,67 @@ def find_repo_root() -> Path:
     return current
 
 REPO_ROOT = find_repo_root()
-WORKSPACES_ROOT = REPO_ROOT / "workspaces"
+
+def get_workspaces_root() -> Path:
+    """
+    Menemukan direktori induk kumpulan workspace dengan hierarki:
+    1. AINA_WORKSPACES_DIR (variabel environment eksplisit)
+    2. Parent directory dari AGENT_WORKSPACE jika diset
+    3. REPO_ROOT / 'workspaces'
+    4. CWD / 'workspaces'
+    """
+    if os.environ.get("AINA_WORKSPACES_DIR"):
+        p = Path(os.environ["AINA_WORKSPACES_DIR"]).resolve()
+        if p.exists():
+            return p
+
+    if os.environ.get("AGENT_WORKSPACE"):
+        p = Path(os.environ["AGENT_WORKSPACE"]).resolve()
+        if p.is_dir() and (p / "knowledge").exists():
+            return p.parent
+        elif p.exists() and p.is_dir():
+            return p
+
+    repo_ws = REPO_ROOT / "workspaces"
+    if repo_ws.exists():
+        return repo_ws
+
+    return Path.cwd() / "workspaces"
+
+def resolve_workspace_dir(ws_input: str | None = None) -> Path:
+    if ws_input and ws_input.strip():
+        val = ws_input.strip()
+        raw_path = Path(val)
+        if raw_path.is_dir():
+            return raw_path.resolve()
+
+        cwd_cand = (Path.cwd() / val).resolve()
+        if cwd_cand.is_dir():
+            return cwd_cand
+
+        root = get_workspaces_root()
+        slug_cand = root / val
+        if slug_cand.is_dir():
+            return slug_cand.resolve()
+
+        lower_cand = root / val.lower()
+        if lower_cand.is_dir():
+            return lower_cand.resolve()
+
+        return slug_cand
+
+    if os.environ.get("AGENT_WORKSPACE"):
+        p = Path(os.environ["AGENT_WORKSPACE"]).resolve()
+        if p.is_dir():
+            return p
+
+    cwd = Path.cwd()
+    if (cwd / "knowledge").is_dir():
+        return cwd.resolve()
+
+    return (get_workspaces_root() / "default").resolve()
+
+WORKSPACES_ROOT = get_workspaces_root()
 
 # ─── REGEX PATTERNS FOR WHATSAPP EXPORT ───────────────────────────────────────
 
@@ -151,9 +211,9 @@ def import_chat_archive(
     chat_slug: str = None,
     extract_media: bool = True
 ) -> dict:
-    ws_dir = WORKSPACES_ROOT / workspace_name.strip().lower()
+    ws_dir = resolve_workspace_dir(workspace_name)
     if not ws_dir.exists():
-        raise FileNotFoundError(f"Workspace '{workspace_name}' tidak ditemukan di {WORKSPACES_ROOT}")
+        raise FileNotFoundError(f"Workspace '{workspace_name}' tidak ditemukan di {ws_dir}")
 
     if not chat_slug:
         chat_slug = slugify(archive_path.stem.replace("WhatsApp Chat with", "").replace("WhatsApp Chat -", ""))
@@ -327,7 +387,7 @@ def search_chat(
     until: str = None,
     limit: int = 30
 ) -> list[dict]:
-    ws_dir = WORKSPACES_ROOT / workspace_name.strip().lower()
+    ws_dir = resolve_workspace_dir(workspace_name)
     db_path = ws_dir / "data" / "chats" / chat_slug / "messages.db"
     if not db_path.exists():
         print(f"❌ Database chat untuk slug '{chat_slug}' tidak ditemukan di {db_path}")
@@ -433,10 +493,10 @@ def cmd_search(args):
         print(divider)
 
 def cmd_links(args):
-    ws_dir = WORKSPACES_ROOT / args.workspace.strip().lower()
+    ws_dir = resolve_workspace_dir(args.workspace)
     links_file = ws_dir / "data" / "chats" / args.name / "links.json"
     if not links_file.exists():
-        print(f"❌ Berkas links.json untuk '{args.name}' tidak ditemukan.")
+        print(f"❌ Berkas links.json untuk '{args.name}' tidak ditemukan di {links_file}.")
         return
 
     links = json.loads(links_file.read_text(encoding="utf-8"))
@@ -451,10 +511,10 @@ def cmd_links(args):
         print(f"  🔗 {l['url']}")
 
 def cmd_stats(args):
-    ws_dir = WORKSPACES_ROOT / args.workspace.strip().lower()
+    ws_dir = resolve_workspace_dir(args.workspace)
     meta_file = ws_dir / "data" / "chats" / args.name / "metadata.json"
     if not meta_file.exists():
-        print(f"❌ Berkas metadata untuk '{args.name}' tidak ditemukan.")
+        print(f"❌ Berkas metadata untuk '{args.name}' tidak ditemukan di {meta_file}.")
         return
 
     meta = json.loads(meta_file.read_text(encoding="utf-8"))
@@ -468,14 +528,14 @@ def main():
     # import
     p_imp = subparsers.add_parser("import", help="Impor berkas ekspor chat (.zip atau .txt)")
     p_imp.add_argument("archive", help="Path berkas zip atau txt chat")
-    p_imp.add_argument("--workspace", default="default", help="Nama workspace target (default: default)")
+    p_imp.add_argument("--workspace", default=None, help="Nama atau path workspace target (default: aktif)")
     p_imp.add_argument("--name", help="Slug penamaan chat (contoh: ipds-6104)")
     p_imp.add_argument("--no-media", action="store_true", help="Jangan ekstrak berkas media/dokumen")
 
     # search
     p_srch = subparsers.add_parser("search", help="Cari pesan di arsip chat")
     p_srch.add_argument("name", help="Slug chat yang dicari")
-    p_srch.add_argument("--workspace", default="default", help="Nama workspace target")
+    p_srch.add_argument("--workspace", default=None, help="Nama atau path workspace target (default: aktif)")
     p_srch.add_argument("--query", "-q", help="Kata kunci pencarian teks")
     p_srch.add_argument("--sender", help="Filter berdasarkan nama pengirim")
     p_srch.add_argument("--since", help="Filter mulai tanggal (YYYY-MM-DD)")
@@ -485,14 +545,14 @@ def main():
     # links
     p_lnk = subparsers.add_parser("links", help="Tampilkan seluruh tautan yang pernah dibagikan")
     p_lnk.add_argument("name", help="Slug chat")
-    p_lnk.add_argument("--workspace", default="default", help="Nama workspace target")
+    p_lnk.add_argument("--workspace", default=None, help="Nama atau path workspace target (default: aktif)")
     p_lnk.add_argument("--domain", help="Filter domain (contoh: drive, docs, sheet, onedrive)")
     p_lnk.add_argument("--limit", type=int, default=50, help="Maksimal tautan ditampilkan")
 
     # stats
     p_stat = subparsers.add_parser("stats", help="Tampilkan metadata & statistik arsip chat")
     p_stat.add_argument("name", help="Slug chat")
-    p_stat.add_argument("--workspace", default="default", help="Nama workspace target")
+    p_stat.add_argument("--workspace", default=None, help="Nama atau path workspace target (default: aktif)")
 
     args = parser.parse_args()
 

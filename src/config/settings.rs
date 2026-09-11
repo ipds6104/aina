@@ -231,7 +231,7 @@ impl AppConfig {
         if let Ok(val) = env::var("AGENT_MODEL") {
             self.agent.model = val;
         }
-        if let Ok(val) = env::var("AGENT_WORKSPACE") {
+        if let Ok(val) = env::var("AGENT_WORKSPACE").or_else(|_| env::var("AINA_WORKSPACE")) {
             self.agent.workspace_dir = val;
         }
         if let Ok(val) = env::var("AGENT_TIMEOUT_SECONDS") {
