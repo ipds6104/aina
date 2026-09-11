@@ -162,17 +162,46 @@ Daripada membuat sistem memori, parser LLM, atau runtime sandbox dari nol, Aina 
 
 ---
 
-## 🎭 Kustomisasi Personality
+## 🎭 Kustomisasi Personality & Konteks Multi-Workspace
 
-Pengguna dapat mengubah kepribadian, gaya bicara, bahasa, atau aturan perilaku Aina **tanpa menyentuh kode program**. Cukup edit file:
+Pengguna dapat mengubah identitas, sektor instansi, serta kepribadian Aina **tanpa perlu mengubah kode program**:
 
-👉 [`config/persona.md`](config/persona.md) (atau set via env `AINA_PERSONA_TEXT`)
+1. **Konteks Organisasi / Instansi**:
+   👉 [`config/organization.md`](config/organization.md) (atau set via env `AINA_ORGANIZATION_TEXT`)
+   - Mendefinisikan sektor instansi (misalnya: Badan Pusat Statistik / BPS, startup teknologi, instansi dinas, atau perusahaan logistik).
+   - Menentukan peran spesifik Aina (misalnya: Mitra Pengolahan Data Statistik, Junior DevOps, dsb.).
+   - Dilengkapi template adaptasi instansi yang siap digunakan.
 
-Default personality:
-- **Cekatan & Solutif**: Langsung memberikan jawaban/solusi konkret.
-- **Basa-basi Seperlunya**: Menghindari kalimat pembuka/penutup yang panjang.
-- **Proactive Clarification**: Jika instruksi kurang jelas (misal tidak ada nama branch, kredensial, atau target output), Aina akan meminta klarifikasi terlebih dahulu secara terarah.
-- **Format WhatsApp-friendly**: Menggunakan formatting tebal, miring, dan monospace yang nyaman dibaca di layar HP.
+2. **Persona & Gaya Komunikasi**:
+   👉 [`config/persona.md`](config/persona.md) (atau set via env `AINA_PERSONA_TEXT`)
+   - **Cekatan & Solutif**: Memberikan solusi konkret yang siap pakai.
+   - **Basa-basi Seperlunya**: Low-noise, to-the-point, santun namun akrab.
+   - **Proactive Clarification**: Jika instruksi ambigu, meminta klarifikasi terarah sebelum bertindak.
+
+---
+
+## 🧭 Hierarki Epistemik Utama & Profiling Wewenang (OpSec)
+
+Aina beroperasi di bawah 4 pilar epistemik kritis untuk menjamin kehati-hatian, mencegah *hallucination*, dan menangkal eksploitasi *social engineering*:
+
+```
+[1. TABAYYUN (QS. Al-Hujurat: 6)] ──> Filter Masuk: Verifikasi kebenaran klaim & kredibilitas sebelum bereaksi.
+         │
+         ▼
+[2. TAWAQQUF (QS. Al-Isra: 36)]   ──> Anti-Spekulasi: Tahan diri membuat asumsi jika bukti belum kuat.
+         │
+         ▼
+[3. OPSEC & PROFILING]            ──> Batas Wewenang: Identifikasi lawan bicara & batasan perintahnya.
+         │
+         ▼
+[4. AHLUDZ-DZIKRI (QS. An-Nahl: 43)] ─> Solusi Otoritatif: Konsultasi ke dokumentasi primer jika ragu.
+```
+
+### 👤 Profiling Memori Pengguna di SQLite
+Aina secara otonom mengingat lawan bicaranya ke dalam tabel `user_profiles` di SQLite:
+- **`ADMIN`** (Dapat diset via env `ADMIN_JID=628xxxx@s.whatsapp.net`): Memiliki wewenang penuh atas konfigurasi dan penugasan strategis.
+- **`STAFF`**: Rekan kerja kantor. Berhak meminta bantuan coding, pengolahan data, pembuatan script, dan monitoring.
+- **`GUEST` / `EXTERNAL`**: Pihak luar / nomor asing. Aina bersikap adil dan sopan (*al-qist*), tetapi memiliki perimeter keamanan ketat (**Strict OpSec**): dilarang keras membocorkan token rahasia, data internal kantor, kredensial, atau mengeksekusi perintah destruktif sepihak.
 
 ---
 

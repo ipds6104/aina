@@ -77,8 +77,28 @@ impl ProcessIncomingMessageUseCase {
                     .get_conversation_id(&msg.chat_jid)
                     .await?;
 
-                // 4. Build prompt incorporating persona and context
-                let prompt = self.persona_engine.build_prompt(&msg);
+                // 4. Retrieve or auto-seed sender profile from profiling memory
+                let profile = match self.session_store.get_user_profile(&msg.sender.jid).await {
+                    Ok(Some(p)) => Some(p),
+                    Ok(None) => {
+                        let new_profile = crate::core::ports::UserProfile {
+                            sender_jid: msg.sender.jid.clone(),
+                            name: msg.sender.name.clone(),
+                            role: Some("Rekan Kerja".to_string()),
+                            authority_level: "staff".to_string(),
+                            notes: Some("Terdaftar otomatis saat interaksi pertama".to_string()),
+                        };
+                        let _ = self.session_store.save_user_profile(&new_profile).await;
+                        Some(new_profile)
+                    }
+                    Err(e) => {
+                        warn!("Failed to fetch user profile for {}: {}", msg.sender.jid, e);
+                        None
+                    }
+                };
+
+                // 5. Build prompt incorporating persona, organization context, and profiling
+                let prompt = self.persona_engine.build_prompt(&msg, profile.as_ref());
 
                 // 5. Execute Antigravity agent CLI
                 let agent_res = match self

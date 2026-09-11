@@ -30,7 +30,12 @@ async fn main() -> anyhow::Result<()> {
     let config = AppConfig::load_from_file_or_default(&config_path);
 
     let persona_text = config.load_persona();
-    info!("Loaded persona with {} characters", persona_text.len());
+    let org_text = config.load_organization();
+    info!(
+        "Loaded persona with {} characters, organization context with {} characters",
+        persona_text.len(),
+        org_text.len()
+    );
 
     // 2. Instantiate Driven Adapters (Secondary Adapters)
     let session_store = Arc::new(SqliteSessionStore::new(&config.database.path)?);
@@ -47,7 +52,11 @@ async fn main() -> anyhow::Result<()> {
         &config.whatsmeow.presence_endpoint,
     ));
 
-    let persona_engine = Arc::new(PersonaEngine::new(persona_text));
+    let persona_engine = Arc::new(PersonaEngine::new(
+        persona_text,
+        org_text,
+        config.agent.admin_jid.clone(),
+    ));
 
     // 3. Instantiate Use Cases (Core Application Logic)
     let process_message_usecase = Arc::new(ProcessIncomingMessageUseCase::new(

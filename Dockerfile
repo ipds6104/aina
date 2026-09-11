@@ -49,8 +49,7 @@ COPY --from=builder /usr/src/aina/target/release/aina /usr/local/bin/aina
 RUN mkdir -p /app/config /app/data /app/workspace /root/.gemini/antigravity-cli
 
 # Copy configuration, skills, and entrypoint
-COPY config/persona.md /app/config/persona.md
-COPY config/config.yaml /app/config/config.yaml
+COPY config/ /app/config/
 COPY skills/ /app/skills/
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
@@ -62,6 +61,7 @@ ENV AGENT_BINARY_PATH=/usr/local/bin/agy
 ENV AGENT_WORKSPACE=/app/workspace
 ENV DATABASE_PATH=/app/data/aina.db
 ENV AGENT_PERSONA_FILE=/app/config/persona.md
+ENV AGENT_ORGANIZATION_FILE=/app/config/organization.md
 ENV PATH="/root/.local/bin:/usr/local/bin:${PATH}"
 
 EXPOSE 8090

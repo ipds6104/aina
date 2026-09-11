@@ -49,6 +49,10 @@ pub struct AgentConfig {
     pub timeout_seconds: u64,
     #[serde(default = "default_persona_file")]
     pub persona_file: String,
+    #[serde(default = "default_organization_file")]
+    pub organization_file: String,
+    #[serde(default = "default_admin_jid")]
+    pub admin_jid: String,
 }
 
 fn default_model() -> String {
@@ -65,6 +69,14 @@ fn default_timeout() -> u64 {
 
 fn default_persona_file() -> String {
     "config/persona.md".to_string()
+}
+
+fn default_organization_file() -> String {
+    "config/organization.md".to_string()
+}
+
+fn default_admin_jid() -> String {
+    String::new()
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -114,6 +126,8 @@ impl Default for AppConfig {
                 workspace_dir: default_workspace(),
                 timeout_seconds: default_timeout(),
                 persona_file: default_persona_file(),
+                organization_file: default_organization_file(),
+                admin_jid: default_admin_jid(),
             },
             scheduler: SchedulerConfig {
                 enabled: default_scheduler_enabled(),
@@ -188,6 +202,12 @@ impl AppConfig {
         if let Ok(val) = env::var("AGENT_PERSONA_FILE") {
             self.agent.persona_file = val;
         }
+        if let Ok(val) = env::var("AGENT_ORGANIZATION_FILE").or_else(|_| env::var("ORGANIZATION_FILE")) {
+            self.agent.organization_file = val;
+        }
+        if let Ok(val) = env::var("ADMIN_JID").or_else(|_| env::var("AINA_ADMIN_JID")) {
+            self.agent.admin_jid = val;
+        }
 
         // Scheduler overrides
         if let Ok(val) = env::var("SCHEDULER_ENABLED") {
@@ -214,6 +234,19 @@ impl AppConfig {
 
         fs::read_to_string(&self.agent.persona_file).unwrap_or_else(|_| {
             "Kamu adalah Aina, asisten dan rekan kerja cerdas yang ramah, cekatan, dan solutif."
+                .to_string()
+        })
+    }
+
+    pub fn load_organization(&self) -> String {
+        if let Ok(org_override) = env::var("AINA_ORGANIZATION_TEXT") {
+            if !org_override.trim().is_empty() {
+                return org_override;
+            }
+        }
+
+        fs::read_to_string(&self.agent.organization_file).unwrap_or_else(|_| {
+            "Organisasi: Layanan Teknis & Rekayasa Perangkat Lunak. Peran Aina: Rekan Kerja Teknis."
                 .to_string()
         })
     }

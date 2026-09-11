@@ -1,4 +1,14 @@
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserProfile {
+    pub sender_jid: String,
+    pub name: Option<String>,
+    pub role: Option<String>,
+    pub authority_level: String, // "admin", "staff", "guest", "external"
+    pub notes: Option<String>,
+}
 
 #[async_trait]
 pub trait SessionStorePort: Send + Sync {
@@ -16,4 +26,10 @@ pub trait SessionStorePort: Send + Sync {
         text: &str,
         is_from_me: bool,
     ) -> anyhow::Result<()>;
+
+    /// Retrieves profiling memory for a sender JID.
+    async fn get_user_profile(&self, sender_jid: &str) -> anyhow::Result<Option<UserProfile>>;
+
+    /// Saves or updates profiling memory for a sender JID.
+    async fn save_user_profile(&self, profile: &UserProfile) -> anyhow::Result<()>;
 }

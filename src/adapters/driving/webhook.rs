@@ -280,7 +280,12 @@ async fn simulate_handler(
                 Err(_) => None,
             };
 
-            let prompt = state.persona_engine.build_prompt(&msg);
+            let profile = match state.session_store.get_user_profile(&msg.sender.jid).await {
+                Ok(p) => p,
+                Err(_) => None,
+            };
+
+            let prompt = state.persona_engine.build_prompt(&msg, profile.as_ref());
 
             match state.agent_engine.execute(conv_id.as_deref(), &prompt).await {
                 Ok(agent_res) => {
