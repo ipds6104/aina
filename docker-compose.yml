@@ -1,0 +1,29 @@
+services:
+  aina:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aina-assistant
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8090}:8090"
+    env_file:
+      - .env
+    volumes:
+      - aina_data:/app/data
+      - aina_workspace:/app/workspace
+      - aina_gemini:/root/.gemini
+    networks:
+      - aina-network
+
+volumes:
+  aina_data:
+    driver: local
+  aina_workspace:
+    driver: local
+  aina_gemini:
+    driver: local
+
+networks:
+  aina-network:
+    driver: bridge

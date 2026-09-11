@@ -1,0 +1,25 @@
+server:
+  host: "0.0.0.0"
+  port: 8090
+
+whatsmeow:
+  base_url: "http://localhost:3000"
+  api_key: "default-secret-key"
+  bot_jid: "628123456789@s.whatsapp.net"
+  bot_name: "Aina"
+  send_endpoint: "/send/message"
+  presence_endpoint: "/send/presence"
+
+agent:
+  binary_path: "/home/ihza/.local/bin/agy"
+  model: "gemini-3.8-flash-high"
+  workspace_dir: "./workspace"
+  timeout_seconds: 300
+  persona_file: "config/persona.md"
+
+scheduler:
+  enabled: true
+  interval_seconds: 60
+
+database:
+  path: "data/aina.db"

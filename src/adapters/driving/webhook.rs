@@ -1,0 +1,846 @@
+use axum::{
+    extract::State,
+    http::StatusCode,
+    response::{Html, IntoResponse},
+    routing::{get, post},
+    Json, Router,
+};
+use crate::core::domain::{ChatType, Gatekeeper, GatekeeperDecision, IncomingMessage, PersonaEngine, QuotedMessage, Sender};
+use crate::core::ports::{AgentEnginePort, SessionStorePort};
+use crate::core::usecases::ProcessIncomingMessageUseCase;
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use std::sync::Arc;
+use tracing::{debug, error, info};
+
+pub struct WebhookServerState {
+    pub usecase: Arc<ProcessIncomingMessageUseCase>,
+    pub agent_engine: Arc<dyn AgentEnginePort>,
+    pub session_store: Arc<dyn SessionStorePort>,
+    pub persona_engine: Arc<PersonaEngine>,
+    pub bot_name: String,
+    pub bot_jid: String,
+    pub model: String,
+    pub whatsmeow_url: String,
+    pub setup_code: String,
+}
+
+pub fn create_router(state: Arc<WebhookServerState>) -> Router {
+    Router::new()
+        .route("/", get(dashboard_or_setup_handler))
+        .route("/setup", get(setup_page_handler))
+        .route("/health", get(health_handler))
+        .route("/api/status", get(api_status_handler))
+        .route("/api/setup", post(api_setup_handler))
+        .route("/api/simulate", post(simulate_handler))
+        .route("/webhook", post(webhook_handler))
+        .with_state(state)
+}
+
+async fn health_handler() -> impl IntoResponse {
+    (StatusCode::OK, "Aina is running smoothly")
+}
+
+#[derive(Debug, Serialize)]
+struct ApiStatusResponse {
+    pub authenticated: bool,
+    pub bot_name: String,
+    pub bot_jid: String,
+    pub model: String,
+    pub whatsmeow_url: String,
+}
+
+async fn api_status_handler(
+    State(state): State<Arc<WebhookServerState>>,
+) -> impl IntoResponse {
+    let auth = state.agent_engine.is_authenticated().await;
+    Json(ApiStatusResponse {
+        authenticated: auth,
+        bot_name: state.bot_name.clone(),
+        bot_jid: state.bot_jid.clone(),
+        model: state.model.clone(),
+        whatsmeow_url: state.whatsmeow_url.clone(),
+    })
+}
+
+#[derive(Debug, Deserialize)]
+struct SetupRequest {
+    pub token: String,
+    pub setup_code: String,
+}
+
+async fn api_setup_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    Json(payload): Json<SetupRequest>,
+) -> impl IntoResponse {
+    info!("Received token configuration request via /api/setup");
+
+    // Industry-Standard Security Check: Verify Setup Code / Admin Key
+    if payload.setup_code.trim() != state.setup_code.trim() {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "success": false,
+                "message": "Kode Setup / Admin Key salah! Masukkan kode yang tertera di log deployment server atau ADMIN_KEY Anda."
+            })),
+        );
+    }
+    
+    match state.agent_engine.save_auth_token(&payload.token).await {
+        Ok(_) => {
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "success": true,
+                    "message": "Token berhasil diverifikasi dan disimpan! Aina sekarang aktif."
+                })),
+            )
+        }
+        Err(e) => {
+            error!("Setup token verification failed: {}", e);
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "success": false,
+                    "message": format!("Verifikasi token gagal: {}", e)
+                })),
+            )
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct SimulateRequest {
+    pub sender_name: Option<String>,
+    pub sender_jid: Option<String>,
+    pub chat_type: Option<String>,
+    pub is_mention: Option<bool>,
+    pub text: String,
+}
+
+#[derive(Debug, Serialize)]
+struct SimulateResponse {
+    pub decision: String,
+    pub reason: String,
+    pub response_text: Option<String>,
+    pub duration_seconds: Option<f64>,
+    pub conversation_id: Option<String>,
+}
+
+async fn simulate_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    Json(payload): Json<SimulateRequest>,
+) -> impl IntoResponse {
+    info!("Running real end-to-end WhatsApp simulation");
+
+    let is_auth = state.agent_engine.is_authenticated().await;
+    if !is_auth {
+        return (
+            StatusCode::PRECONDITION_FAILED,
+            Json(json!({
+                "error": "Aina belum terautentikasi ke Google Antigravity. Silakan lakukan setup terlebih dahulu."
+            })),
+        );
+    }
+
+    let sender_name = payload.sender_name.unwrap_or_else(|| "Pengguna Tester".to_string());
+    let sender_jid = payload.sender_jid.unwrap_or_else(|| "628999888777@s.whatsapp.net".to_string());
+    let is_group = payload.chat_type.as_deref().unwrap_or("dm").to_lowercase() == "group";
+    let is_mention = payload.is_mention.unwrap_or(false);
+    
+    let chat_jid = if is_group {
+        "120363999999999@g.us".to_string()
+    } else {
+        sender_jid.clone()
+    };
+
+    let chat_type = if is_group {
+        ChatType::Group
+    } else {
+        ChatType::DirectMessage
+    };
+
+    let mentioned_jids = if is_group && is_mention {
+        vec![state.bot_jid.clone()]
+    } else {
+        vec![]
+    };
+
+    let msg = IncomingMessage {
+        id: format!("sim-{}", chrono_now_secs()),
+        chat_jid: chat_jid.clone(),
+        chat_type,
+        sender: Sender {
+            jid: sender_jid.clone(),
+            name: Some(sender_name),
+        },
+        text: payload.text,
+        timestamp: chrono_now_secs(),
+        is_from_me: false,
+        quoted_message: None,
+        mentioned_jids,
+    };
+
+    let decision = Gatekeeper::evaluate(&msg, &state.bot_jid, &state.bot_name);
+
+    match decision {
+        GatekeeperDecision::Ignore { reason } => {
+            (
+                StatusCode::OK,
+                Json(json!(SimulateResponse {
+                    decision: "Ignore".to_string(),
+                    reason,
+                    response_text: None,
+                    duration_seconds: None,
+                    conversation_id: None,
+                })),
+            )
+        }
+        GatekeeperDecision::RecordOnly { reason } => {
+            let _ = state.session_store.record_message(&msg.chat_jid, &msg.sender.jid, &msg.text, false).await;
+            (
+                StatusCode::OK,
+                Json(json!(SimulateResponse {
+                    decision: "RecordOnly".to_string(),
+                    reason,
+                    response_text: None,
+                    duration_seconds: None,
+                    conversation_id: None,
+                })),
+            )
+        }
+        GatekeeperDecision::Respond { reason } => {
+            let _ = state.session_store.record_message(&msg.chat_jid, &msg.sender.jid, &msg.text, false).await;
+            
+            let conv_id = match state.session_store.get_conversation_id(&msg.chat_jid).await {
+                Ok(id) => id,
+                Err(_) => None,
+            };
+
+            let prompt = state.persona_engine.build_prompt(&msg);
+
+            match state.agent_engine.execute(conv_id.as_deref(), &prompt).await {
+                Ok(agent_res) => {
+                    let _ = state.session_store.save_conversation_id(&msg.chat_jid, &agent_res.conversation_id).await;
+                    let _ = state.session_store.record_message(&msg.chat_jid, &state.bot_jid, &agent_res.response_text, true).await;
+
+                    (
+                        StatusCode::OK,
+                        Json(json!(SimulateResponse {
+                            decision: "Respond".to_string(),
+                            reason,
+                            response_text: Some(agent_res.response_text),
+                            duration_seconds: Some(agent_res.duration_seconds),
+                            conversation_id: Some(agent_res.conversation_id),
+                        })),
+                    )
+                }
+                Err(e) => {
+                    error!("Agent execution error in simulator: {}", e);
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({
+                            "error": format!("Agent error: {}", e)
+                        })),
+                    )
+                }
+            }
+        }
+    }
+}
+
+async fn dashboard_or_setup_handler(
+    State(state): State<Arc<WebhookServerState>>,
+) -> impl IntoResponse {
+    let is_auth = state.agent_engine.is_authenticated().await;
+    Html(render_html(is_auth, &state))
+}
+
+async fn setup_page_handler(
+    State(state): State<Arc<WebhookServerState>>,
+) -> impl IntoResponse {
+    let is_auth = state.agent_engine.is_authenticated().await;
+    Html(render_html(is_auth, &state))
+}
+
+async fn webhook_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    debug!("Received webhook payload: {:?}", payload);
+
+    let msg_opt = parse_whatsmeow_message(&payload);
+
+    if let Some(msg) = msg_opt {
+        let usecase = Arc::clone(&state.usecase);
+        tokio::spawn(async move {
+            if let Err(e) = usecase.execute(msg).await {
+                error!("Error processing message: {:?}", e);
+            }
+        });
+    } else {
+        debug!("Webhook received event that was not a parseable user message");
+    }
+
+    (StatusCode::OK, "OK")
+}
+
+fn parse_whatsmeow_message(val: &Value) -> Option<IncomingMessage> {
+    let root = if let Some(data_obj) = val.get("data").and_then(|d| d.as_object()) {
+        data_obj
+    } else if let Some(root_obj) = val.as_object() {
+        root_obj
+    } else {
+        return None;
+    };
+
+    let chat_jid = root
+        .get("from")
+        .or_else(|| root.get("chat_jid"))
+        .or_else(|| root.get("remote_jid"))
+        .or_else(|| root.get("chat"))
+        .and_then(|v| v.as_str())?
+        .to_string();
+
+    let sender_jid = root
+        .get("sender")
+        .or_else(|| root.get("participant"))
+        .and_then(|v| v.as_str())
+        .unwrap_or(&chat_jid)
+        .to_string();
+
+    let sender_name = root
+        .get("push_name")
+        .or_else(|| root.get("sender_name"))
+        .or_else(|| root.get("name"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    let text = root
+        .get("body")
+        .or_else(|| root.get("message"))
+        .or_else(|| root.get("text"))
+        .or_else(|| root.get("conversation"))
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+
+    let msg_id = root
+        .get("id")
+        .or_else(|| root.get("message_id"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown_id")
+        .to_string();
+
+    let is_from_me = root
+        .get("is_from_me")
+        .or_else(|| root.get("from_me"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let timestamp = root
+        .get("timestamp")
+        .and_then(|v| v.as_i64())
+        .unwrap_or_else(chrono_now_secs);
+
+    let chat_type = if chat_jid.ends_with("@g.us")
+        || root
+            .get("is_group")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+    {
+        ChatType::Group
+    } else {
+        ChatType::DirectMessage
+    };
+
+    let quoted_message = root
+        .get("quoted_message")
+        .or_else(|| root.get("context_info"))
+        .and_then(|q| {
+            let q_id = q.get("id").and_then(|v| v.as_str()).unwrap_or_default();
+            let q_sender = q
+                .get("participant")
+                .or_else(|| q.get("sender"))
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            let q_text = q
+                .get("body")
+                .or_else(|| q.get("text"))
+                .or_else(|| q.get("conversation"))
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+
+            if !q_text.is_empty() {
+                Some(QuotedMessage {
+                    id: q_id.to_string(),
+                    sender_jid: q_sender.to_string(),
+                    text: q_text.to_string(),
+                })
+            } else {
+                None
+            }
+        });
+
+    let mentioned_jids = root
+        .get("mentioned_jids")
+        .or_else(|| root.get("mentions"))
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Some(IncomingMessage {
+        id: msg_id,
+        chat_jid,
+        chat_type,
+        sender: Sender {
+            jid: sender_jid,
+            name: sender_name,
+        },
+        text,
+        timestamp,
+        is_from_me,
+        quoted_message,
+        mentioned_jids,
+    })
+}
+
+fn chrono_now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
+    let (badge_class, badge_text, badge_bg) = if is_authenticated {
+        ("badge-success", "ONLINE & TERAUTENTIKASI", "#10b981")
+    } else {
+        ("badge-warning", "PERLU SETUP AUTENTIKASI", "#f59e0b")
+    };
+
+    let status_card = if is_authenticated {
+        format!(
+            r#"
+            <div class="card status-card">
+                <div class="card-header">
+                    <span class="pulse" style="background: {badge_bg}"></span>
+                    <h2>Aina Siap Digunakan!</h2>
+                </div>
+                <p>Mesin agentik Google Antigravity telah terhubung dan aktif melayani pesan WhatsApp.</p>
+                <div class="info-grid">
+                    <div class="info-item"><span class="label">Nama Bot</span><span class="val">{name}</span></div>
+                    <div class="info-item"><span class="label">WhatsApp JID</span><span class="val">{jid}</span></div>
+                    <div class="info-item"><span class="label">Model AI</span><span class="val">{model}</span></div>
+                    <div class="info-item"><span class="label">Whatsmeow</span><span class="val">{url}</span></div>
+                </div>
+                <div class="helper-box">
+                    <strong>Webhook Endpoint:</strong>
+                    <code>POST /webhook</code>
+                    <p style="margin-top: 6px; font-size: 0.85rem; color: #94a3b8;">Arahkan webhook dari instance Whatsmeow ke URL ini.</p>
+                </div>
+            </div>
+
+            <!-- SIMULATOR CHAT REAL END-TO-END -->
+            <div class="card simulator-card">
+                <div class="card-header">
+                    <span style="font-size: 1.2rem;">🧪</span>
+                    <h2>Simulator Percakapan WhatsApp (Real Test)</h2>
+                </div>
+                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 16px;">
+                    Uji langsung logika respons, etika grup (Gatekeeper), dan eksekusi agentik Antigravity secara nyata tanpa harus mengirim chat dari HP Anda.
+                </p>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                    <div>
+                        <label class="form-label">Tipe Obrolan</label>
+                        <select id="sim-chat-type" class="form-input" onchange="onChatTypeChange(this.value)">
+                            <option value="dm">Pesan Pribadi (DM)</option>
+                            <option value="group">Grup WhatsApp Kantor</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label">Nama Pengirim</label>
+                        <input id="sim-sender-name" class="form-input" value="Ihza" />
+                    </div>
+                </div>
+
+                <div id="mention-toggle-wrapper" style="display: none; margin-bottom: 12px;">
+                    <label style="font-size: 0.85rem; color: #94a3b8; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="sim-is-mention" />
+                        <span>Simulasikan Tag / Mention (@Aina) dalam grup</span>
+                    </label>
+                </div>
+
+                <label class="form-label">Isi Pesan Chat</label>
+                <textarea id="sim-text" class="form-input" style="height: 80px;" placeholder="Contoh: Aina, tolong buatkan script python untuk cek koneksi..."></textarea>
+
+                <button id="sim-btn" class="btn" style="width: 100%; margin-top: 8px;" onclick="runSimulation()">
+                    Kirim & Uji Respon Aina
+                </button>
+
+                <div id="sim-result-box" style="display: none; margin-top: 18px;">
+                    <div class="chat-bubble">
+                        <div style="font-size: 0.75rem; color: var(--primary); font-weight: 700; margin-bottom: 4px;" id="sim-meta"></div>
+                        <div id="sim-response-text" style="white-space: pre-wrap; font-size: 0.92rem;"></div>
+                    </div>
+                </div>
+            </div>
+            "#,
+            badge_bg = badge_bg,
+            name = state.bot_name,
+            jid = state.bot_jid,
+            model = state.model,
+            url = state.whatsmeow_url,
+        )
+    } else {
+        r#"
+        <div class="card warning-card">
+            <div class="card-header">
+                <span class="pulse" style="background: #f59e0b"></span>
+                <h2>Setup Autentikasi Google Antigravity</h2>
+            </div>
+            <p>Aina memerlukan OAuth Token untuk mengakses Google Antigravity CLI di server ini.</p>
+        </div>
+        "#.to_string()
+    };
+
+    let auth_form_display = if is_authenticated { "display: none;" } else { "display: block;" };
+
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aina (あいな) - Assistant Dashboard</title>
+    <style>
+        :root {{
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --border: #334155;
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --primary: #38bdf8;
+            --primary-hover: #0284c7;
+            --success: #10b981;
+            --warning: #f59e0b;
+        }}
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        body {{
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            line-height: 1.6;
+            padding: 40px 20px;
+            display: flex;
+            justify-content: center;
+        }}
+        .container {{
+            width: 100%;
+            max-width: 680px;
+        }}
+        .header {{
+            text-align: center;
+            margin-bottom: 30px;
+        }}
+        .header h1 {{
+            font-size: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }}
+        .badge {{
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            margin-top: 10px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid var(--border);
+        }}
+        .badge-success {{ color: var(--success); border-color: rgba(16,185,129,0.3); }}
+        .badge-warning {{ color: var(--warning); border-color: rgba(245,158,11,0.3); }}
+        .card {{
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3);
+        }}
+        .card-header {{
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }}
+        .pulse {{
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            animation: pulse-animation 2s infinite;
+        }}
+        @keyframes pulse-animation {{
+            0% {{ transform: scale(0.95); box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.7); }}
+            70% {{ transform: scale(1); box-shadow: 0 0 0 8px rgba(56, 189, 248, 0); }}
+            100% {{ transform: scale(0.95); box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); }}
+        }}
+        .info-grid {{
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin: 18px 0;
+        }}
+        .info-item {{
+            background: rgba(0,0,0,0.2);
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }}
+        .info-item .label {{
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            display: block;
+        }}
+        .info-item .val {{
+            font-size: 0.9rem;
+            font-weight: 600;
+            word-break: break-all;
+        }}
+        .helper-box {{
+            background: #090d16;
+            border: 1px solid #1e293b;
+            padding: 14px;
+            border-radius: 8px;
+            margin-top: 14px;
+        }}
+        code {{
+            background: #1e293b;
+            color: var(--primary);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.85rem;
+        }}
+        .form-label {{
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            display: block;
+            margin-bottom: 4px;
+        }}
+        .form-input {{
+            width: 100%;
+            background: #090d16;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: #fff;
+            padding: 10px 12px;
+            font-family: inherit;
+            font-size: 0.9rem;
+            margin-bottom: 12px;
+        }}
+        .form-input:focus {{
+            outline: none;
+            border-color: var(--primary);
+        }}
+        textarea.form-input {{
+            font-family: monospace;
+            font-size: 0.8rem;
+            resize: vertical;
+        }}
+        .btn {{
+            background: var(--primary);
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }}
+        .btn:hover {{ background: var(--primary-hover); color: #fff; }}
+        .btn-outline {{
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+        }}
+        .btn-outline:hover {{ background: rgba(255,255,255,0.05); color: var(--text); }}
+        .alert {{
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 14px;
+            display: none;
+            font-size: 0.85rem;
+        }}
+        .alert-success {{ background: rgba(16,185,129,0.15); border: 1px solid var(--success); color: var(--success); }}
+        .alert-error {{ background: rgba(239,68,68,0.15); border: 1px solid #ef4444; color: #ef4444; }}
+        .chat-bubble {{
+            background: #022c22;
+            border: 1px solid #059669;
+            padding: 14px 16px;
+            border-radius: 12px;
+            border-bottom-left-radius: 2px;
+            position: relative;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌸 Aina (あいな)</h1>
+            <span class="badge {badge_class}">{badge_text}</span>
+        </div>
+
+        {status_card}
+
+        <div id="auth-form-container" class="card" style="{auth_form_display}">
+            <h3 style="margin-bottom: 10px;">🔐 Setup Autentikasi Pertama Kali</h3>
+            <p style="color: var(--text-muted); font-size: 0.88rem; margin-bottom: 12px;">
+                Untuk mencegah akses tidak sah pada server publik, Anda memerlukan <strong>Kode Setup</strong> yang tercetak pada log deployment server.
+            </p>
+
+            <div class="helper-box" style="margin-bottom: 14px;">
+                <p style="font-size: 0.82rem; color: #94a3b8; margin-bottom: 4px;">1. Ambil token dari terminal laptop lokal Anda:</p>
+                <code>cat ~/.gemini/antigravity-cli/antigravity-oauth-token</code>
+            </div>
+
+            <label class="form-label">Kode Setup / Admin Key (Lihat di log terminal/Coolify):</label>
+            <input id="setup-code-input" class="form-input" placeholder="AINA-XXXXXX atau ADMIN_KEY Anda" />
+
+            <label class="form-label">Tempelkan seluruh JSON token di bawah:</label>
+            <textarea id="token-input" class="form-input" style="height: 120px;" placeholder='{{"auth_method":"oauth","id_token":"...","token":{{...}}}}'></textarea>
+            
+            <button id="submit-btn" class="btn" onclick="submitToken()">Verifikasi & Simpan Token</button>
+            <div id="alert-box" class="alert"></div>
+        </div>
+    </div>
+
+    <script>
+        function onChatTypeChange(val) {{
+            const el = document.getElementById('mention-toggle-wrapper');
+            if (el) el.style.display = (val === 'group') ? 'block' : 'none';
+        }}
+
+        async function runSimulation() {{
+            const text = document.getElementById('sim-text').value.trim();
+            const chatType = document.getElementById('sim-chat-type').value;
+            const senderName = document.getElementById('sim-sender-name').value.trim();
+            const isMention = document.getElementById('sim-is-mention') ? document.getElementById('sim-is-mention').checked : false;
+            const btn = document.getElementById('sim-btn');
+            const resBox = document.getElementById('sim-result-box');
+            const metaEl = document.getElementById('sim-meta');
+            const textEl = document.getElementById('sim-response-text');
+
+            if (!text) {{
+                alert('Tolong ketik pesan chat terlebih dahulu.');
+                return;
+            }}
+
+            btn.disabled = true;
+            btn.innerText = 'Aina sedang berpikir dan mengetik...';
+            resBox.style.display = 'none';
+
+            try {{
+                const res = await fetch('/api/simulate', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{
+                        text: text,
+                        chat_type: chatType,
+                        sender_name: senderName,
+                        is_mention: isMention
+                    }})
+                }});
+
+                const data = await res.json();
+                resBox.style.display = 'block';
+
+                if (data.decision === 'Respond') {{
+                    metaEl.innerText = `Aina membalas (${{data.duration_seconds.toFixed(2)}}s) - Alasan: ${{data.reason}}`;
+                    textEl.innerText = data.response_text;
+                }} else {{
+                    metaEl.innerText = `Gatekeeper: ${{data.decision}} (${{data.reason}})`;
+                    textEl.innerText = `(Aina menyimak/mengabaikan pesan ini sesuai etika grup kantor tanpa membalas chat)`;
+                }}
+            }} catch(err) {{
+                alert('Gagal menjalankan simulasi: ' + err.message);
+            }} finally {{
+                btn.disabled = false;
+                btn.innerText = 'Kirim & Uji Respon Aina';
+            }}
+        }}
+
+        async function submitToken() {{
+            const token = document.getElementById('token-input').value.trim();
+            const setupCode = document.getElementById('setup-code-input').value.trim();
+            const btn = document.getElementById('submit-btn');
+            const alertBox = document.getElementById('alert-box');
+
+            if (!setupCode) {{
+                showAlert('Harap masukkan Kode Setup / Admin Key yang tertera di log.', false);
+                return;
+            }}
+
+            if (!token) {{
+                showAlert('Harap tempelkan token JSON terlebih dahulu.', false);
+                return;
+            }}
+
+            try {{
+                JSON.parse(token);
+            }} catch(e) {{
+                showAlert('Format token tidak valid: Harus berupa JSON yang valid.', false);
+                return;
+            }}
+
+            btn.disabled = true;
+            btn.innerText = 'Memverifikasi token...';
+            alertBox.style.display = 'none';
+
+            try {{
+                const res = await fetch('/api/setup', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ token, setup_code: setupCode }})
+                }});
+
+                const data = await res.json();
+                if (res.ok && data.success) {{
+                    showAlert(data.message + ' Halaman akan dimuat ulang...', true);
+                    setTimeout(() => window.location.reload(), 2000);
+                }} else {{
+                    showAlert(data.message || 'Gagal memverifikasi token.', false);
+                }}
+            }} catch(err) {{
+                showAlert('Terjadi kesalahan koneksi: ' + err.message, false);
+            }} finally {{
+                btn.disabled = false;
+                btn.innerText = 'Verifikasi & Simpan Token';
+            }}
+        }}
+
+        function showAlert(msg, isSuccess) {{
+            const alertBox = document.getElementById('alert-box');
+            alertBox.style.display = 'block';
+            alertBox.className = 'alert ' + (isSuccess ? 'alert-success' : 'alert-error');
+            alertBox.innerText = msg;
+        }}
+    </script>
+</body>
+</html>
+        "#,
+        badge_class = badge_class,
+        badge_text = badge_text,
+        status_card = status_card,
+        auth_form_display = auth_form_display,
+    )
+}
