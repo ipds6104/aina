@@ -1,3 +1,4 @@
+use crate::core::domain::knowledge::GhPollStatus;
 use crate::core::domain::{ArchiveEngine, AuditEngine, KnowledgeEngine};
 use std::path::{Path, PathBuf};
 
@@ -64,6 +65,9 @@ SUBCOMMANDS:
 
     workspace gh-status       Periksa status autentikasi GitHub CLI (`gh`)
 
+    workspace gh-device       Mulai login GitHub via Device Code OAuth (Non-Blocking)
+                              Subcommand: start (default), poll
+
     workspace gh-login <pat>  Login ke GitHub CLI secara non-interaktif via Personal Access Token
 
     workspace gh-create <n>   Buat repositori GitHub baru secara instan via `gh`
@@ -76,6 +80,10 @@ SUBCOMMANDS:
     sync                      Alias cepat untuk `workspace sync`
 
     link <git-url>            Alias cepat untuk `workspace link`
+
+    gh-device                 Alias cepat untuk `workspace gh-device start`
+
+    gh-poll                   Alias cepat untuk `workspace gh-device poll`
 
     gh-login <pat>            Alias cepat untuk `workspace gh-login`
 
@@ -102,6 +110,8 @@ SUBCOMMANDS:
             "clone" => Self::handle_workspace_clone(&args[2..]),
             "sync" => Self::handle_workspace_sync(&args[2..]),
             "link" => Self::handle_workspace_link(&args[2..]),
+            "gh-device" => Self::handle_gh_device(&args[2..]),
+            "gh-poll" => Self::handle_gh_device(&["poll".to_string()]),
             "gh-login" => Self::handle_gh_login(&args[2..]),
             "audit" => Self::handle_audit(&args[2..]),
             _ => {
@@ -482,6 +492,7 @@ SUBCOMMANDS:
             "link" => Self::handle_workspace_link(&args[1..]),
             "gh-status" => Self::handle_gh_status(),
             "gh-login" | "login" => Self::handle_gh_login(&args[1..]),
+            "gh-device" | "device" => Self::handle_gh_device(&args[1..]),
             "gh-create" => Self::handle_gh_create(&args[1..]),
             _ => {
                 eprintln!("Subcommand workspace tidak dikenal: `{}`", sub);
@@ -623,6 +634,50 @@ SUBCOMMANDS:
         println!("🐙 Masuk ke GitHub CLI menggunakan Personal Access Token...");
         let msg = KnowledgeEngine::login_github_token(token)?;
         println!("✅ {}", msg);
+        Ok(())
+    }
+
+    fn handle_gh_device(args: &[String]) -> anyhow::Result<()> {
+        let action = args.first().map(|s| s.as_str()).unwrap_or("start");
+        match action {
+            "poll" | "check" | "status" => {
+                println!("🔄 Memeriksa status otorisasi GitHub...");
+                match KnowledgeEngine::poll_gh_device_flow()? {
+                    GhPollStatus::Success { user } => {
+                        println!("\n🎉 OTORISASI BERHASIL!");
+                        println!("Akun GitHub @{} telah aktif dan terhubung ke server!", user);
+                        println!("Anda kini bisa menjalankan `aina sync` untuk sinkronisasi repository.");
+                    }
+                    GhPollStatus::Pending { user_code, verification_uri } => {
+                        println!("\n⏳ Masih Menunggu Otorisasi Pengguna:");
+                        println!("1. Buka browser: {}", verification_uri);
+                        println!("2. Masukkan kode: {}", user_code);
+                        println!("3. Klik 'Authorize github'.");
+                        println!("\nSetelah selesai klik Authorize, jalankan `aina gh-device poll` atau balas chat dengan 'sudah'.");
+                    }
+                    GhPollStatus::Expired => {
+                        println!("\n⚠️ Sesi otorisasi telah kadaluwarsa (lebih dari 15 menit).");
+                        println!("Silakan jalankan `aina gh-device` untuk meminta kode verifikasi baru.");
+                    }
+                    GhPollStatus::Error(e) => {
+                        eprintln!("\n❌ {}", e);
+                    }
+                }
+            }
+            _ => {
+                // start
+                println!("🔐 Memulai Otorisasi GitHub Device Flow (Non-Blocking)...");
+                let session = KnowledgeEngine::start_gh_device_flow()?;
+                println!("\n👉 LANGKAH OTORISASI GITHUB:");
+                println!("1. Buka tautan berikut di browser HP / laptop:");
+                println!("   🔗 {}", session.verification_uri);
+                println!("2. Masukkan kode verifikasi 8-digit ini:");
+                println!("   🔑 {}", session.user_code);
+                println!("3. Klik tombol 'Authorize github'.");
+                println!("\n⏳ Sesi ini aktif selama 15 menit.");
+                println!("Setelah klik Authorize di browser, ketik `aina gh-device poll` atau balas chat WhatsApp dengan 'sudah'!");
+            }
+        }
         Ok(())
     }
 }

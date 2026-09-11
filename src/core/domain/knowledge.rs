@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tracing::info;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,6 +65,24 @@ pub struct SyncResult {
     pub commit_message: Option<String>,
     pub pushed: bool,
     pub push_summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GhDeviceSession {
+    pub device_code: String,
+    pub user_code: String,
+    pub verification_uri: String,
+    pub expires_in: u64,
+    pub interval: u64,
+    pub created_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum GhPollStatus {
+    Success { user: String },
+    Pending { user_code: String, verification_uri: String },
+    Expired,
+    Error(String),
 }
 
 pub struct KnowledgeEngine;
@@ -853,6 +871,151 @@ __pycache__/
         Ok("Berhasil login GitHub CLI menggunakan Personal Access Token!".to_string())
     }
 
+    const GITHUB_CLI_CLIENT_ID: &'static str = "178c6fc778ccc68e1d6a";
+
+    fn get_device_session_path() -> PathBuf {
+        std::env::temp_dir().join("aina_gh_device_session.json")
+    }
+
+    /// Starts non-blocking GitHub OAuth Device Authorization Flow (RFC 8628)
+    pub fn start_gh_device_flow() -> anyhow::Result<GhDeviceSession> {
+        let output = std::process::Command::new("curl")
+            .args([
+                "-s",
+                "-X", "POST",
+                "https://github.com/login/device/code",
+                "-H", "Accept: application/json",
+                "-d", &format!("client_id={}&scope=repo,read:org,gist", Self::GITHUB_CLI_CLIENT_ID),
+            ])
+            .output()?;
+
+        if !output.status.success() {
+            anyhow::bail!("Gagal menghubungi GitHub Device API via curl.");
+        }
+
+        let body_str = String::from_utf8_lossy(&output.stdout);
+        let resp: serde_json::Value = serde_json::from_str(&body_str)?;
+
+        if let Some(err) = resp.get("error").and_then(|v| v.as_str()) {
+            anyhow::bail!("GitHub API error: {}", err);
+        }
+
+        let device_code = resp.get("device_code").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+        let user_code = resp.get("user_code").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+        let verification_uri = resp.get("verification_uri").and_then(|v| v.as_str()).unwrap_or("https://github.com/login/device").to_string();
+        let expires_in = resp.get("expires_in").and_then(|v| v.as_u64()).unwrap_or(899);
+        let interval = resp.get("interval").and_then(|v| v.as_u64()).unwrap_or(5);
+
+        if device_code.is_empty() || user_code.is_empty() {
+            anyhow::bail!("Respons GitHub tidak memuat device_code atau user_code: {}", body_str);
+        }
+
+        let now_sec = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        let session = GhDeviceSession {
+            device_code,
+            user_code,
+            verification_uri,
+            expires_in,
+            interval,
+            created_at: now_sec,
+        };
+
+        let session_file = Self::get_device_session_path();
+        std::fs::write(&session_file, serde_json::to_string_pretty(&session)?)?;
+
+        Ok(session)
+    }
+
+    /// Polls GitHub OAuth token endpoint non-blockingly to check if user authorized
+    pub fn poll_gh_device_flow() -> anyhow::Result<GhPollStatus> {
+        let session_file = Self::get_device_session_path();
+        if !session_file.exists() {
+            anyhow::bail!("Tidak ada sesi otorisasi device yang aktif. Jalankan `aina gh-device` untuk memulai.");
+        }
+
+        let content = std::fs::read_to_string(&session_file)?;
+        let session: GhDeviceSession = serde_json::from_str(&content)?;
+
+        let now_sec = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        if now_sec > session.created_at + session.expires_in {
+            let _ = std::fs::remove_file(&session_file);
+            return Ok(GhPollStatus::Expired);
+        }
+
+        let output = std::process::Command::new("curl")
+            .args([
+                "-s",
+                "-X", "POST",
+                "https://github.com/login/oauth/access_token",
+                "-H", "Accept: application/json",
+                "-d", &format!(
+                    "client_id={}&device_code={}&grant_type=urn:ietf:params:oauth:grant-type:device_code",
+                    Self::GITHUB_CLI_CLIENT_ID,
+                    session.device_code
+                ),
+            ])
+            .output()?;
+
+        if !output.status.success() {
+            anyhow::bail!("Gagal menghubungi GitHub OAuth Token API via curl.");
+        }
+
+        let body_str = String::from_utf8_lossy(&output.stdout);
+        let resp: serde_json::Value = serde_json::from_str(&body_str)?;
+
+        if let Some(err) = resp.get("error").and_then(|v| v.as_str()) {
+            match err {
+                "authorization_pending" => {
+                    return Ok(GhPollStatus::Pending {
+                        user_code: session.user_code,
+                        verification_uri: session.verification_uri,
+                    });
+                }
+                "slow_down" => {
+                    return Ok(GhPollStatus::Pending {
+                        user_code: session.user_code,
+                        verification_uri: session.verification_uri,
+                    });
+                }
+                "expired_token" => {
+                    let _ = std::fs::remove_file(&session_file);
+                    return Ok(GhPollStatus::Expired);
+                }
+                other => {
+                    return Ok(GhPollStatus::Error(format!("Error dari GitHub: {}", other)));
+                }
+            }
+        }
+
+        if let Some(access_token) = resp.get("access_token").and_then(|v| v.as_str()) {
+            // Log in via token
+            Self::login_github_token(access_token)?;
+            let _ = std::fs::remove_file(&session_file);
+
+            // Check who logged in
+            let status = Self::check_gh_status().unwrap_or_default();
+            let user = status
+                .lines()
+                .find(|l| l.contains("account "))
+                .and_then(|l| l.split("account ").nth(1))
+                .and_then(|l| l.split_whitespace().next())
+                .unwrap_or("user")
+                .to_string();
+
+            return Ok(GhPollStatus::Success { user });
+        }
+
+        Ok(GhPollStatus::Error(format!("Respons tidak dikenal dari GitHub: {}", body_str)))
+    }
+
     /// Create a remote GitHub repository directly using GitHub CLI (gh)
     pub fn create_github_repo<P: AsRef<Path>>(
         workspace_dir: P,
@@ -984,5 +1147,27 @@ mod tests {
         assert!(info.is_clean);
 
         let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn test_gh_device_session_serde() {
+        let session = GhDeviceSession {
+            device_code: "dev_12345".to_string(),
+            user_code: "WD72-99B1".to_string(),
+            verification_uri: "https://github.com/login/device".to_string(),
+            expires_in: 900,
+            interval: 5,
+            created_at: 1700000000,
+        };
+
+        let json = serde_json::to_string(&session).unwrap();
+        let deserialized: GhDeviceSession = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.device_code, "dev_12345");
+        assert_eq!(deserialized.user_code, "WD72-99B1");
+        assert_eq!(deserialized.verification_uri, "https://github.com/login/device");
+        assert_eq!(deserialized.expires_in, 900);
+        assert_eq!(deserialized.interval, 5);
+        assert_eq!(deserialized.created_at, 1700000000);
     }
 }
