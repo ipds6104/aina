@@ -48,9 +48,10 @@ COPY --from=builder /usr/src/aina/target/release/aina /usr/local/bin/aina
 # Create application directories
 RUN mkdir -p /app/config /app/data /app/workspace /root/.gemini/antigravity-cli
 
-# Copy configuration and entrypoint
+# Copy configuration, skills, and entrypoint
 COPY config/persona.md /app/config/persona.md
 COPY config/config.yaml /app/config/config.yaml
+COPY skills/ /app/skills/
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 

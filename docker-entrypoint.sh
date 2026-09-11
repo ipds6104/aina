@@ -15,9 +15,16 @@ elif [ -n "$ANTIGRAVITY_OAUTH_TOKEN" ]; then
     chmod 600 /root/.gemini/antigravity-cli/antigravity-oauth-token
 fi
 
-# Ensure workspace and data directories exist
-mkdir -p "${AGENT_WORKSPACE:-/app/workspace}"
+# Ensure workspace, data directories, and skills exist
+mkdir -p "${AGENT_WORKSPACE:-/app/workspace}/.agents/skills"
 mkdir -p "$(dirname "${DATABASE_PATH:-/app/data/aina.db}")"
+mkdir -p /root/.gemini/config/skills
+
+# Mount/Sync skills from image to global config and workspace
+if [ -d "/app/skills" ]; then
+    cp -r /app/skills/* /root/.gemini/config/skills/ 2>/dev/null || true
+    cp -r /app/skills/* "${AGENT_WORKSPACE:-/app/workspace}/.agents/skills/" 2>/dev/null || true
+fi
 
 # Make sure agy is in PATH
 export PATH="/root/.local/bin:/usr/local/bin:$PATH"
