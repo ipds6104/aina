@@ -113,6 +113,7 @@ async fn main() -> anyhow::Result<()> {
         setup_code,
         timezone: config.app.timezone.clone(),
         locale: config.app.locale.clone(),
+        sim_jobs: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
     });
     let app = create_router(state);
 

@@ -1,5 +1,5 @@
 use axum::{
-    extract::State,
+    extract::{Path, State},
     http::{HeaderMap, StatusCode},
     response::{Html, IntoResponse},
     routing::{get, post},
@@ -10,8 +10,35 @@ use crate::core::ports::{AgentEnginePort, SessionStorePort};
 use crate::core::usecases::ProcessIncomingMessageUseCase;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::{debug, error, info};
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum SimulationJobStatus {
+    Processing { started_at: i64 },
+    Completed {
+        decision: String,
+        reason: String,
+        response_text: Option<String>,
+        duration_seconds: Option<f64>,
+        conversation_id: Option<String>,
+        finished_at: i64,
+    },
+    Failed {
+        error: String,
+        finished_at: i64,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct SimulationJob {
+    #[allow(dead_code)]
+    pub id: String,
+    pub status: SimulationJobStatus,
+}
 
 pub struct WebhookServerState {
     pub usecase: Arc<ProcessIncomingMessageUseCase>,
@@ -25,6 +52,7 @@ pub struct WebhookServerState {
     pub setup_code: String,
     pub timezone: String,
     pub locale: String,
+    pub sim_jobs: Arc<RwLock<HashMap<String, SimulationJob>>>,
 }
 
 pub fn create_router(state: Arc<WebhookServerState>) -> Router {
@@ -36,6 +64,7 @@ pub fn create_router(state: Arc<WebhookServerState>) -> Router {
         .route("/api/setup", post(api_setup_handler))
         .route("/api/auth/verify", post(api_verify_admin_handler))
         .route("/api/simulate", post(simulate_handler))
+        .route("/api/simulate/job/{id}", get(simulate_job_status_handler))
         .route("/webhook", post(webhook_handler))
         .with_state(state)
 }
@@ -293,34 +322,151 @@ async fn simulate_handler(
             };
 
             let prompt = state.persona_engine.build_prompt(&msg, profile.as_ref());
+            let job_id = format!("job-{}", chrono_now_secs() * 1000 + (rand::random::<u32>() % 1000) as i64);
 
-            match state.agent_engine.execute(conv_id.as_deref(), &prompt).await {
-                Ok(agent_res) => {
-                    let _ = state.session_store.save_conversation_id(&msg.chat_jid, &agent_res.conversation_id).await;
-                    let _ = state.session_store.record_message(&msg.chat_jid, &state.bot_jid, &agent_res.response_text, true).await;
+            let now = chrono_now_secs();
+            {
+                let mut jobs = state.sim_jobs.write().await;
+                // Clean up jobs older than 10 minutes
+                jobs.retain(|_, v| match &v.status {
+                    SimulationJobStatus::Processing { started_at } => (now - started_at) < 600,
+                    SimulationJobStatus::Completed { finished_at, .. } => (now - finished_at) < 600,
+                    SimulationJobStatus::Failed { finished_at, .. } => (now - finished_at) < 600,
+                });
 
+                jobs.insert(
+                    job_id.clone(),
+                    SimulationJob {
+                        id: job_id.clone(),
+                        status: SimulationJobStatus::Processing { started_at: now },
+                    },
+                );
+            }
+
+            let state_clone = Arc::clone(&state);
+            let job_id_clone = job_id.clone();
+            let msg_chat_jid = msg.chat_jid.clone();
+
+            tokio::spawn(async move {
+                info!("Starting async agent execution for job {}", job_id_clone);
+                let exec_res = state_clone.agent_engine.execute(conv_id.as_deref(), &prompt).await;
+                let fin_time = chrono_now_secs();
+
+                let mut jobs = state_clone.sim_jobs.write().await;
+                match exec_res {
+                    Ok(agent_res) => {
+                        let _ = state_clone.session_store.save_conversation_id(&msg_chat_jid, &agent_res.conversation_id).await;
+                        let _ = state_clone.session_store.record_message(&msg_chat_jid, &state_clone.bot_jid, &agent_res.response_text, true).await;
+
+                        jobs.insert(
+                            job_id_clone.clone(),
+                            SimulationJob {
+                                id: job_id_clone,
+                                status: SimulationJobStatus::Completed {
+                                    decision: "Respond".to_string(),
+                                    reason,
+                                    response_text: Some(agent_res.response_text),
+                                    duration_seconds: Some(agent_res.duration_seconds),
+                                    conversation_id: Some(agent_res.conversation_id),
+                                    finished_at: fin_time,
+                                },
+                            },
+                        );
+                    }
+                    Err(e) => {
+                        error!("Agent async execution error for job {}: {}", job_id_clone, e);
+                        jobs.insert(
+                            job_id_clone.clone(),
+                            SimulationJob {
+                                id: job_id_clone,
+                                status: SimulationJobStatus::Failed {
+                                    error: format!("Agent error: {}", e),
+                                    finished_at: fin_time,
+                                },
+                            },
+                        );
+                    }
+                }
+            });
+
+            // Return immediately with 202 Accepted (<5ms)
+            (
+                StatusCode::ACCEPTED,
+                Json(json!({
+                    "job_id": job_id,
+                    "status": "processing"
+                })),
+            )
+        }
+    }
+}
+
+async fn simulate_job_status_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
+    Path(job_id): Path<String>,
+) -> impl IntoResponse {
+    if !is_admin_authorized(&headers, &state.setup_code) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "error": "Akses simulator ditolak. Harap masukkan Admin Key / Setup Code yang valid."
+            })),
+        );
+    }
+
+    let jobs = state.sim_jobs.read().await;
+    match jobs.get(&job_id) {
+        Some(job) => {
+            let now = chrono_now_secs();
+            match &job.status {
+                SimulationJobStatus::Processing { started_at } => {
+                    let elapsed = (now - started_at).max(0);
                     (
                         StatusCode::OK,
-                        Json(json!(SimulateResponse {
-                            decision: "Respond".to_string(),
-                            reason,
-                            response_text: Some(agent_res.response_text),
-                            duration_seconds: Some(agent_res.duration_seconds),
-                            conversation_id: Some(agent_res.conversation_id),
-                        })),
-                    )
-                }
-                Err(e) => {
-                    error!("Agent execution error in simulator: {}", e);
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
                         Json(json!({
-                            "error": format!("Agent error: {}", e)
+                            "status": "processing",
+                            "job_id": job_id,
+                            "elapsed_seconds": elapsed,
                         })),
                     )
                 }
+                SimulationJobStatus::Completed {
+                    decision,
+                    reason,
+                    response_text,
+                    duration_seconds,
+                    conversation_id,
+                    ..
+                } => (
+                    StatusCode::OK,
+                    Json(json!({
+                        "status": "completed",
+                        "job_id": job_id,
+                        "decision": decision,
+                        "reason": reason,
+                        "response_text": response_text,
+                        "duration_seconds": duration_seconds,
+                        "conversation_id": conversation_id,
+                    })),
+                ),
+                SimulationJobStatus::Failed { error, .. } => (
+                    StatusCode::OK,
+                    Json(json!({
+                        "status": "failed",
+                        "job_id": job_id,
+                        "error": error,
+                    })),
+                ),
             }
         }
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "status": "not_found",
+                "error": "Pekerjaan simulasi tidak ditemukan atau sudah kedaluwarsa."
+            })),
+        ),
     }
 }
 
@@ -1093,14 +1239,15 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
 
             btn.disabled = true;
             let secondsElapsed = 0;
-            btn.innerText = 'Aina sedang berpikir dan mengetik... (0s)';
+            btn.innerText = 'Memulai simulasi... (0s)';
             const timerInterval = setInterval(() => {{
                 secondsElapsed++;
-                btn.innerText = `Aina sedang berpikir dan mengetik... (${{secondsElapsed}}s)`;
+                btn.innerText = `Aina sedang berpikir dan mengeksekusi... (${{secondsElapsed}}s)`;
             }}, 1000);
             resBox.style.display = 'none';
 
             try {{
+                // 1. Submit simulation job (<5ms response, completely immune to proxy timeout)
                 const res = await fetch('/api/simulate', {{
                     method: 'POST',
                     headers: {{
@@ -1122,39 +1269,78 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState) -> String {
                 }}
 
                 const contentType = res.headers.get('content-type') || '';
-                if (!res.ok || !contentType.includes('application/json')) {{
+                if (!res.ok && !contentType.includes('application/json')) {{
                     const rawBody = await res.text();
                     let errMsg = `Server HTTP error ${{res.status}}`;
-                    if (res.status === 524 || res.status === 504) {{
-                        errMsg = `Gateway Timeout (${{res.status}}): Antigravity AI membutuhkan waktu proses lebih lama dari batas timeout proxy Cloudflare/Coolify. Jika Anda meminta aksi pengiriman pesan ke WhatsApp, periksa apakah pesan tersebut sudah sampai di WhatsApp target.`;
-                    }} else if (rawBody.toLowerCase().includes('<!doctype') || rawBody.toLowerCase().includes('<html')) {{
-                        errMsg = `Proxy/Web Server Error (${{res.status}}): Server mengembalikan halaman HTML. Biasanya ini terjadi saat proses agen AI melampaui batas waktu gateway proxy (504/524).`;
+                    if (res.status === 524 || res.status === 504 || res.status === 529) {{
+                        errMsg = `Gateway Timeout / Overloaded (${{res.status}}): Server proxy memutuskan koneksi.`;
                     }} else {{
-                        try {{
-                            const errJson = JSON.parse(rawBody);
-                            errMsg = errJson.error || errJson.message || errMsg;
-                        }} catch (_) {{
-                            errMsg = rawBody.slice(0, 200) || errMsg;
-                        }}
+                        errMsg = rawBody.slice(0, 200) || errMsg;
                     }}
                     throw new Error(errMsg);
                 }}
 
-                const data = await res.json();
-                resBox.style.display = 'block';
+                const initialData = await res.json();
 
-                if (data.decision === 'Respond') {{
-                    lastSimulationResponseText = data.response_text || '';
-                    metaEl.innerText = `Aina membalas (${{data.duration_seconds.toFixed(2)}}s) - Alasan: ${{data.reason}}`;
-                    textEl.innerHTML = renderMarkdownToHtml(data.response_text || '');
-                    const copyBtn = document.getElementById('copy-full-btn');
-                    if (copyBtn) copyBtn.style.display = 'inline-flex';
-                }} else {{
+                // If Gatekeeper answered immediately (e.g. Ignore or RecordOnly)
+                if (initialData.decision && initialData.decision !== 'Respond') {{
+                    resBox.style.display = 'block';
                     lastSimulationResponseText = '';
-                    metaEl.innerText = `Gatekeeper: ${{data.decision}} (${{data.reason}})`;
+                    metaEl.innerText = `Gatekeeper: ${{initialData.decision}} (${{initialData.reason}})`;
                     textEl.innerHTML = `<em>(Aina menyimak/mengabaikan pesan ini sesuai etika grup kantor tanpa membalas chat)</em>`;
                     const copyBtn = document.getElementById('copy-full-btn');
                     if (copyBtn) copyBtn.style.display = 'none';
+                    return;
+                }}
+
+                // If sync response was returned directly
+                if (initialData.decision === 'Respond') {{
+                    resBox.style.display = 'block';
+                    lastSimulationResponseText = initialData.response_text || '';
+                    metaEl.innerText = `Aina membalas (${{initialData.duration_seconds ? initialData.duration_seconds.toFixed(2) : secondsElapsed}}s) - Alasan: ${{initialData.reason}}`;
+                    textEl.innerHTML = renderMarkdownToHtml(initialData.response_text || '');
+                    const copyBtn = document.getElementById('copy-full-btn');
+                    if (copyBtn) copyBtn.style.display = 'inline-flex';
+                    return;
+                }}
+
+                const jobId = initialData.job_id;
+                if (!jobId) {{
+                    throw new Error(initialData.error || 'Gagal memulai pekerjaan simulasi.');
+                }}
+
+                // 2. Poll job status (each poll takes ~2ms, completely immune to Cloudflare 100s timeout!)
+                let isFinished = false;
+                while (!isFinished) {{
+                    await new Promise(r => setTimeout(r, 1500));
+
+                    const pollRes = await fetch(`/api/simulate/job/${{jobId}}`, {{
+                        headers: {{ 'X-Admin-Key': adminKey }}
+                    }});
+
+                    if (!pollRes.ok) {{
+                        if (pollRes.status === 404) {{
+                            throw new Error('Sesi pekerjaan simulasi kedaluwarsa.');
+                        }}
+                        continue;
+                    }}
+
+                    const jobData = await pollRes.json();
+
+                    if (jobData.status === 'processing') {{
+                        continue;
+                    }} else if (jobData.status === 'completed') {{
+                        isFinished = true;
+                        resBox.style.display = 'block';
+                        lastSimulationResponseText = jobData.response_text || '';
+                        metaEl.innerText = `Aina membalas (${{jobData.duration_seconds ? jobData.duration_seconds.toFixed(2) : secondsElapsed}}s) - Alasan: ${{jobData.reason}}`;
+                        textEl.innerHTML = renderMarkdownToHtml(jobData.response_text || '');
+                        const copyBtn = document.getElementById('copy-full-btn');
+                        if (copyBtn) copyBtn.style.display = 'inline-flex';
+                    }} else if (jobData.status === 'failed') {{
+                        isFinished = true;
+                        throw new Error(jobData.error || 'Eksekusi agen AI gagal.');
+                    }}
                 }}
             }} catch(err) {{
                 alert('Gagal menjalankan simulasi: ' + err.message);
