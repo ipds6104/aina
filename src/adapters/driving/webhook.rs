@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{Html, IntoResponse},
     routing::{get, post},
@@ -712,12 +712,15 @@ async fn setup_page_handler(
 
 async fn webhook_handler(
     State(state): State<Arc<WebhookServerState>>,
+    Query(query_params): Query<HashMap<String, String>>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
-    debug!("Received webhook payload: {:?}", payload);
+    debug!("Received webhook payload: {:?}, query: {:?}", payload, query_params);
 
     let msg_opt = parse_whatsmeow_message(
         &payload,
+        Some(&query_params),
+        Some(&state.bot_jid),
         state.companion_jid.as_deref(),
         state.companion_session_id.as_deref(),
     );
@@ -738,6 +741,8 @@ async fn webhook_handler(
 
 fn parse_whatsmeow_message(
     val: &Value,
+    query_params: Option<&HashMap<String, String>>,
+    bot_jid: Option<&str>,
     companion_jid: Option<&str>,
     companion_session_id: Option<&str>,
 ) -> Option<IncomingMessage> {
@@ -848,17 +853,37 @@ fn parse_whatsmeow_message(
         })
         .unwrap_or_default();
 
-    let explicit_role = root
-        .get("session_role")
-        .or_else(|| val.get("session_role"))
-        .and_then(|v| v.as_str());
+    let is_bot_unassigned = bot_jid
+        .map(|b| {
+            let clean = b.trim().to_lowercase();
+            clean.is_empty()
+                || clean.starts_with("unassigned")
+                || clean.starts_with("placeholder")
+                || clean.starts_with("dummy")
+                || clean.starts_with("6280000000000")
+                || clean.starts_with("628123456789")
+        })
+        .unwrap_or(true);
 
-    let session_id = root
-        .get("session_id")
-        .or_else(|| root.get("session"))
-        .or_else(|| val.get("session_id"))
-        .or_else(|| val.get("session"))
-        .and_then(|v| v.as_str());
+    let explicit_role = query_params
+        .and_then(|q| q.get("role").or_else(|| q.get("session_role")))
+        .map(|s| s.as_str())
+        .or_else(|| {
+            root.get("session_role")
+                .or_else(|| val.get("session_role"))
+                .and_then(|v| v.as_str())
+        });
+
+    let session_id = query_params
+        .and_then(|q| q.get("session_id").or_else(|| q.get("session")))
+        .map(|s| s.as_str())
+        .or_else(|| {
+            root.get("session_id")
+                .or_else(|| root.get("session"))
+                .or_else(|| val.get("session_id"))
+                .or_else(|| val.get("session"))
+                .and_then(|v| v.as_str())
+        });
 
     let to_jid = root
         .get("to")
@@ -890,6 +915,9 @@ fn parse_whatsmeow_message(
         let sender_clean = sender_jid.split('@').next().unwrap_or(&sender_jid);
         let comp_clean = comp_jid.split('@').next().unwrap_or(comp_jid);
         if is_from_me && sender_clean == comp_clean {
+            crate::core::domain::SessionRole::UserCompanion
+        } else if is_bot_unassigned {
+            // If primary dedicated bot is not configured/unassigned, all traffic from this gateway belongs to the companion sensor
             crate::core::domain::SessionRole::UserCompanion
         } else {
             crate::core::domain::SessionRole::PrimaryBot
@@ -2106,4 +2134,80 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
         status_card = status_card,
         auth_form_display = auth_form_display,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::domain::SessionRole;
+    use serde_json::json;
+
+    #[test]
+    fn test_parse_whatsmeow_unassigned_bot_defaults_to_companion() {
+        let payload = json!({
+            "from": "628111222333@s.whatsapp.net",
+            "body": "Halo, ini pesan dari rekan kerja",
+            "id": "MSG_TEST_001",
+            "is_from_me": false
+        });
+
+        // Bot is unassigned, but companion is active
+        let msg = parse_whatsmeow_message(
+            &payload,
+            None,
+            Some("unassigned@s.whatsapp.net"),
+            Some("6289625345646@s.whatsapp.net"),
+            Some("default"),
+        )
+        .expect("Message should be parsed");
+
+        assert_eq!(msg.session_role, SessionRole::UserCompanion);
+        assert_eq!(msg.text, "Halo, ini pesan dari rekan kerja");
+    }
+
+    #[test]
+    fn test_parse_whatsmeow_query_params_role() {
+        let payload = json!({
+            "from": "1203630123456789@g.us",
+            "body": "!aina tolong rangkum",
+            "id": "MSG_TEST_002",
+            "is_from_me": false
+        });
+
+        let mut query_params = HashMap::new();
+        query_params.insert("role".to_string(), "companion".to_string());
+
+        let msg = parse_whatsmeow_message(
+            &payload,
+            Some(&query_params),
+            Some("628123456789@s.whatsapp.net"),
+            Some("6289625345646@s.whatsapp.net"),
+            Some("default"),
+        )
+        .expect("Message should be parsed");
+
+        assert_eq!(msg.session_role, SessionRole::UserCompanion);
+    }
+
+    #[test]
+    fn test_parse_whatsmeow_session_id_matching() {
+        let payload = json!({
+            "session_id": "companion_office",
+            "from": "6289625345646@s.whatsapp.net",
+            "body": "Catatan tugas",
+            "id": "MSG_TEST_003",
+            "is_from_me": true
+        });
+
+        let msg = parse_whatsmeow_message(
+            &payload,
+            None,
+            Some("628123456789@s.whatsapp.net"),
+            Some("6289625345646@s.whatsapp.net"),
+            Some("companion_office"),
+        )
+        .expect("Message should be parsed");
+
+        assert_eq!(msg.session_role, SessionRole::UserCompanion);
+    }
 }
