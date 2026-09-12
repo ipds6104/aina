@@ -17,7 +17,7 @@ async fn main() -> anyhow::Result<()> {
     // Check if CLI subcommands are requested (e.g. `aina archive ...`, `aina kb ...`, `aina audit ...`)
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 1 && args[1] != "server" && args[1] != "daemon" {
-        return adapters::driving::CliDispatcher::run(args);
+        return adapters::driving::CliDispatcher::run(args).await;
     }
 
     // Initialize structured logging

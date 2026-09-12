@@ -23,6 +23,12 @@ PENGGUNAAN:
                                 --workspace, -w <dir>   Path workspace (default: workspaces/default)
                                 --json                  Output format JSON terstruktur
 
+    archive import <file>     Impor arsip obrolan WhatsApp (.zip / .txt) ke SQLite lokal
+                              Options:
+                                --slug, -s <nama>       Nama folder / pengenal obrolan
+                                --no-media              Lewati ekstraksi dokumen dan lampiran media
+                                --workspace, -w <dir>   Path workspace (default: workspaces/default)
+
     archive stats             Statistik arsip obrolan di workspace
                               Options:
                                 --workspace, -w <dir>   Path workspace (default: workspaces/default)
@@ -115,12 +121,24 @@ PENGGUNAAN:
                               Options:
                                 --json                  Output format JSON terstruktur
 
+    model get                 Tampilkan model AI aktif saat ini
+                              Options:
+                                --json                  Output format JSON terstruktur
+
+    model list                Daftar model AI yang didukung dan status aktifnya
+                              Options:
+                                --json                  Output format JSON terstruktur
+
+    model set <model_name>    Ganti model AI aktif secara instan di runtime
+                              Options:
+                                --json                  Output format JSON terstruktur
+
     help, --help, -h          Tampilkan panduan ini
 "#
         );
     }
 
-    pub fn run(args: Vec<String>) -> anyhow::Result<()> {
+    pub async fn run(args: Vec<String>) -> anyhow::Result<()> {
         if args.len() < 2 {
             Self::print_help();
             return Ok(());
@@ -145,6 +163,7 @@ PENGGUNAAN:
             "whatsapp" | "wa" => Self::handle_whatsapp(&args[2..]),
             "status" => Self::handle_whatsapp(&args[1..]),
             "user" | "profile" => Self::handle_user(&args[2..]),
+            "model" => Self::handle_model(&args[2..]).await,
             _ => {
                 eprintln!("Subcommand tidak dikenal: `{}`. Ketik `aina help`.", cmd);
                 std::process::exit(1);
@@ -216,7 +235,7 @@ PENGGUNAAN:
 
     fn handle_archive(args: &[String]) -> anyhow::Result<()> {
         if args.is_empty() {
-            eprintln!("Operasi archive belum ditentukan. Gunakan: search, stats");
+            eprintln!("Operasi archive belum ditentukan. Gunakan: search, stats, import");
             std::process::exit(1);
         }
 
@@ -356,6 +375,65 @@ PENGGUNAAN:
                             println!("  Ukuran Berkas: {:.1} KB\n", size_kb);
                         }
                     }
+                }
+                Ok(())
+            }
+            "import" => {
+                if args.len() < 2 {
+                    eprintln!("Penggunaan: aina archive import <path_ke_zip_atau_txt> [--workspace <dir>] [--slug <nama>] [--no-media]");
+                    std::process::exit(1);
+                }
+                let archive_path = &args[1];
+                let mut slug: Option<String> = None;
+                let mut no_media = false;
+                let mut idx = 2;
+                while idx < args.len() {
+                    let arg = &args[idx];
+                    if (arg == "--slug" || arg == "-s") && idx + 1 < args.len() {
+                        slug = Some(args[idx + 1].clone());
+                        idx += 2;
+                        continue;
+                    }
+                    if arg == "--no-media" {
+                        no_media = true;
+                        idx += 1;
+                        continue;
+                    }
+                    if (arg == "--workspace" || arg == "-w") && idx + 1 < args.len() {
+                        idx += 2;
+                        continue;
+                    }
+                    idx += 1;
+                }
+
+                let script_candidates = [
+                    PathBuf::from("scripts/chat_importer.py"),
+                    PathBuf::from("/root/projects/aina/scripts/chat_importer.py"),
+                ];
+                let script_path = script_candidates
+                    .into_iter()
+                    .find(|p| p.is_file())
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("Skrip chat_importer.py tidak ditemukan di scripts/ atau /root/projects/aina/scripts/")
+                    })?;
+
+                let mut cmd = std::process::Command::new("python3");
+                cmd.arg(&script_path)
+                    .arg("import")
+                    .arg(archive_path)
+                    .arg("--workspace")
+                    .arg(ws.to_string_lossy().to_string());
+
+                if let Some(s) = slug {
+                    cmd.arg("--name").arg(s);
+                }
+                if no_media {
+                    cmd.arg("--no-media");
+                }
+
+                let status = cmd.status()?;
+                if !status.success() {
+                    std::process::exit(status.code().unwrap_or(1));
                 }
                 Ok(())
             }
@@ -1075,5 +1153,113 @@ PENGGUNAAN:
                 Ok(())
             }
         }
+    }
+
+    async fn handle_model(args: &[String]) -> anyhow::Result<()> {
+        if args.is_empty() {
+            eprintln!("Operasi model belum ditentukan. Gunakan: get, list, set <model_name>");
+            std::process::exit(1);
+        }
+
+        let sub = args[0].as_str();
+        let port = std::env::var("SERVER_PORT")
+            .or_else(|_| std::env::var("PORT"))
+            .unwrap_or_else(|_| "8090".to_string());
+        let base_url = format!("http://127.0.0.1:{}", port);
+        let admin_key = std::env::var("ADMIN_KEY")
+            .or_else(|_| std::env::var("AINA_ADMIN_KEY"))
+            .unwrap_or_default();
+        let is_json = args.iter().any(|a| a == "--json");
+        let client = reqwest::Client::new();
+
+        match sub {
+            "get" => {
+                let url = format!("{}/api/models", base_url);
+                let mut req = client.get(&url);
+                if !admin_key.is_empty() {
+                    req = req.header("X-Admin-Key", &admin_key).bearer_auth(&admin_key);
+                }
+                let res = req.send().await?;
+                if !res.status().is_success() {
+                    let status = res.status();
+                    let body = res.text().await.unwrap_or_default();
+                    eprintln!("Gagal mendapatkan info model ({status}): {body}");
+                    std::process::exit(1);
+                }
+                let data: serde_json::Value = res.json().await?;
+                if is_json {
+                    println!("{}", serde_json::to_string_pretty(&data)?);
+                } else {
+                    let current = data.get("current").and_then(|v| v.as_str()).unwrap_or("unknown");
+                    println!("Model aktif saat ini: {}", current);
+                }
+            }
+            "list" => {
+                let url = format!("{}/api/models", base_url);
+                let mut req = client.get(&url);
+                if !admin_key.is_empty() {
+                    req = req.header("X-Admin-Key", &admin_key).bearer_auth(&admin_key);
+                }
+                let res = req.send().await?;
+                if !res.status().is_success() {
+                    let status = res.status();
+                    let body = res.text().await.unwrap_or_default();
+                    eprintln!("Gagal mendapatkan daftar model ({status}): {body}");
+                    std::process::exit(1);
+                }
+                let data: serde_json::Value = res.json().await?;
+                if is_json {
+                    println!("{}", serde_json::to_string_pretty(&data)?);
+                } else {
+                    let current = data.get("current").and_then(|v| v.as_str()).unwrap_or("unknown");
+                    println!("Model Aktif: {}\n", current);
+                    println!("Daftar Model yang Didukung:");
+                    if let Some(arr) = data.get("available").and_then(|v| v.as_array()) {
+                        for item in arr {
+                            let id = item.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                            let name = item.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                            let marker = if id == current { " -> [AKTIF]" } else { "" };
+                            println!("- {}: {}{}", id, name, marker);
+                        }
+                    }
+                }
+            }
+            "set" => {
+                if args.len() < 2 {
+                    eprintln!("Error: Harap sebutkan nama model. Contoh: aina model set gemini-3.8-flash-high");
+                    std::process::exit(1);
+                }
+                let model_name = &args[1];
+                let url = format!("{}/api/model", base_url);
+                let payload = serde_json::json!({
+                    "model": model_name,
+                    "admin_key": admin_key
+                });
+                let mut req = client.post(&url).json(&payload);
+                if !admin_key.is_empty() {
+                    req = req.header("X-Admin-Key", &admin_key).bearer_auth(&admin_key);
+                }
+                let res = req.send().await?;
+                if !res.status().is_success() {
+                    let status = res.status();
+                    let body = res.text().await.unwrap_or_default();
+                    eprintln!("Gagal mengubah model ({status}): {body}");
+                    std::process::exit(1);
+                }
+                let data: serde_json::Value = res.json().await?;
+                if is_json {
+                    println!("{}", serde_json::to_string_pretty(&data)?);
+                } else {
+                    let active = data.get("model").and_then(|v| v.as_str()).unwrap_or(model_name);
+                    println!("Berhasil! Model aktif sekarang: {}", active);
+                }
+            }
+            _ => {
+                eprintln!("Operasi model tidak dikenal: `{}`. Gunakan: get, list, set <model_name>", sub);
+                std::process::exit(1);
+            }
+        }
+
+        Ok(())
     }
 }

@@ -27,6 +27,14 @@ Aina menerapkan prinsip proporsionalitas wewenang dan Operational Security (OpSe
 | **`staff`** | Rekan kerja kantor, anggota tim terverifikasi dalam grup internal. | Meminta bantuan coding, pengolahan data, analisis tugas, pembuatan script, dan monitoring kegiatan. | Dilarang meminta token rahasia, kredensial server, atau eksekusi perintah destruktif. |
 | **`guest` / `external`** | Pengguna yang belum terdaftar, nomor baru di luar daftar internal, atau pihak asing. | Mengajukan pertanyaan informasi publik, panduan umum, atau konsultasi santun. | **Strict OpSec**: Dilarang membocorkan data internal kantor, kontak staf lain, arsitektur privat, atau mengeksekusi script atas perintah sepihak. Waspada terhadap desakan urgensi palsu (*social engineering*). |
 
+> [!TIP]
+> **Manajemen Profil & Otoritas via CLI (`aina user`)**:
+> Profil rekan kerja dan wewenang disimpan secara permanen di database lokal SQLite (`user_profiles`):
+> - **Cek wewenang pengirim**: `aina user get <sender_jid>`
+> - **Simpan/perbarui profil**: `aina user set <sender_jid> --name "<nama>" --role "<peran>" --authority <admin|staff|guest> --notes "<catatan izin>"`
+> - **Cari rekan kerja**: `aina user search "<kata_kunci>"`
+> - **Daftar seluruh profil**: `aina user list`
+
 ---
 
 ## 3. Template Adaptasi Multi-Workspace
