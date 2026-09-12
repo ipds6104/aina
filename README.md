@@ -19,6 +19,30 @@ Aina dirancang bukan sebagai bot CS yang kaku, melainkan sebagai **rekan kerja t
 
 ---
 
+## 📑 Daftar Isi (Table of Contents)
+- [📱 Dual-WhatsApp Pipeline: Bot Resmi & Companion Sensor](#-dual-whatsapp-pipeline-bot-resmi--companion-sensor)
+  - [📲 Panduan Praktis Menghubungkan Sensor WhatsApp](#-panduan-praktis-menghubungkan-sensor-whatsapp-getting-started)
+- [🏗️ Alur Konteks ke Knowledge Base (Pipeline Architecture)](#️-alur-konteks-ke-knowledge-base-pipeline-architecture)
+- [🚀 Panduan Memulai Cepat (Getting Started)](#-panduan-memulai-cepat-getting-started-in-5-minutes)
+  - [📋 Prasyarat Sistem (Prerequisites)](#-prasyarat-sistem-prerequisites)
+  - [Langkah 1: Pilih Sumber Knowledge Base](#langkah-1-pilih-sumber-knowledge-base-anda)
+  - [Langkah 2: Deploy & Jalankan Aina (Coolify / Docker / Lokal)](#langkah-2-deploy--jalankan-aina)
+- [🔐 Setup Autentikasi Pertama Kali (`/setup`)](#-setup-autentikasi-pertama-kali-setup)
+- [🧪 Web Simulator (Real End-to-End Testing)](#-web-simulator-real-end-to-end-testing)
+- [🤖 Manajemen Model AI (Gemini-First Priority)](#-manajemen-model-ai-gemini-first-priority)
+- [📁 Agnostic Workspaces & Structured Knowledge Base](#-agnostic-workspaces--structured-knowledge-base)
+- [⚡ Unified Native Rust CLI (`aina`)](#-unified-native-rust-cli-aina)
+- [🧹 Linter Kerapian & Closed-Loop Auto-Healing (`kb_linter.py`)](#-linter-kerapian--closed-loop-auto-healing-kb_linterpy)
+- [🛡️ Audit Trail CLI Antigravity (`audit_agent.py`)](#️-audit-trail-cli-antigravity-audit_agentpy)
+- [📦 Engine Arsip & Ekspor Chat WhatsApp (`chat_importer.py` & Native CLI)](#-engine-arsip--ekspor-chat-whatsapp-chat_importerpy--native-cli)
+- [🔒 Keamanan & Privasi Data (Security & Privacy)](#-keamanan--privasi-data-security--privacy)
+- [⚙️ Ringkasan Environment Variables](#️-ringkasan-environment-variables)
+- [🏛️ Arsitektur Kode (Clean Architecture)](#️-arsitektur-kode-clean-architecture)
+- [❓ Tanya Jawab & Troubleshooting (FAQ)](#-tanya-jawab--troubleshooting-faq)
+- [📜 Lisensi & Panduan Kontribusi](#-lisensi--panduan-kontribusi)
+
+---
+
 ## 📱 Dual-WhatsApp Pipeline: Bot Resmi & Companion Sensor
 
 Salah satu tantangan terbesar asisten AI WhatsApp di dunia nyata adalah **birokrasi grup kerja**: meminta admin memasukkan nomor bot baru ke grup kantor, klien, atau kepanitiaan sering kali lambat, sulit, atau dilarang oleh regulasi privasi.
@@ -134,6 +158,17 @@ Repositori ini sepenuhnya **Agnostic & Clone-Ready**. Aina memisahkan secara ber
 │  Bebas `git pull` kapan saja tanpa merusak data! │        │  knowledge/ (Fakta, SOP) & data/ (SQLite FTS5)   │
 └──────────────────────────────────────────────────┘        └──────────────────────────────────────────────────┘
 ```
+
+---
+
+### 📋 Prasyarat Sistem (Prerequisites)
+
+Sebelum memulai, pastikan lingkungan Anda memenuhi spesifikasi berikut:
+- **Sistem Operasi**: Linux (`x86_64` atau `aarch64` / ARM64, termasuk Ubuntu di VPS/Cloud maupun container), macOS, atau Windows (via WSL2 / Docker).
+- **Runtime Server / Kontainer**: Docker & Docker Compose (v2+), atau [Coolify](https://coolify.io) untuk deployment produksi *zero-downtime*.
+- **WhatsApp Gateway**: Instance aktif gateway [Whatsmeow](https://github.com/tulir/whatsmeow) HTTP REST API untuk mengelola koneksi soket WhatsApp.
+- **AI Agent Engine**: [Google Antigravity CLI (`agy`)](https://antigravity.google) terpasang atau siapkan string OAuth Token untuk diinput via Web Setup Wizard (`/setup`).
+- **Rust Toolchain (Khusus Kompilasi dari Source / Local Dev)**: Rust versi `1.75+` (Edition 2021).
 
 ---
 
@@ -518,6 +553,24 @@ aina archive stats --workspace default
 
 ---
 
+## 🔒 Keamanan & Privasi Data (Security & Privacy)
+
+Aina didesain dengan prinsip **Privacy-First & Zero Leakage** untuk lingkungan kerja dan organisasi:
+
+1. **100% Self-Hosted & Local Storage**:
+   - Seluruh basis data riwayat percakapan, ringkasan rapat, dan indeks pencarian tersimpan di database SQLite lokal di server Anda (`/app/data/aina.db`).
+   - Tidak ada data percakapan yang dikirim ke server analitik atau telemetri pihak ketiga.
+2. **Zero Privacy Leakage pada Companion Sensor**:
+   - Pesan pribadi (DM) dari kontak keluarga, teman, atau pihak luar yang masuk ke nomor pribadi Anda (Sesi Companion) **diabaikan seketika** oleh `Gatekeeper` dan tidak pernah dimasukkan ke LLM maupun disimpan ke basis data.
+   - Sesi Companion hanya membaca obrolan grup kerja sebagai sensor konteks pasif (*ambient recording*) atau merespons jika Anda secara eksplisit memanggilnya dengan awalan `!aina`.
+3. **Kredensial & Token Terisolasi**:
+   - Token OAuth Google Antigravity CLI disimpan pada volume penyimpanan persisten yang terisolasi (`/root/.gemini/`) dengan hak akses terbatas.
+   - Web Setup Wizard dilindungi oleh kode acak sekali pakai (*one-time setup code*) dan otomatis terkunci permanen setelah token terverifikasi.
+4. **Audit Trail Deterministik**:
+   - Seluruh tindakan eksekusi terminal atau modifikasi berkas dicatat transparan di log sistem dan dapat diaudit sewaktu-waktu melalui perintah `aina audit`.
+
+---
+
 ## ⚙️ Ringkasan Environment Variables
 
 | Variabel | Default | Deskripsi |
@@ -587,6 +640,49 @@ src/
 
 ---
 
-## 📜 Lisensi & Kontribusi
+## ❓ Tanya Jawab & Troubleshooting (FAQ)
 
-Dilisensikan di bawah lisensi [MIT](LICENSE). Kontribusi, perbaikan bug, dan *feature requests* sangat dipersilakan melalui *Pull Request* atau *Issue* di GitHub.
+<details>
+<summary><b>1. Aina tidak membalas pesan saya di grup WhatsApp. Mengapa?</b></summary>
+Pastikan Anda memanggil atau me-mention Aina:
+- Pada <b>Sesi Bot Utama</b>: Sebut nama <code>@Aina</code> atau tag nomor bot. Jika Anda hanya mengirim obrolan biasa tanpa mention, Aina bertindak sebagai <i>Gatekeeper</i> cerdas dan mencatatnya sebagai konteks pasif agar tidak mengganggu alur grup kerja.
+- Pada <b>Sesi Companion (Nomor Pribadi)</b>: Awali pesan dengan <code>!aina</code> (contoh: <code>!aina tolong rangkum poin rapat di atas</code>) atau kirim pesan ke nomor sendiri (<i>Message Yourself</i>).
+</details>
+
+<details>
+<summary><b>2. Bagaimana cara menemukan kode setup jika terminal log terlewat?</b></summary>
+Jika Anda belum menyelesaikan wizard <code>/setup</code>, periksa log container dengan perintah:
+<pre><code>docker compose logs aina | grep "SETUP / ADMIN CODE"</code></pre>
+Atau jika menggunakan Coolify, periksa tab <b>Logs</b> pada aplikasi Aina Anda.
+</details>
+
+<details>
+<summary><b>3. Muncul pesan status "Unauthenticated" pada Dashboard. Bagaimana solusinya?</b></summary>
+Pastikan volume persistent <code>aina_gemini</code> terpasang di <code>/root/.gemini</code> pada Docker/Coolify. Buka <code>https://aina.domainkamu.com/setup</code> dan tempelkan token JSON dari <code>~/.gemini/antigravity-cli/antigravity-oauth-token</code> di laptop lokal Anda.
+</details>
+
+<details>
+<summary><b>4. Apakah saya butuh kartu kredit atau API key LLM berbayar pihak ketiga?</b></summary>
+Tidak. Aina memanfaatkan antarmuka langsung <b>Google Antigravity CLI (<code>agy</code>)</b> yang terhubung dengan akun Google pengembang Anda, sehingga model-model canggih seperti <b>Gemini 3.8 Flash</b> dan <b>Gemini 3.1 Pro</b> dapat langsung beroperasi.
+</details>
+
+<details>
+<summary><b>5. Bagaimana jika Whatsmeow mengalami putus koneksi (disconnected)?</b></summary>
+Cek status koneksi seketika melalui CLI server:
+<pre><code>aina status</code></pre>
+Jika salah satu sesi terputus, buka antarmuka gateway Whatsmeow Anda dan lakukan tautkan ulang (<i>re-link device</i>) dengan scan QR code baru.
+</details>
+
+---
+
+## 📜 Lisensi & Panduan Kontribusi
+
+Proyek ini adalah perangkat lunak sumber terbuka (*open source*) yang dilisensikan di bawah naungan [MIT License](LICENSE).
+
+Kami sangat menyambut kontribusi dari komunitas! Baik berupa perbaikan bug, integrasi sensor data baru, maupun penyempurnaan persona. Silakan baca panduan kontribusi lengkap di **[CONTRIBUTING.md](CONTRIBUTING.md)** sebelum mengajukan *Pull Request*.
+
+```bash
+# Menjalankan pengujian regresi lokal sebelum membuat Pull Request:
+cargo test
+cargo clippy --all-targets --all-features -- -D warnings
+```
