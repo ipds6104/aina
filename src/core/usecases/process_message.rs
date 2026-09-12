@@ -158,7 +158,6 @@ impl ProcessIncomingMessageUseCase {
                 let chat_jid = msg.chat_jid.clone();
                 let msg_id = msg.id.clone();
                 let session_role = msg.session_role;
-                let caller_name = msg.sender.name.clone().unwrap_or_else(|| "Kak".to_string());
 
                 let heartbeat_handle = tokio::spawn(async move {
                     let mut elapsed_secs = 0;
@@ -174,7 +173,7 @@ impl ProcessIncomingMessageUseCase {
 
                         // If task takes longer than 6 seconds, send a friendly interim ack once
                         if elapsed_secs >= 6 && !ack_sent {
-                            let ack_text = format!("_Sebentar ya {}, sedang Aina telusuri dan siapkan..._ ⏳", caller_name);
+                            let ack_text = "okee sebentarr...".to_string();
                             let _ = whatsapp
                                 .send_text_with_session(&chat_jid, &ack_text, Some(&msg_id), session_role)
                                 .await;

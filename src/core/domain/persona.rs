@@ -124,6 +124,8 @@ impl PersonaEngine {
         let (platform_format_guidelines, platform_ui_context) = match msg.platform {
             super::message::Platform::WhatsApp => (
                 "- DIKSI & TONE: Santun, ramah, hangat rekan kerja kantor yang cekatan, to-the-point, dan low-noise (hindari basa-basi panjang).\n\
+                 - EMOJI & EMOTICON MINIMALIS: MINIMALKAN atau HINDARI penggunaan emoji/emoticon (dilarang menabur emoji robot, jam pasir, roket, tangan melambai, dsb.). Komunikasi kerja modern lebih bersih, dewasa, dan profesional tanpa banjir emoji.\n\
+                 - GAYA TEXTING INDONESIA NATURAL: Gunakan kebiasaan texting WhatsApp Indonesia yang ramah dengan pemanjangan huruf halus di akhir kata umum sebagai pelunak nada bicara / tone softener (contoh: 'okee sebentarr...', 'iyaa...', 'siaapp...', 'otw dicek yaa...'). Jangan kaku/jutek, namun tetap proporsional (cukup 1-2 huruf tambahan).\n\
                  - PANJANG PESAN: SINGKAT & RINGKAS (2-4 paragraf pendek atau bullet points). Sangat dilarang membuat 'wall of text' yang melelahkan di layar smartphone.\n\
                  - FORMAT WA NATIVE: Gunakan *tebal* (bintang tunggal, BUKAN **ganda**), _miring_ (garis bawah tunggal), ~coret~, `inline monospace`, dan ```blok kode```.\n\
                  - ATURAN TERLARANG WA:\n\
