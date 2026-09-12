@@ -50,6 +50,48 @@ aina status
 aina whatsapp status --json
 ```
 
+### 📲 Panduan Praktis Menghubungkan Sensor WhatsApp (Getting Started)
+
+Aina memisahkan **Gateway WhatsApp (Whatsmeow)** dan **Otak Agentik (Aina)**. Whatsmeow menangani koneksi soket WhatsApp web, sedangkan Aina menangani pemikiran, privasi, dan kristalisasi pengetahuan.
+
+#### 1. Setup Sesi 1: Bot Utama Resmi (`PrimaryBot`)
+1. **Buat Sesi di Whatsmeow Gateway**:
+   Buka Whatsmeow instance Anda, buat sesi baru (misal ID sesi: `default`).
+2. **Scan QR Code Bot**:
+   Di HP nomor khusus bot: buka **WhatsApp** -> **Perangkat Tertaut (Linked Devices)** -> **Tautkan Perangkat** -> scan QR Code yang muncul di Whatsmeow.
+3. **Konfigurasi Environment Variable**:
+   Salin JID bot yang muncul (format: `628xxxxxxxxxx@s.whatsapp.net`) ke konfigurasi `.env` / Coolify:
+   ```ini
+   WHATSMEOW_BASE_URL=https://wa.domainkamu.com
+   WHATSMEOW_API_KEY=secret_key_kamu
+   WHATSMEOW_BOT_JID=6289625345646@s.whatsapp.net
+   WHATSMEOW_BOT_NAME=Aina
+   WHATSMEOW_BOT_SESSION_ID=default
+   ```
+
+#### 2. Setup Sesi 2: User Companion (Nomor Pribadi / Shadow Sensor) [Opsional]
+1. **Buat Sesi Companion di Whatsmeow**:
+   Buat sesi kedua dengan ID unik (contoh: `companion`).
+2. **Scan QR Code dari WhatsApp Pribadi Anda**:
+   Di WhatsApp HP pribadi Anda (yang sudah bergabung di puluhan grup kantor): buka **Perangkat Tertaut (Linked Devices)** -> **Tautkan Perangkat** -> scan QR code sesi `companion`.
+3. **Tambahkan Konfigurasi Companion di Aina**:
+   ```ini
+   WHATSMEOW_COMPANION_JID=628111222333@s.whatsapp.net
+   WHATSMEOW_COMPANION_NAME=Ihza (Personal)
+   WHATSMEOW_COMPANION_SESSION_ID=companion
+   ```
+
+#### 3. Arahkan Webhook Whatsmeow ke Aina
+Pada konfigurasi Whatsmeow Gateway Anda (baik sesi bot maupun companion), arahkan webhook URL ke:
+```text
+https://aina.domainkamu.com/webhook (atau http://IP_SERVER:8090/webhook)
+```
+Aina otomatis membedakan pesan dari bot resmi vs akun pribadi Anda.
+
+#### 4. Uji dan Verifikasi Seketika
+1. Jalankan di server: `aina status` untuk memastikan kedua sesi berstatus **Aktif & Terhubung**.
+2. Buka dashboard web `https://aina.domainkamu.com`, masuk ke **Simulator Percakapan**, dan pilih mode **👥 Sesi Companion** untuk menguji alur privasi secara langsung tanpa HP!
+
 ---
 
 ## 🏗️ Alur Konteks ke Knowledge Base (Pipeline Architecture)
@@ -134,10 +176,19 @@ aina workspace gh-create knowledge-base-ipds
    ```ini
    PORT=8090
    SERVER_PORT=8090
+   
+   # Sesi 1: Bot Utama Resmi (Dedicated Bot)
    WHATSMEOW_BASE_URL=https://wa.domainkamu.com
    WHATSMEOW_API_KEY=secret_key_kamu
-   WHATSMEOW_BOT_JID=628xxxxxxxxxx@s.whatsapp.net
+   WHATSMEOW_BOT_JID=62896xxxxxxxx@s.whatsapp.net
    WHATSMEOW_BOT_NAME=Aina
+   WHATSMEOW_BOT_SESSION_ID=default
+
+   # Sesi 2: User Companion (Nomor WhatsApp Pribadi / Shadow Sensor) [Opsional]
+   # WHATSMEOW_COMPANION_JID=628111222333@s.whatsapp.net
+   # WHATSMEOW_COMPANION_NAME=Ihza (Personal)
+   # WHATSMEOW_COMPANION_SESSION_ID=companion
+
    AGENT_MODEL=gemini-3.8-flash-medium
    AGENT_WORKSPACE=/app/workspaces/default
    DATABASE_PATH=/app/data/aina.db
@@ -448,8 +499,12 @@ python3 scripts/chat_importer.py stats "ipds-6104"
 | `SERVER_HOST` | `0.0.0.0` | Host bind server |
 | `WHATSMEOW_BASE_URL` | `http://localhost:3000`| Base URL REST API instance Whatsmeow |
 | `WHATSMEOW_API_KEY` | `default-secret` | API Key autentikasi ke Whatsmeow |
-| `WHATSMEOW_BOT_JID` | - | JID WhatsApp bot (contoh: `628xxxx@s.whatsapp.net`) |
+| `WHATSMEOW_BOT_JID` | - | JID WhatsApp bot resmi (contoh: `628xxxx@s.whatsapp.net`) |
 | `WHATSMEOW_BOT_NAME` | `Aina` | Nama panggilan bot di obrolan |
+| `WHATSMEOW_BOT_SESSION_ID` | `default` | ID sesi Whatsmeow gateway untuk bot utama |
+| `WHATSMEOW_COMPANION_JID` | - | *(Opsional)* JID WhatsApp pribadi untuk Companion Sensor |
+| `WHATSMEOW_COMPANION_NAME` | `Personal Account`| *(Opsional)* Label nama akun companion di dashboard & simulator |
+| `WHATSMEOW_COMPANION_SESSION_ID` | `companion` | *(Opsional)* ID sesi Whatsmeow gateway untuk akun companion |
 | `AGENT_BINARY_PATH` | `agy` | Lokasi biner Antigravity CLI (otomatis mendeteksi PATH) |
 | `AGENT_MODEL` | `gemini-3.8-flash-medium` | Model AI default bawaan |
 | `AGENT_WORKSPACE` | `./workspaces/default` | Direktori kerja aktif bawaan agen |
