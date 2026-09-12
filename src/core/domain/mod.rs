@@ -4,6 +4,7 @@ pub mod gatekeeper;
 pub mod knowledge;
 pub mod message;
 pub mod persona;
+pub mod sensor;
 
 pub use archive::ArchiveEngine;
 pub use audit::AuditEngine;
@@ -11,3 +12,5 @@ pub use gatekeeper::Gatekeeper;
 pub use knowledge::KnowledgeEngine;
 pub use message::*;
 pub use persona::PersonaEngine;
+#[allow(unused_imports)]
+pub use sensor::*;
