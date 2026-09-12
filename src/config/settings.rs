@@ -62,6 +62,14 @@ pub struct WhatsmeowConfig {
     pub send_endpoint: String,
     #[serde(default = "default_presence_endpoint")]
     pub presence_endpoint: String,
+    #[serde(default)]
+    pub bot_session_id: Option<String>,
+    #[serde(default)]
+    pub companion_jid: Option<String>,
+    #[serde(default)]
+    pub companion_name: Option<String>,
+    #[serde(default)]
+    pub companion_session_id: Option<String>,
 }
 
 fn default_send_endpoint() -> String {
@@ -159,6 +167,10 @@ impl Default for AppConfig {
                 bot_name: "Aina".to_string(),
                 send_endpoint: default_send_endpoint(),
                 presence_endpoint: default_presence_endpoint(),
+                bot_session_id: None,
+                companion_jid: None,
+                companion_name: None,
+                companion_session_id: None,
             },
             agent: AgentConfig {
                 binary_path: default_binary_path(),
@@ -222,6 +234,26 @@ impl AppConfig {
         }
         if let Ok(val) = env::var("WHATSMEOW_PRESENCE_ENDPOINT") {
             self.whatsmeow.presence_endpoint = val;
+        }
+        if let Ok(val) = env::var("WHATSMEOW_BOT_SESSION_ID") {
+            if !val.trim().is_empty() {
+                self.whatsmeow.bot_session_id = Some(val);
+            }
+        }
+        if let Ok(val) = env::var("WHATSMEOW_COMPANION_JID") {
+            if !val.trim().is_empty() {
+                self.whatsmeow.companion_jid = Some(val);
+            }
+        }
+        if let Ok(val) = env::var("WHATSMEOW_COMPANION_NAME") {
+            if !val.trim().is_empty() {
+                self.whatsmeow.companion_name = Some(val);
+            }
+        }
+        if let Ok(val) = env::var("WHATSMEOW_COMPANION_SESSION_ID") {
+            if !val.trim().is_empty() {
+                self.whatsmeow.companion_session_id = Some(val);
+            }
         }
 
         // Agent overrides

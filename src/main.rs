@@ -51,11 +51,13 @@ async fn main() -> anyhow::Result<()> {
         &config.agent.workspace_dir,
         config.agent.timeout_seconds,
     ));
-    let whatsapp = Arc::new(WhatsmeowHttpAdapter::new(
+    let whatsapp = Arc::new(WhatsmeowHttpAdapter::with_sessions(
         &config.whatsmeow.base_url,
         &config.whatsmeow.api_key,
         &config.whatsmeow.send_endpoint,
         &config.whatsmeow.presence_endpoint,
+        config.whatsmeow.bot_session_id.clone(),
+        config.whatsmeow.companion_session_id.clone(),
     ));
 
     let persona_engine = Arc::new(PersonaEngine::new(
@@ -116,6 +118,9 @@ async fn main() -> anyhow::Result<()> {
         persona_engine: Arc::clone(&persona_engine),
         bot_name: config.whatsmeow.bot_name.clone(),
         bot_jid: config.whatsmeow.bot_jid.clone(),
+        companion_jid: config.whatsmeow.companion_jid.clone(),
+        companion_name: config.whatsmeow.companion_name.clone(),
+        companion_session_id: config.whatsmeow.companion_session_id.clone(),
         model: config.agent.model.clone(),
         whatsmeow_url: config.whatsmeow.base_url.clone(),
         setup_code,

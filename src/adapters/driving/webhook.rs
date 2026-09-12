@@ -47,6 +47,9 @@ pub struct WebhookServerState {
     pub persona_engine: Arc<PersonaEngine>,
     pub bot_name: String,
     pub bot_jid: String,
+    pub companion_jid: Option<String>,
+    pub companion_name: Option<String>,
+    pub companion_session_id: Option<String>,
     #[allow(dead_code)]
     pub model: String,
     pub whatsmeow_url: String,
@@ -82,6 +85,9 @@ struct ApiStatusResponse {
     pub authenticated: bool,
     pub bot_name: String,
     pub bot_jid: String,
+    pub companion_jid: Option<String>,
+    pub companion_name: Option<String>,
+    pub companion_active: bool,
     pub model: String,
     pub whatsmeow_url: String,
     pub timezone: String,
@@ -93,10 +99,14 @@ async fn api_status_handler(
 ) -> impl IntoResponse {
     let auth = state.agent_engine.is_authenticated().await;
     let live_model = state.agent_engine.get_model().await;
+    let companion_active = state.companion_jid.is_some();
     Json(ApiStatusResponse {
         authenticated: auth,
         bot_name: state.bot_name.clone(),
         bot_jid: state.bot_jid.clone(),
+        companion_jid: state.companion_jid.clone(),
+        companion_name: state.companion_name.clone(),
+        companion_active,
         model: live_model,
         whatsmeow_url: state.whatsmeow_url.clone(),
         timezone: state.timezone.clone(),
@@ -280,6 +290,8 @@ struct SimulateRequest {
     pub sender_jid: Option<String>,
     pub chat_type: Option<String>,
     pub is_mention: Option<bool>,
+    pub is_from_me: Option<bool>,
+    pub session_role: Option<String>,
     pub text: String,
     pub model_override: Option<String>,
 }
@@ -430,8 +442,26 @@ async fn simulate_handler(
         }
     }
 
-    let sender_name = payload.sender_name.unwrap_or_else(|| "Pengguna Tester".to_string());
-    let sender_jid = payload.sender_jid.unwrap_or_else(|| "628999888777@s.whatsapp.net".to_string());
+    let is_from_me = payload.is_from_me.unwrap_or(false);
+    let session_role = match payload.session_role.as_deref().unwrap_or("primary_bot").to_lowercase().as_str() {
+        "user_companion" | "companion" => crate::core::domain::SessionRole::UserCompanion,
+        _ => crate::core::domain::SessionRole::PrimaryBot,
+    };
+
+    let default_sender_jid = if session_role == crate::core::domain::SessionRole::UserCompanion && is_from_me {
+        state.companion_jid.clone().unwrap_or_else(|| "628111222333@s.whatsapp.net".to_string())
+    } else {
+        "628999888777@s.whatsapp.net".to_string()
+    };
+
+    let sender_name = payload.sender_name.unwrap_or_else(|| {
+        if is_from_me {
+            state.companion_name.clone().unwrap_or_else(|| "Saya (Owner)".to_string())
+        } else {
+            "Pengguna Tester".to_string()
+        }
+    });
+    let sender_jid = payload.sender_jid.unwrap_or(default_sender_jid);
     let is_group = payload.chat_type.as_deref().unwrap_or("dm").to_lowercase() == "group";
     let is_mention = payload.is_mention.unwrap_or(false);
     
@@ -456,6 +486,7 @@ async fn simulate_handler(
     let msg = IncomingMessage {
         id: format!("sim-{}", chrono_now_secs()),
         platform: crate::core::domain::Platform::WebSimulator,
+        session_role,
         chat_jid: chat_jid.clone(),
         chat_type,
         sender: Sender {
@@ -464,7 +495,7 @@ async fn simulate_handler(
         },
         text: payload.text,
         timestamp: chrono_now_secs(),
-        is_from_me: false,
+        is_from_me,
         quoted_message: None,
         mentioned_jids,
     };
@@ -685,7 +716,11 @@ async fn webhook_handler(
 ) -> impl IntoResponse {
     debug!("Received webhook payload: {:?}", payload);
 
-    let msg_opt = parse_whatsmeow_message(&payload);
+    let msg_opt = parse_whatsmeow_message(
+        &payload,
+        state.companion_jid.as_deref(),
+        state.companion_session_id.as_deref(),
+    );
 
     if let Some(msg) = msg_opt {
         let usecase = Arc::clone(&state.usecase);
@@ -701,7 +736,11 @@ async fn webhook_handler(
     (StatusCode::OK, "OK")
 }
 
-fn parse_whatsmeow_message(val: &Value) -> Option<IncomingMessage> {
+fn parse_whatsmeow_message(
+    val: &Value,
+    companion_jid: Option<&str>,
+    companion_session_id: Option<&str>,
+) -> Option<IncomingMessage> {
     let root = if let Some(data_obj) = val.get("data").and_then(|d| d.as_object()) {
         data_obj
     } else if let Some(root_obj) = val.as_object() {
@@ -809,9 +848,60 @@ fn parse_whatsmeow_message(val: &Value) -> Option<IncomingMessage> {
         })
         .unwrap_or_default();
 
+    let explicit_role = root
+        .get("session_role")
+        .or_else(|| val.get("session_role"))
+        .and_then(|v| v.as_str());
+
+    let session_id = root
+        .get("session_id")
+        .or_else(|| root.get("session"))
+        .or_else(|| val.get("session_id"))
+        .or_else(|| val.get("session"))
+        .and_then(|v| v.as_str());
+
+    let to_jid = root
+        .get("to")
+        .or_else(|| root.get("receiver"))
+        .or_else(|| root.get("recipient"))
+        .and_then(|v| v.as_str());
+
+    let session_role = if let Some(role_str) = explicit_role {
+        if role_str.eq_ignore_ascii_case("user_companion") || role_str.eq_ignore_ascii_case("companion") {
+            crate::core::domain::SessionRole::UserCompanion
+        } else {
+            crate::core::domain::SessionRole::PrimaryBot
+        }
+    } else if let (Some(sid), Some(comp_sid)) = (session_id, companion_session_id) {
+        if sid.trim() == comp_sid.trim() {
+            crate::core::domain::SessionRole::UserCompanion
+        } else {
+            crate::core::domain::SessionRole::PrimaryBot
+        }
+    } else if let (Some(to), Some(comp_jid)) = (to_jid, companion_jid) {
+        let to_clean = to.split('@').next().unwrap_or(to);
+        let comp_clean = comp_jid.split('@').next().unwrap_or(comp_jid);
+        if to_clean == comp_clean {
+            crate::core::domain::SessionRole::UserCompanion
+        } else {
+            crate::core::domain::SessionRole::PrimaryBot
+        }
+    } else if let Some(comp_jid) = companion_jid {
+        let sender_clean = sender_jid.split('@').next().unwrap_or(&sender_jid);
+        let comp_clean = comp_jid.split('@').next().unwrap_or(comp_jid);
+        if is_from_me && sender_clean == comp_clean {
+            crate::core::domain::SessionRole::UserCompanion
+        } else {
+            crate::core::domain::SessionRole::PrimaryBot
+        }
+    } else {
+        crate::core::domain::SessionRole::PrimaryBot
+    };
+
     Some(IncomingMessage {
         id: msg_id,
         platform: crate::core::domain::Platform::WhatsApp,
+        session_role,
         chat_jid,
         chat_type,
         sender: Sender {
@@ -840,6 +930,13 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
         ("badge-warning", "PERLU SETUP AUTENTIKASI", "#f59e0b")
     };
 
+    let companion_info = if let Some(c_jid) = &state.companion_jid {
+        let c_name = state.companion_name.as_deref().unwrap_or("Personal Account");
+        format!("{} ({}) <span style=\"color: #10b981; font-weight: 600;\">[Aktif]</span>", c_name, c_jid)
+    } else {
+        "<span style=\"color: #94a3b8;\">Belum Dikonfigurasi (Opsional)</span>".to_string()
+    };
+
     let status_card = if is_authenticated {
         format!(
             r#"
@@ -850,8 +947,9 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
                 </div>
                 <p>Mesin agentik Google Antigravity telah terhubung dan aktif melayani pesan WhatsApp.</p>
                 <div class="info-grid">
-                    <div class="info-item"><span class="label">Nama Bot</span><span class="val">{name}</span></div>
-                    <div class="info-item"><span class="label">WhatsApp JID</span><span class="val">{jid}</span></div>
+                    <div class="info-item"><span class="label">Nama Bot (Primary)</span><span class="val">{name}</span></div>
+                    <div class="info-item"><span class="label">WhatsApp JID Bot</span><span class="val">{jid}</span></div>
+                    <div class="info-item"><span class="label">Companion (Shadow Sensor)</span><span class="val">{companion_info}</span></div>
                     <div class="info-item">
                         <span class="label">Model AI Aktif</span>
                         <div style="display: flex; justify-content: space-between; align-items: baseline;">
@@ -860,8 +958,7 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
                         </div>
                     </div>
                     <div class="info-item"><span class="label">Whatsmeow</span><span class="val">{url}</span></div>
-                    <div class="info-item"><span class="label">Zona Waktu</span><span class="val">{timezone}</span></div>
-                    <div class="info-item"><span class="label">Locale</span><span class="val">{locale}</span></div>
+                    <div class="info-item"><span class="label">Zona Waktu / Locale</span><span class="val">{timezone} ({locale})</span></div>
                 </div>
                 <div class="helper-box">
                     <strong>Webhook Endpoint:</strong>
@@ -897,10 +994,17 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
                     <h2>Simulator Percakapan WhatsApp (Real Test)</h2>
                 </div>
                 <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 16px;">
-                    Uji langsung logika respons, etika grup (Gatekeeper), dan eksekusi agentik Antigravity secara nyata tanpa harus mengirim chat dari HP Anda.
+                    Uji langsung logika respons, dual-session routing (Bot Utama vs Companion Sensor), etika grup (Gatekeeper), dan eksekusi agentik Antigravity secara nyata tanpa harus mengirim chat dari HP Anda.
                 </p>
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                    <div>
+                        <label class="form-label">Sesi WhatsApp (Pipeline Routing)</label>
+                        <select id="sim-session-role" class="form-input" onchange="onSessionRoleChange(this.value)">
+                            <option value="primary_bot">🤖 Sesi Bot Utama (Primary Dedicated)</option>
+                            <option value="user_companion">👥 Sesi Companion (Akun Pribadi / Shadow Sensor)</option>
+                        </select>
+                    </div>
                     <div>
                         <label class="form-label">Tipe Obrolan</label>
                         <select id="sim-chat-type" class="form-input" onchange="onChatTypeChange(this.value)">
@@ -908,9 +1012,18 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
                             <option value="group">Grup WhatsApp Kantor</option>
                         </select>
                     </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
                     <div>
                         <label class="form-label">Nama Pengirim</label>
                         <input id="sim-sender-name" class="form-input" value="Ihza" />
+                    </div>
+                    <div style="display: flex; align-items: center; padding-top: 20px;">
+                        <label style="font-size: 0.85rem; color: #94a3b8; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="sim-is-from-me" onchange="onIsFromMeChange(this.checked)" />
+                            <span>Kirim Sebagai Diri Sendiri (is_from_me / Owner)</span>
+                        </label>
                     </div>
                 </div>
 
@@ -950,7 +1063,7 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
 
                 <label class="form-label">Ketik Pesan Chat (Tekan Enter untuk kirim, Shift+Enter untuk baris baru):</label>
                 <div style="display: flex; gap: 8px; align-items: flex-start;">
-                    <textarea id="sim-text" class="form-input" style="height: 60px; margin-bottom: 0; resize: none;" placeholder="Ketik pesan atau balasan Anda ke Aina (contoh: 'Sudah ku-authorize ya')..."></textarea>
+                    <textarea id="sim-text" class="form-input" style="height: 60px; margin-bottom: 0; resize: none;" placeholder="Ketik pesan atau balasan Anda ke Aina (contoh: '!aina rangkum diskusi tadi' atau 'Sudah ku-authorize ya')..."></textarea>
                     <button id="sim-btn" class="btn" style="min-width: 130px; height: 60px; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600;" onclick="runSimulation()">
                         <span>Kirim</span> 🚀
                     </button>
@@ -960,6 +1073,7 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
             badge_bg = badge_bg,
             name = state.bot_name,
             jid = state.bot_jid,
+            companion_info = companion_info,
             model = current_model,
             url = state.whatsmeow_url,
             timezone = state.timezone,
@@ -1538,6 +1652,23 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
             if (el) el.style.display = (val === 'group') ? 'block' : 'none';
         }}
 
+        function onSessionRoleChange(role) {{
+            const fromMeEl = document.getElementById('sim-is-from-me');
+            if (role === 'user_companion' && fromMeEl && !fromMeEl.checked) {{
+                // Keep checkbox flexible for testing companion personal DMs or owner group commands
+            }}
+        }}
+
+        function onIsFromMeChange(checked) {{
+            const nameInput = document.getElementById('sim-sender-name');
+            if (checked) {{
+                if (!nameInput.dataset.original) nameInput.dataset.original = nameInput.value;
+                nameInput.value = 'Saya (Owner)';
+            }} else if (nameInput.dataset.original) {{
+                nameInput.value = nameInput.dataset.original;
+            }}
+        }}
+
         function escapeHtml(str) {{
             if (!str) return '';
             return str
@@ -1586,9 +1717,11 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
         async function runSimulation() {{
             const textInput = document.getElementById('sim-text');
             const text = textInput.value.trim();
+            const sessionRole = document.getElementById('sim-session-role') ? document.getElementById('sim-session-role').value : 'primary_bot';
             const chatType = document.getElementById('sim-chat-type').value;
             const senderName = document.getElementById('sim-sender-name').value.trim() || 'Ihza';
             const isMention = document.getElementById('sim-is-mention') ? document.getElementById('sim-is-mention').checked : false;
+            const isFromMe = document.getElementById('sim-is-from-me') ? document.getElementById('sim-is-from-me').checked : false;
             const modelSelectEl = document.getElementById('sim-model-select');
             const selectedModel = modelSelectEl ? modelSelectEl.value : 'default';
             const modelOverride = (selectedModel !== 'default') ? selectedModel : null;
@@ -1609,9 +1742,10 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
             // 2. Append User Message Bubble
             const userRow = document.createElement('div');
             userRow.className = 'chat-row-user';
+            const roleTag = (sessionRole === 'user_companion') ? ' <span style="font-size: 0.65rem; background: rgba(56,189,248,0.2); padding: 1px 4px; border-radius: 4px; color: #38bdf8;">Companion</span>' : '';
             userRow.innerHTML = `
                 <div class="chat-bubble-user">
-                    <div style="font-size: 0.72rem; opacity: 0.8; margin-bottom: 3px; font-weight: 600;">${{escapeHtml(senderName)}}</div>
+                    <div style="font-size: 0.72rem; opacity: 0.8; margin-bottom: 3px; font-weight: 600;">${{escapeHtml(senderName)}}${{roleTag}}</div>
                     <div style="white-space: pre-wrap;">${{escapeHtml(text)}}</div>
                 </div>
             `;
@@ -1652,9 +1786,11 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
                     }},
                     body: JSON.stringify({{
                         text: text,
+                        session_role: sessionRole,
                         chat_type: chatType,
                         sender_name: senderName,
                         is_mention: isMention,
+                        is_from_me: isFromMe,
                         model_override: modelOverride
                     }})
                 }});

@@ -13,8 +13,42 @@ Aina dirancang bukan sebagai bot CS yang kaku, melainkan sebagai **rekan kerja t
 - 💬 **Basa-Basi Seperlunya**: *Low-noise*, to-the-point, santun, dan bersahabat.
 - 🧭 **Proactive Clarification**: Bertanya dan meminta klarifikasi terarah jika instruksi multitafsir sebelum mengambil tindakan.
 - 🛡️ **Gatekeeper Cerdas**: Tidak *spamming* di grup kantor (hanya menjawab jika di-tag/disebut, dan mencatat percakapan pasif sebagai konteks).
+- 📱 **Dual-WhatsApp Pipeline (Multi-Session)**: Mendukung nomor bot khusus (`PrimaryBot`) sekaligus akun pribadi pengguna (`UserCompanion` / *Shadow Sensor*). Aina dapat mencerna konteks puluhan grup kantor tanpa perlu meminta admin memasukkan nomor bot baru.
 - 🧠 **Dynamic Model Switching**: Bawaan cepat & cerdas dengan **Google Gemini** (5–15 detik), dengan opsi eskalasi ke **Claude Opus** khusus tugas kompleks.
 - 📁 **Workspace-Agnostic & Structured Knowledge Base**: Basis pengetahuan tumbuh secara organik per proyek/instansi tanpa tercampur baur.
+
+---
+
+## 📱 Dual-WhatsApp Pipeline: Bot Resmi & Companion Sensor
+
+Salah satu tantangan terbesar asisten AI WhatsApp di dunia nyata adalah **birokrasi grup kerja**: meminta admin memasukkan nomor bot baru ke grup kantor, klien, atau kepanitiaan sering kali lambat, sulit, atau dilarang oleh regulasi privasi.
+
+Aina memecahkan masalah ini secara revolusioner melalui **Dual-WhatsApp Architecture**:
+
+```text
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                DUAL-WHATSAPP PIPELINE                                  │
+├──────────────────────────────────────────┬─────────────────────────────────────────────┤
+│  SESI 1: BOT RESMI (Dedicated Bot)       │  SESI 2: COMPANION SENSOR (Akun Pribadi)    │
+│  Nomor: WHATSMEOW_BOT_JID                │  Nomor: WHATSMEOW_COMPANION_JID             │
+├──────────────────────────────────────────┼─────────────────────────────────────────────┤
+│  • Melayani DM dari siapa saja           │  • Zero Privacy Leakage:                    │
+│  • Melayani grup yang mengundang bot     │    DM personal dari kontak diabaikan 100%   │
+│  • Respon ramah dan profesional          │  • Shadow Sensor (Perekam Pasif):           │
+│  • Cocok untuk kontak publik & kantor    │    Mencatat obrolan grup kantor ke SQLite   │
+│                                          │  • Explicit Invocation:                     │
+│                                          │    Owner panggil `!aina` di grup -> Balas   │
+│                                          │  • Chat to Self ("Message Yourself"):       │
+│                                          │    Ketik catatan ke nomor sendiri -> Balas  │
+└──────────────────────────────────────────┴─────────────────────────────────────────────┘
+```
+
+Periksa status kedua sesi kapan saja via terminal:
+```bash
+aina status
+# atau
+aina whatsapp status --json
+```
 
 ---
 
@@ -23,11 +57,11 @@ Aina dirancang bukan sebagai bot CS yang kaku, melainkan sebagai **rekan kerja t
 Aina memproses percakapan WhatsApp menjadi basis pengetahuan terstruktur yang rapi, terisolasi, dan mudah dicari (*high retrievability*):
 
 ```text
-[WhatsApp DM / Grup / Web Simulator]
+[WhatsApp DM / Grup / Web Simulator / Companion Sensor]
                  │
                  ▼
-     [1. Gatekeeper & Epistemic Filter] ──(Bukan Tag)──> [Simpan Pasif di SQLite]
-                 │ (Di-mention / Pesan Pribadi)
+     [1. Gatekeeper & Epistemic Filter] ──(Bukan Tag / Ambient)──> [Simpan Pasif di SQLite FTS5]
+                 │ (Di-mention / Pesan Pribadi / Command !aina)
                  ▼
     [2. Dynamic Workspace Router]
                  ├── /workspace <nama> (Eksplisit)

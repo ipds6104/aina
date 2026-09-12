@@ -3,7 +3,7 @@ use crate::core::domain::{
 };
 use crate::core::ports::{AgentEnginePort, SessionStorePort, WhatsAppPort};
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 pub struct ProcessIncomingMessageUseCase {
     session_store: Arc<dyn SessionStorePort>,
@@ -73,7 +73,7 @@ impl ProcessIncomingMessageUseCase {
                     let _ = std::fs::remove_file(std::env::temp_dir().join("aina_gh_device_session.json"));
                     let reply = "🔄 *Sesi Percakapan Berhasil Direset*\n\nMemori konteks percakapan untuk ruang obrolan ini telah dibersihkan. Sesi berikutnya akan dimulai sebagai percakapan baru yang segar. Silakan ajukan pertanyaan atau instruksi baru Anda!".to_string();
                     self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
-                    self.whatsapp.send_text(&msg.chat_jid, &reply, Some(&msg.id)).await?;
+                    self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
                     return Ok(());
                 }
 
@@ -87,7 +87,7 @@ impl ProcessIncomingMessageUseCase {
                             current
                         );
                         self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
-                        self.whatsapp.send_text(&msg.chat_jid, &reply, Some(&msg.id)).await?;
+                        self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
                         return Ok(());
                     } else if parts.len() >= 2 {
                         let target_model = parts[1];
@@ -99,7 +99,7 @@ impl ProcessIncomingMessageUseCase {
                                     new_model
                                 );
                                 self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
-                                self.whatsapp.send_text(&msg.chat_jid, &reply, Some(&msg.id)).await?;
+                                self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
                                 return Ok(());
                             }
                             Err(e) => {
@@ -108,7 +108,7 @@ impl ProcessIncomingMessageUseCase {
                                     e
                                 );
                                 self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
-                                self.whatsapp.send_text(&msg.chat_jid, &reply, Some(&msg.id)).await?;
+                                self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
                                 return Ok(());
                             }
                         }
@@ -118,7 +118,7 @@ impl ProcessIncomingMessageUseCase {
                 // 2. Send 'typing...' indicator immediately
                 if let Err(e) = self
                     .whatsapp
-                    .send_presence(&msg.chat_jid, PresenceState::Composing)
+                    .send_presence_with_session(&msg.chat_jid, PresenceState::Composing, msg.session_role)
                     .await
                 {
                     warn!("Failed to send typing presence: {}", e);
@@ -153,7 +153,7 @@ impl ProcessIncomingMessageUseCase {
                 // 5. Build prompt incorporating persona, organization context, and profiling
                 let prompt = self.persona_engine.build_prompt(&msg, profile.as_ref());
 
-                // 5. Execute Antigravity agent CLI
+                // 6. Execute Antigravity agent CLI
                 let agent_res = match self
                     .agent_engine
                     .execute(existing_conv_id.as_deref(), &prompt)
@@ -161,10 +161,11 @@ impl ProcessIncomingMessageUseCase {
                 {
                     Ok(res) => res,
                     Err(e) => {
-                        // Reset presence on error
+                        error!("Agent engine failed to execute: {}", e);
+                        let err_reply = "Maaf, terjadi kesalahan saat memproses permintaan Anda. Silakan coba sesaat lagi.";
                         let _ = self
                             .whatsapp
-                            .send_presence(&msg.chat_jid, PresenceState::Paused)
+                            .send_text_with_session(&msg.chat_jid, err_reply, Some(&msg.id), msg.session_role)
                             .await;
                         return Err(e);
                     }
@@ -184,13 +185,13 @@ impl ProcessIncomingMessageUseCase {
 
                 // 8. Send reply back to WhatsApp
                 self.whatsapp
-                    .send_text(&msg.chat_jid, &agent_res.response_text, Some(&msg.id))
+                    .send_text_with_session(&msg.chat_jid, &agent_res.response_text, Some(&msg.id), msg.session_role)
                     .await?;
 
                 // 9. Reset presence
                 let _ = self
                     .whatsapp
-                    .send_presence(&msg.chat_jid, PresenceState::Paused)
+                    .send_presence_with_session(&msg.chat_jid, PresenceState::Paused, msg.session_role)
                     .await;
 
                 info!(
