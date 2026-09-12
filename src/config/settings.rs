@@ -65,6 +65,8 @@ pub struct WhatsmeowConfig {
     #[serde(default)]
     pub bot_session_id: Option<String>,
     #[serde(default)]
+    pub bot_lid: Option<String>,
+    #[serde(default)]
     pub companion_jid: Option<String>,
     #[serde(default)]
     pub companion_name: Option<String>,
@@ -168,6 +170,7 @@ impl Default for AppConfig {
                 send_endpoint: default_send_endpoint(),
                 presence_endpoint: default_presence_endpoint(),
                 bot_session_id: None,
+                bot_lid: None,
                 companion_jid: None,
                 companion_name: None,
                 companion_session_id: None,
@@ -238,6 +241,11 @@ impl AppConfig {
         if let Ok(val) = env::var("WHATSMEOW_BOT_SESSION_ID") {
             if !val.trim().is_empty() {
                 self.whatsmeow.bot_session_id = Some(val);
+            }
+        }
+        if let Ok(val) = env::var("WHATSMEOW_BOT_LID").or_else(|_| env::var("BOT_LID")) {
+            if !val.trim().is_empty() {
+                self.whatsmeow.bot_lid = Some(val);
             }
         }
         if let Ok(val) = env::var("WHATSMEOW_COMPANION_JID") {

@@ -80,6 +80,10 @@ pub struct IncomingMessage {
     pub is_from_me: bool,
     pub quoted_message: Option<QuotedMessage>,
     pub mentioned_jids: Vec<String>,
+    #[serde(default)]
+    pub is_bot_mentioned: bool,
+    #[serde(default)]
+    pub bot_lid: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

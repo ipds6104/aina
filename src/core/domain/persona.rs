@@ -340,6 +340,8 @@ mod tests {
             timestamp: 1726000000,
             quoted_message: None,
             mentioned_jids: vec![],
+            is_bot_mentioned: false,
+            bot_lid: None,
             is_from_me: false,
         };
 
@@ -380,6 +382,8 @@ mod tests {
             timestamp: 1726000000,
             quoted_message: None,
             mentioned_jids: vec![],
+            is_bot_mentioned: false,
+            bot_lid: None,
             is_from_me: false,
         };
 

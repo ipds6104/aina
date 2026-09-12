@@ -5,7 +5,12 @@ pub struct Gatekeeper;
 impl Gatekeeper {
     /// Pure domain decision logic to determine if Aina should respond to an incoming WhatsApp message.
     /// Supports both PrimaryBot (dedicated bot session) and UserCompanion (personal WhatsApp shadow sensor).
-    pub fn evaluate(msg: &IncomingMessage, bot_jid: &str, bot_name: &str) -> GatekeeperDecision {
+    pub fn evaluate(
+        msg: &IncomingMessage,
+        bot_jid: &str,
+        bot_name: &str,
+        bot_lid: Option<&str>,
+    ) -> GatekeeperDecision {
         // 1. Always ignore empty text
         let trimmed_text = msg.text.trim();
         if trimmed_text.is_empty() {
@@ -14,9 +19,11 @@ impl Gatekeeper {
             };
         }
 
+        let effective_lid = msg.bot_lid.as_deref().or(bot_lid);
+
         match msg.session_role {
-            SessionRole::PrimaryBot => Self::evaluate_primary_bot(msg, trimmed_text, bot_jid, bot_name),
-            SessionRole::UserCompanion => Self::evaluate_user_companion(msg, trimmed_text, bot_jid, bot_name),
+            SessionRole::PrimaryBot => Self::evaluate_primary_bot(msg, trimmed_text, bot_jid, bot_name, effective_lid),
+            SessionRole::UserCompanion => Self::evaluate_user_companion(msg, trimmed_text, bot_jid, bot_name, effective_lid),
         }
     }
 
@@ -25,6 +32,7 @@ impl Gatekeeper {
         trimmed_text: &str,
         bot_jid: &str,
         bot_name: &str,
+        bot_lid: Option<&str>,
     ) -> GatekeeperDecision {
         // Ignore own messages to prevent infinite loops on the dedicated bot number
         if msg.is_from_me {
@@ -41,7 +49,7 @@ impl Gatekeeper {
         }
 
         // Group Chat -> Check if explicitly addressed
-        if let Some(trigger_reason) = Self::detect_trigger(msg, trimmed_text, bot_jid, bot_name) {
+        if let Some(trigger_reason) = Self::detect_trigger(msg, trimmed_text, bot_jid, bot_name, bot_lid) {
             return GatekeeperDecision::Respond {
                 reason: trigger_reason,
             };
@@ -58,6 +66,7 @@ impl Gatekeeper {
         trimmed_text: &str,
         bot_jid: &str,
         bot_name: &str,
+        bot_lid: Option<&str>,
     ) -> GatekeeperDecision {
         match msg.chat_type {
             ChatType::DirectMessage => {
@@ -74,7 +83,7 @@ impl Gatekeeper {
                     }
 
                     // In private DM with another contact, only respond if explicitly invoked
-                    if let Some(trigger_reason) = Self::detect_trigger(msg, trimmed_text, bot_jid, bot_name) {
+                    if let Some(trigger_reason) = Self::detect_trigger(msg, trimmed_text, bot_jid, bot_name, bot_lid) {
                         return GatekeeperDecision::Respond {
                             reason: format!("Companion owner explicit trigger in DM: {}", trigger_reason),
                         };
@@ -92,7 +101,7 @@ impl Gatekeeper {
             }
             ChatType::Group => {
                 // In group chats where user companion is connected:
-                if let Some(trigger_reason) = Self::detect_trigger(msg, trimmed_text, bot_jid, bot_name) {
+                if let Some(trigger_reason) = Self::detect_trigger(msg, trimmed_text, bot_jid, bot_name, bot_lid) {
                     let caller = if msg.is_from_me { "Companion owner" } else { "Group member" };
                     return GatekeeperDecision::Respond {
                         reason: format!("{} invoked Aina in group: {}", caller, trigger_reason),
@@ -112,10 +121,17 @@ impl Gatekeeper {
         trimmed_text: &str,
         bot_jid: &str,
         bot_name: &str,
+        bot_lid: Option<&str>,
     ) -> Option<String> {
         let bot_jid_clean = bot_jid.split('@').next().unwrap_or(bot_jid);
+        let bot_lid_clean = bot_lid.map(|lid| lid.split('@').next().unwrap_or(lid));
         let lower_text = trimmed_text.to_lowercase();
         let lower_bot_name = bot_name.to_lowercase();
+
+        // 0. Explicit flag from webhook gateway
+        if msg.is_bot_mentioned {
+            return Some("Bot explicitly mentioned via gateway flag".to_string());
+        }
 
         // 1. Command triggers: !aina, /aina, !ai, /ai, !help
         let cmd_prefixes = [
@@ -132,10 +148,15 @@ impl Gatekeeper {
             }
         }
 
-        // 2. Mention check via mentioned_jids
+        // 2. Mention check via mentioned_jids (matches phone JID OR LID)
         for mentioned in &msg.mentioned_jids {
             if mentioned.contains(bot_jid_clean) {
                 return Some("Bot mentioned via JID in group".to_string());
+            }
+            if let Some(lid) = bot_lid_clean {
+                if mentioned.contains(lid) {
+                    return Some("Bot mentioned via LID in group".to_string());
+                }
             }
         }
 
@@ -144,10 +165,15 @@ impl Gatekeeper {
             if quoted.sender_jid.contains(bot_jid_clean) {
                 return Some("Bot quoted/replied in group".to_string());
             }
+            if let Some(lid) = bot_lid_clean {
+                if quoted.sender_jid.contains(lid) {
+                    return Some("Bot quoted/replied via LID in group".to_string());
+                }
+            }
         }
 
         // 4. Name prefix / address check in text
-        let name_patterns = [
+        let mut name_patterns = vec![
             format!("@{}", lower_bot_name),
             format!("{}:", lower_bot_name),
             format!("{},", lower_bot_name),
@@ -159,9 +185,14 @@ impl Gatekeeper {
             format!("hey {}", lower_bot_name),
         ];
 
+        // If bot LID is known, also recognize @<bot_lid> in raw text!
+        if let Some(lid) = bot_lid_clean {
+            name_patterns.push(format!("@{}", lid));
+        }
+
         for pattern in &name_patterns {
             if lower_text.starts_with(pattern) || lower_text.contains(pattern) {
-                return Some(format!("Bot addressed by name pattern '{}'", pattern));
+                return Some(format!("Bot addressed by pattern '{}'", pattern));
             }
         }
 
@@ -202,6 +233,8 @@ mod tests {
             is_from_me,
             quoted_message: None,
             mentioned_jids: vec![],
+            is_bot_mentioned: false,
+            bot_lid: None,
         }
     }
 
@@ -215,7 +248,7 @@ mod tests {
             "user-1@s.whatsapp.net",
             "user-1@s.whatsapp.net",
         );
-        let dec = Gatekeeper::evaluate(&msg, "628999@s.whatsapp.net", "Aina");
+        let dec = Gatekeeper::evaluate(&msg, "628999@s.whatsapp.net", "Aina", None);
         assert!(matches!(dec, GatekeeperDecision::Respond { .. }));
     }
 
@@ -229,7 +262,7 @@ mod tests {
             "group-123@g.us",
             "user-1@s.whatsapp.net",
         );
-        let dec = Gatekeeper::evaluate(&msg, "628999@s.whatsapp.net", "Aina");
+        let dec = Gatekeeper::evaluate(&msg, "628999@s.whatsapp.net", "Aina", None);
         assert!(matches!(dec, GatekeeperDecision::RecordOnly { .. }));
     }
 
@@ -243,7 +276,51 @@ mod tests {
             "group-123@g.us",
             "user-1@s.whatsapp.net",
         );
-        let dec = Gatekeeper::evaluate(&msg, "628999@s.whatsapp.net", "Aina");
+        let dec = Gatekeeper::evaluate(&msg, "628999@s.whatsapp.net", "Aina", None);
+        assert!(matches!(dec, GatekeeperDecision::Respond { .. }));
+    }
+
+    #[test]
+    fn test_primary_group_mentioned_via_lid_responds() {
+        let mut msg = make_msg(
+            ChatType::Group,
+            "@109389310636200",
+            false,
+            SessionRole::PrimaryBot,
+            "group-123@g.us",
+            "user-1@s.whatsapp.net",
+        );
+        msg.mentioned_jids = vec!["109389310636200@lid".to_string()];
+        let dec = Gatekeeper::evaluate(&msg, "628999@s.whatsapp.net", "Aina", Some("109389310636200@lid"));
+        assert!(matches!(dec, GatekeeperDecision::Respond { .. }));
+    }
+
+    #[test]
+    fn test_primary_group_raw_text_lid_tag_responds() {
+        let msg = make_msg(
+            ChatType::Group,
+            "Ini tdi, @109389310636200",
+            false,
+            SessionRole::PrimaryBot,
+            "group-123@g.us",
+            "user-1@s.whatsapp.net",
+        );
+        let dec = Gatekeeper::evaluate(&msg, "628999@s.whatsapp.net", "Aina", Some("109389310636200@lid"));
+        assert!(matches!(dec, GatekeeperDecision::Respond { .. }));
+    }
+
+    #[test]
+    fn test_primary_group_explicit_flag_responds() {
+        let mut msg = make_msg(
+            ChatType::Group,
+            "tolong periksa",
+            false,
+            SessionRole::PrimaryBot,
+            "group-123@g.us",
+            "user-1@s.whatsapp.net",
+        );
+        msg.is_bot_mentioned = true;
+        let dec = Gatekeeper::evaluate(&msg, "628999@s.whatsapp.net", "Aina", None);
         assert!(matches!(dec, GatekeeperDecision::Respond { .. }));
     }
 
@@ -257,7 +334,7 @@ mod tests {
             "user-1@s.whatsapp.net",
             "628999@s.whatsapp.net",
         );
-        let dec = Gatekeeper::evaluate(&msg, "628999@s.whatsapp.net", "Aina");
+        let dec = Gatekeeper::evaluate(&msg, "628999@s.whatsapp.net", "Aina", None);
         assert!(matches!(dec, GatekeeperDecision::Ignore { .. }));
     }
 
@@ -272,7 +349,7 @@ mod tests {
             "friend@s.whatsapp.net",
             "friend@s.whatsapp.net",
         );
-        let dec = Gatekeeper::evaluate(&msg, "628999@s.whatsapp.net", "Aina");
+        let dec = Gatekeeper::evaluate(&msg, "628999@s.whatsapp.net", "Aina", None);
         assert!(matches!(dec, GatekeeperDecision::Ignore { .. }));
     }
 
@@ -287,7 +364,7 @@ mod tests {
             "628111@s.whatsapp.net",
             "628111@s.whatsapp.net",
         );
-        let dec = Gatekeeper::evaluate(&msg, "628999@s.whatsapp.net", "Aina");
+        let dec = Gatekeeper::evaluate(&msg, "628999@s.whatsapp.net", "Aina", None);
         assert!(matches!(dec, GatekeeperDecision::Respond { .. }));
     }
 
@@ -302,7 +379,7 @@ mod tests {
             "work-group@g.us",
             "628111@s.whatsapp.net",
         );
-        let dec = Gatekeeper::evaluate(&msg, "628999@s.whatsapp.net", "Aina");
+        let dec = Gatekeeper::evaluate(&msg, "628999@s.whatsapp.net", "Aina", None);
         assert!(matches!(dec, GatekeeperDecision::Respond { .. }));
     }
 
@@ -317,7 +394,7 @@ mod tests {
             "work-group@g.us",
             "colleague@s.whatsapp.net",
         );
-        let dec = Gatekeeper::evaluate(&msg, "628999@s.whatsapp.net", "Aina");
+        let dec = Gatekeeper::evaluate(&msg, "628999@s.whatsapp.net", "Aina", None);
         assert!(matches!(dec, GatekeeperDecision::RecordOnly { .. }));
     }
 }

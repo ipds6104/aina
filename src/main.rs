@@ -80,6 +80,7 @@ async fn main() -> anyhow::Result<()> {
         Arc::clone(&persona_engine),
         config.whatsmeow.bot_jid.clone(),
         config.whatsmeow.bot_name.clone(),
+        config.whatsmeow.bot_lid.clone(),
     ));
 
     let scheduled_tick_usecase = Arc::new(ScheduledTickUseCase::new(
@@ -118,6 +119,7 @@ async fn main() -> anyhow::Result<()> {
         persona_engine: Arc::clone(&persona_engine),
         bot_name: config.whatsmeow.bot_name.clone(),
         bot_jid: config.whatsmeow.bot_jid.clone(),
+        bot_lid: config.whatsmeow.bot_lid.clone(),
         companion_jid: config.whatsmeow.companion_jid.clone(),
         companion_name: config.whatsmeow.companion_name.clone(),
         companion_session_id: config.whatsmeow.companion_session_id.clone(),

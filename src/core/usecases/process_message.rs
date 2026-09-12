@@ -12,6 +12,7 @@ pub struct ProcessIncomingMessageUseCase {
     persona_engine: Arc<PersonaEngine>,
     bot_jid: String,
     bot_name: String,
+    bot_lid: Option<String>,
 }
 
 impl ProcessIncomingMessageUseCase {
@@ -22,6 +23,7 @@ impl ProcessIncomingMessageUseCase {
         persona_engine: Arc<PersonaEngine>,
         bot_jid: String,
         bot_name: String,
+        bot_lid: Option<String>,
     ) -> Self {
         Self {
             session_store,
@@ -30,11 +32,12 @@ impl ProcessIncomingMessageUseCase {
             persona_engine,
             bot_jid,
             bot_name,
+            bot_lid,
         }
     }
 
     pub async fn execute(&self, msg: IncomingMessage) -> anyhow::Result<()> {
-        let decision = Gatekeeper::evaluate(&msg, &self.bot_jid, &self.bot_name);
+        let decision = Gatekeeper::evaluate(&msg, &self.bot_jid, &self.bot_name, self.bot_lid.as_deref());
 
         match decision {
             GatekeeperDecision::Ignore { reason } => {

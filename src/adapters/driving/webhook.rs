@@ -47,6 +47,7 @@ pub struct WebhookServerState {
     pub persona_engine: Arc<PersonaEngine>,
     pub bot_name: String,
     pub bot_jid: String,
+    pub bot_lid: Option<String>,
     pub companion_jid: Option<String>,
     pub companion_name: Option<String>,
     pub companion_session_id: Option<String>,
@@ -498,9 +499,11 @@ async fn simulate_handler(
         is_from_me,
         quoted_message: None,
         mentioned_jids,
+        is_bot_mentioned: false,
+        bot_lid: state.bot_lid.clone(),
     };
 
-    let decision = Gatekeeper::evaluate(&msg, &state.bot_jid, &state.bot_name);
+    let decision = Gatekeeper::evaluate(&msg, &state.bot_jid, &state.bot_name, state.bot_lid.as_deref());
 
     match decision {
         GatekeeperDecision::Ignore { reason } => {
@@ -853,6 +856,18 @@ fn parse_whatsmeow_message(
         })
         .unwrap_or_default();
 
+    let is_bot_mentioned = root
+        .get("is_bot_mentioned")
+        .or_else(|| val.get("is_bot_mentioned"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let bot_lid = root
+        .get("bot_lid")
+        .or_else(|| val.get("bot_lid"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
     let is_bot_unassigned = bot_jid
         .map(|b| {
             let clean = b.trim().to_lowercase();
@@ -941,6 +956,8 @@ fn parse_whatsmeow_message(
         is_from_me,
         quoted_message,
         mentioned_jids,
+        is_bot_mentioned,
+        bot_lid,
     })
 }
 
