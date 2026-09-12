@@ -115,10 +115,10 @@ Aina memproses percakapan WhatsApp menjadi basis pengetahuan terstruktur yang ra
       ├── Jalur 1: Balasan Teks WhatsApp (Anti-Tabel Markdown, Ramah HP)
       ├── Jalur 2: Kristalisasi Pengetahuan (knowledge/facts.md & procedures.md)
       └── Jalur 3: Penyimpanan Berkas & Skrip (data/*.xlsx, *.csv & scripts/*.py)
-                 │
-                 ▼
- [4. Knowledge Grooming Engine (scripts/workspace_manager.py groom)]
-      └── Pembaruan Indeks Otomatis (knowledge/index.md) -> Progressive Retrieval
+                  │
+                  ▼
+  [4. In-Process Knowledge Grooming Engine (aina kb groom / Background Scheduler)]
+       └── Pembaruan Indeks Otomatis (knowledge/index.md) -> Progressive Retrieval
 ```
 
 ---
@@ -284,17 +284,26 @@ Aina mengutamakan efisiensi dan kecepatan respons dengan memprioritaskan keluarg
 | **`gemini-3.8-flash-low`** | Respons Kilat | < 3 detik | Sapaan santai, konfirmasi cepat, obrolan kasual. |
 | **`gemini-3.1-pro-high`** | Deep Coding | 20 – 45 detik | Debugging kode tingkat lanjut, penulisan script besar. |
 | **`claude-opus-4-6-thinking`** | **Khusus Eksplisit** | 60 – 120 detik | Hanya aktif jika user meminta: *"Aina, pakai model opus"*. |
+| **`claude-sonnet-4-6`** | Penalaran Menengah-Tinggi | 30 – 60 detik | Alternatif penalaran Claude untuk analisis mendalam. |
 
 ### Cara Mengganti Model AI:
 1. **Via Chat WhatsApp / Simulator**:
    - Cek model aktif: `/model status` atau `/model list`
    - Ganti model instan: `/model <nama_model>` (contoh: `/model gemini-3.8-flash-high` atau `/model opus`)
 2. **Via Web Dashboard**:
-   - Klik **⚡ Ganti** pada info *Model AI Aktif* di dashboard.
-3. **Via Skrip Terminal / Aina Otonom**:
+   - Klik **⚡ Ganti** pada info *Model AI Aktif* di dashboard utama (`https://aina.domainkamu.com`).
+3. **Via Skrip Terminal / Agen Otonom**:
    ```bash
    python3 scripts/model_control.py get
+   python3 scripts/model_control.py list
    python3 scripts/model_control.py set gemini-3.8-flash-high
+   ```
+4. **Via REST API (Automasi / CI)**:
+   ```bash
+   curl -X POST http://localhost:8090/api/model \
+     -H "Content-Type: application/json" \
+     -H "X-Admin-Key: AINA-XXXXXX" \
+     -d '{"model": "gemini-3.8-flash-high"}'
    ```
 
 ---
@@ -330,42 +339,55 @@ Selain berfungsi sebagai HTTP Webhook server daemon, biner utama `aina` juga men
 aina
 # atau: aina server / aina daemon
 
-# 2. Pencarian Arsip Chat Super Cepat (SQLite FTS5 BM25 Ranking, <1ms)
+# 2. Status Pipeline Multi-Session WhatsApp (Bot Resmi & Companion Sensor)
+aina status
+aina whatsapp status --json
+
+# 3. Pencarian Arsip Chat Super Cepat (SQLite FTS5 BM25 Ranking, <1ms)
 aina archive search "akreditasi" --workspace default --limit 5
 aina archive search "kurikulum" --workspace default --json
 
-# 3. Statistik Arsip Chat di Seluruh Workspace
+# 4. Statistik Arsip Chat di Seluruh Workspace
 aina archive stats --workspace default
 
-# 4. Validasi Kerapian Basis Pengetahuan (Linter & Auto-Heal)
+# 5. Validasi Kerapian Basis Pengetahuan (Linter & Auto-Heal)
 aina kb lint --workspace default
 aina kb lint --workspace default --auto-heal
 
-# 5. Kompilasi Ulang Katalog `knowledge/index.md` Deterministik
+# 6. Kompilasi Ulang Katalog `knowledge/index.md` Deterministik
 aina kb groom --workspace default
 
-# 6. Ringkasan Jadwal & Tenggat Waktu (Deadlines)
+# 7. Ringkasan Jadwal & Tenggat Waktu (Deadlines)
 aina kb schedule --workspace default
 
-# 7. Audit Trail Jejak Eksekusi Antigravity CLI
+# 8. Audit Trail Jejak Eksekusi Antigravity CLI
 aina audit --limit 10
 aina audit --query "git" --errors-only
 
-# 8. Sinkronisasi Git Dua Arah Otomatis (Pull Rebase + Safe Push)
+# 9. Informasi Status & Metadata Workspace
+aina workspace info
+aina workspace info --json
+
+# 10. Inisialisasi Workspace Baru Secara Deterministik
+aina workspace init /var/lib/aina/workspaces/keuangan --title "Divisi Keuangan & Anggaran"
+
+# 11. Sinkronisasi Git Dua Arah Otomatis (Pull Rebase + Safe Push)
 aina sync
 # atau: aina workspace sync --workspace default --message "docs: update SOP cuti"
 
-# 9. Hubungkan Workspace ke Git Remote (GitHub/GitLab)
+# 12. Hubungkan Workspace ke Git Remote (GitHub/GitLab)
 aina link https://github.com/ipds6104/knowledge-base.git
 # atau: aina workspace link https://github.com/ipds6104/knowledge-base.git --workspace default
 
-# 10. Manajemen GitHub CLI (`gh`) & Autentikasi Non-Interaktif
+# 13. Manajemen GitHub CLI (`gh`) & Autentikasi Non-Interaktif / OAuth Device Flow
 aina workspace gh-status
-aina gh-login ghp_xxxxxxxxxxxxxxxxxxxx
+aina gh-device                             # Request kode Device Flow (misal: ABCD-1234)
+aina gh-poll                               # Cek status verifikasi browser secara otomatis
+aina gh-login ghp_xxxxxxxxxxxxxxxxxxxx     # Atau login langsung via Personal Access Token
 aina workspace gh-create knowledge-base-ipds
 aina workspace gh-create knowledge-base-public --public
 
-# 11. Clone Knowledge Base Repositori Luar & Auto-Groom
+# 14. Clone Knowledge Base Repositori Luar & Auto-Groom
 aina clone https://github.com/ipds6104/knowledge-base.git /var/lib/aina/workspaces/ipds
 ```
 
@@ -468,7 +490,7 @@ python3 scripts/audit_agent.py --since 24h --json > audit_harian.json
 
 ---
 
-## 📦 Engine Arsip & Ekspor Chat WhatsApp (`chat_importer.py`)
+## 📦 Engine Arsip & Ekspor Chat WhatsApp (`chat_importer.py` & Native CLI)
 
 Karena batasan protokol resmi Meta yang hanya menyinkronkan pesan-pesan terkini ke perangkat pendamping (*linked device*), riwayat percakapan bertahun-tahun (1 s.d. 3+ tahun) dari grup kantor sering kali diekspor langsung dari ponsel berupa berkas `.zip` atau `.txt`.
 
@@ -478,7 +500,11 @@ Aina menyediakan engine impor berkinerja tinggi (*streaming regex* & SQLite FTS5
 # 1. Impor berkas ekspor chat WhatsApp (.zip / .txt) ke workspace
 python3 scripts/chat_importer.py import /path/ke/chat.zip --workspace default --name "ipds-6104"
 
-# 2. Pencarian teks super cepat (<10ms) menggunakan SQLite FTS5 (0 Token LLM)
+# 2. Pencarian teks super cepat (<1ms) via Native CLI (Rekomendasi di Server Produksi)
+aina archive search "reimbursement" --workspace default --limit 5
+aina archive search "SOP pencacahan" --workspace default --json
+
+# Atau via skrip Python:
 python3 scripts/chat_importer.py search "ipds-6104" --query "reimbursement"
 python3 scripts/chat_importer.py search "ipds-6104" --query "SOP" --since 2024-01-01
 
@@ -486,7 +512,8 @@ python3 scripts/chat_importer.py search "ipds-6104" --query "SOP" --since 2024-0
 python3 scripts/chat_importer.py links "ipds-6104" --domain "sheets"
 
 # 4. Tampilkan statistik & anggota grup teraktif selama bertahun-tahun
-python3 scripts/chat_importer.py stats "ipds-6104"
+aina archive stats --workspace default
+# Atau: python3 scripts/chat_importer.py stats "ipds-6104"
 ```
 
 ---
@@ -497,22 +524,30 @@ python3 scripts/chat_importer.py stats "ipds-6104"
 | :--- | :--- | :--- |
 | `SERVER_PORT` / `PORT` | `8090` | Port HTTP listening server Aina |
 | `SERVER_HOST` | `0.0.0.0` | Host bind server |
-| `WHATSMEOW_BASE_URL` | `http://localhost:3000`| Base URL REST API instance Whatsmeow |
-| `WHATSMEOW_API_KEY` | `default-secret` | API Key autentikasi ke Whatsmeow |
-| `WHATSMEOW_BOT_JID` | - | JID WhatsApp bot resmi (contoh: `628xxxx@s.whatsapp.net`) |
-| `WHATSMEOW_BOT_NAME` | `Aina` | Nama panggilan bot di obrolan |
+| `WHATSMEOW_BASE_URL` | `http://localhost:3000` | Base URL REST API instance Whatsmeow |
+| `WHATSMEOW_API_KEY` | `default-secret` | API Key autentikasi ke Whatsmeow Gateway |
+| `WHATSMEOW_BOT_JID` | - | JID WhatsApp bot resmi (contoh: `62896xxxx@s.whatsapp.net`) |
+| `WHATSMEOW_BOT_NAME` | `Aina` | Nama panggilan bot di obrolan WhatsApp |
 | `WHATSMEOW_BOT_SESSION_ID` | `default` | ID sesi Whatsmeow gateway untuk bot utama |
 | `WHATSMEOW_COMPANION_JID` | - | *(Opsional)* JID WhatsApp pribadi untuk Companion Sensor |
-| `WHATSMEOW_COMPANION_NAME` | `Personal Account`| *(Opsional)* Label nama akun companion di dashboard & simulator |
+| `WHATSMEOW_COMPANION_NAME` | `Personal Account` | *(Opsional)* Label nama akun companion di dashboard & simulator |
 | `WHATSMEOW_COMPANION_SESSION_ID` | `companion` | *(Opsional)* ID sesi Whatsmeow gateway untuk akun companion |
+| `WHATSMEOW_SEND_ENDPOINT` | `/api/v1/messages/send-text` | Endpoint kirim pesan teks Whatsmeow (fallback: `/send/message`) |
+| `WHATSMEOW_PRESENCE_ENDPOINT` | `/send/presence` | Endpoint penanda *typing presence* Whatsmeow |
 | `AGENT_BINARY_PATH` | `agy` | Lokasi biner Antigravity CLI (otomatis mendeteksi PATH) |
 | `AGENT_MODEL` | `gemini-3.8-flash-medium` | Model AI default bawaan |
-| `AGENT_WORKSPACE` | `./workspaces/default` | Direktori kerja aktif bawaan agen |
-| `DATABASE_PATH` | `data/aina.db` | Path berkas SQLite database |
+| `AGENT_WORKSPACE` | `./workspaces/default` | Direktori kerja aktif bawaan agen (`/app/workspaces/default` di container) |
+| `AGENT_TIMEOUT_SECONDS` | `300` | Batas waktu timeout eksekusi agent dalam detik |
+| `DATABASE_PATH` | `data/aina.db` | Path berkas SQLite database (`/app/data/aina.db` di container) |
 | `ADMIN_KEY` / `AINA_ADMIN_KEY` | *(Auto-generated)* | Kunci rahasia untuk membuka kunci Web Simulator & Wizard |
-| `ADMIN_JID` | - | Nomor WhatsApp pemilik/admin berwewenang penuh |
+| `ADMIN_JID` / `AINA_ADMIN_JID` | - | Nomor WhatsApp pemilik/admin dengan hak wewenang penuh |
+| `AINA_OAUTH_TOKEN` | - | *(Opsional)* Token OAuth Antigravity CLI mentah (JSON) untuk auto-injeksi di Coolify/Docker |
+| `AINA_PERSONA_TEXT` | - | *(Opsional)* Teks persona kustom untuk meng-override isi `config/persona.md` |
+| `AINA_ORGANIZATION_TEXT` | - | *(Opsional)* Konteks organisasi kustom untuk meng-override `config/organization.md` |
+| `SCHEDULER_ENABLED` | `true` | Mengaktifkan pemindaian berkala in-process otomatis |
+| `SCHEDULER_INTERVAL_SECONDS` | `60` | Interval pemeriksaan scheduler berkala dalam detik |
 | `TZ` / `AINA_TIMEZONE` | `Asia/Jakarta` | Zona waktu operasional (WIB: UTC+7) |
-| `AINA_LOCALE` | `id-ID` | Standar locale bahasa |
+| `AINA_LOCALE` | `id-ID` | Standar locale bahasa dan penanggalan |
 
 ---
 
@@ -521,12 +556,31 @@ python3 scripts/chat_importer.py stats "ipds-6104"
 ```text
 src/
 ├── core/                        # CORE BUSINESS LOGIC (Murni, Bebas Framework)
-│   ├── domain/                  # Entitas Pesan, Pengirim, Gatekeeper, Persona
-│   ├── ports/                   # Trait Interface (AgentEnginePort, WhatsAppPort, SessionStorePort)
-│   └── usecases/                # ProcessIncomingMessageUseCase, ScheduledTickUseCase
+│   ├── domain/                  # Entitas & Domain Logic
+│   │   ├── message.rs           # Pesan, Pengirim, SenderType, TargetType
+│   │   ├── sensor.rs            # Multi-Session WhatsApp (PrimaryBot, UserCompanion, Shadow Sensor)
+│   │   ├── gatekeeper.rs        # Evaluasi Mention, DM, & Aturan Privasi Kompanion
+│   │   ├── persona.rs           # Persona Engine, Anti-Markdown-Table Formatting
+│   │   ├── knowledge.rs         # Linter, Grooming, & GitHub Device Code Flow
+│   │   ├── archive.rs           # SQLite FTS5 Full-Text Search BM25 Engine
+│   │   └── audit.rs             # Audit Trail Jejak Eksekusi Antigravity
+│   ├── ports/                   # Port Interfaces (Dependency Inversion)
+│   │   ├── agent_engine.rs      # Trait AgentEnginePort (LLM Invocation & Models)
+│   │   ├── whatsapp.rs          # Trait WhatsAppPort (Multi-Session Dispatch & Presence)
+│   │   ├── session_store.rs     # Trait SessionStorePort (Chat History & Active Jobs)
+│   │   └── ingestion.rs         # Trait KnowledgeIngestionPort & SourceRegistryPort
+│   └── usecases/                # Orchestration Use Cases
+│       ├── process_message.rs   # ProcessIncomingMessageUseCase (Dual-Session Pipeline)
+│       └── scheduled_tick.rs    # ScheduledTickUseCase (Background Grooming & Auto-Healing)
 ├── adapters/
-│   ├── driving/                 # Webhook Server (Axum HTTP), Web Simulator, Scheduler
-│   └── driven/                  # Antigravity CLI Adapter, Whatsmeow Client, SQLite Store
+│   ├── driving/                 # Driving / Inbound Adapters
+│   │   ├── webhook.rs           # Axum HTTP Server, Web Simulator, REST API (/api/*)
+│   │   ├── scheduler.rs         # In-Process Background Scheduler Runner
+│   │   └── cli.rs               # Unified Rust CLI Dispatcher (`aina [subcommand]`)
+│   └── driven/                  # Driven / Outbound Adapters
+│       ├── agy_cli.rs           # Google Antigravity CLI Adapter (`agy`)
+│       ├── whatsmeow_http.rs    # Whatsmeow Multi-Session REST Client
+│       └── sqlite_store.rs      # SQLite Persistence Adapter + FTS5 Search
 ├── config/                      # Pengaturan aplikasi & pemuat persona
 └── main.rs                      # Composition Root & Dependency Injection
 ```
