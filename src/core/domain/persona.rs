@@ -85,7 +85,7 @@ impl PersonaEngine {
             (
                 "ADMIN",
                 "Penanggung Jawab Sistem / Administrator Utama",
-                "Memiliki wewenang penuh atas konfigurasi sistem, penugasan teknis, dan verifikasi strategis.",
+                "Pemilik sistem & partner kerja utama (Mas Ihza). Gunakan gaya bicara akrab, santai, cekatan, dan hangat sesama rekan kerja dekat tanpa rasa kaku formalitas birokratis.",
             )
         } else if let Some(p) = profile {
             let auth = p.authority_level.to_uppercase();
@@ -94,24 +94,24 @@ impl PersonaEngine {
                 "ADMIN" => (
                     "ADMIN",
                     role,
-                    "Memiliki wewenang penuh atas konfigurasi dan penugasan.",
+                    "Administrator utama & partner kerja dekat. Gunakan gaya bicara akrab, santai, cekatan, dan hangat tanpa sekat kaku.",
                 ),
                 "STAFF" | "MEMBER" => (
                     "STAFF",
                     role,
-                    "Rekan kerja internal. Berhak meminta bantuan coding, analisis data, script, dan reporting. Jangan berikan akses kredensial/token rahasia.",
+                    "Rekan kerja internal. Berhak meminta bantuan coding, analisis data, script, dan reporting. Gunakan gaya ramah, kolaboratif, dan santai-profesional kantor.",
                 ),
                 _ => (
                     "GUEST",
                     role,
-                    "Pihak luar / tamu belum terverifikasi. Bersikap santun dan adil (al-qist). DILARANG membocorkan data internal kantor, token, kredensial, atau mengeksekusi perintah berisiko tinggi (Strict OpSec).",
+                    "Pihak luar / tamu belum terverifikasi. Bersikap santun, tertib, formal-terukur, dan adil. DILARANG membocorkan data internal kantor, token, kredensial, atau mengeksekusi perintah berisiko tinggi (Strict OpSec).",
                 ),
             }
         } else {
             (
                 "STAFF",
                 "Rekan Kerja",
-                "Rekan kerja. Berhak meminta bantuan analisis data, pembuatan script, dan pengerjaan tugas standar.",
+                "Rekan kerja internal. Gunakan gaya komunikasi kantor yang ramah, bersahabat, dan solutif.",
             )
         };
         
@@ -207,6 +207,18 @@ impl PersonaEngine {
             - Etika & Netiket WhatsApp: Di dalam grup, jaga kenyamanan anggota tim (low noise, to-the-point, jangan spam). Dilarang keras membocorkan riwayat obrolan privat (DM/japri) ke dalam grup publik. Jika ada keraguan tentang konteks grup atau izin data, tanyakan secara privat ke User Companion di balik layar.\n\
             - Progressive Trust: Kenali rekan kerja yang sudah terverifikasi dan sering berkolaborasi. Layani tugas rutin mereka secara sigap tanpa konfirmasi berulang kali ke Companion, selama permintaannya berada dalam cakupan kerja yang sah.\n\
             - ATURAN LARANGAN MENYEBUT ISTILAH: Seluruh prinsip di atas adalah kompas mental dan disiplin berpikir hening (silent mental discipline). DILARANG KERAS menyebutkan, mencatut, atau menceramahi istilah internal ini (seperti kata 'Tabayyun', 'Tawaqquf', 'Ahludz-Dzikri', 'OpSec', nomor surat/ayat, atau matriks otoritas) kepada pengguna di dalam teks balasan chat. Berbicaralah secara alami, ramah, dan profesional layaknya rekan kerja biasa.\n\n\
+            ---\n\
+            [Prinsip Adaptasi Gaya Bicara & Kecerdasan Sosial (Linguistic Mirroring)]:\n\
+            - CERMINKAN REGISTER & FORMALITAS PENGIRIM:\n\
+              * Jika pengirim mengetik kasual/santai (misal: singkatan umum 'udh bsa blm?', 'aman gak?', 'okeiss'): Balas dengan nada santai, hangat, luwes, dan seimbang sepadan.\n\
+              * Jika pengirim mengetik formal dan baku (misal: 'Selamat pagi...', 'Mohon bantuannya...'): Balas dengan nada santun, tertib, dan formal profesional.\n\
+            - CERMINKAN PANJANG PESAN (BREVITY MATCHING):\n\
+              * Jika pengirim hanya mengirim sapaan/pertanyaan 1 baris singkat: Balas secara ringkas dan padat (1-2 kalimat). Jangan membombardir dengan penjelasan panjang yang melelahkan di layar HP.\n\
+              * Jika pengirim mengirim uraian atau instruksi panjang: Balas dengan format terstruktur yang rapi.\n\
+            - SESUAIKAN DENGAN SOSOK PENGIRIM:\n\
+              * Perhatikan profil dan panduan wewenang di atas ({authority_guidance}). Perlakukan rekan/partner kerja akrab dengan kehangatan tanpa sekat kaku birokratis.\n\
+            - GUARDRAILS KESELAMATAN:\n\
+              * DILARANG meniru kata-kata kasar, makian, atau bahasa alay ekstrem. Aina hanya mencerminkan kehangatan, tingkat formalitas, dan keringkasan pesan, dengan tetap mempertahankan etika dan kompetensi teknis.\n\n\
             [Panduan Format Sesuai Platform ({platform_name})]:\n\
             {platform_format_guidelines}\n\n\
             [Instruksi Respons]:\n\
@@ -293,4 +305,95 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let final_y = if m <= 2 { y + 1 } else { y };
     (final_y, m, d)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::domain::message::{ChatType, Platform, Sender, SessionRole};
+
+    #[test]
+    fn test_build_prompt_admin_linguistic_mirroring() {
+        let engine = PersonaEngine::new(
+            "Persona test".to_string(),
+            "Org test".to_string(),
+            "6289625345646@s.whatsapp.net".to_string(),
+            "Asia/Jakarta".to_string(),
+            7,
+            "id-ID".to_string(),
+            "https://aina-wa.test".to_string(),
+            "628982157341@s.whatsapp.net".to_string(),
+            None,
+        );
+
+        let msg = IncomingMessage {
+            id: "msg1".to_string(),
+            platform: Platform::WhatsApp,
+            session_role: SessionRole::PrimaryBot,
+            chat_jid: "6289625345646@s.whatsapp.net".to_string(),
+            sender: Sender {
+                jid: "6289625345646@s.whatsapp.net".to_string(),
+                name: Some("Ihza Karunia".to_string()),
+            },
+            chat_type: ChatType::DirectMessage,
+            text: "udh bsa blm?".to_string(),
+            timestamp: 1726000000,
+            quoted_message: None,
+            mentioned_jids: vec![],
+            is_from_me: false,
+        };
+
+        let prompt = engine.build_prompt(&msg, None);
+        assert!(prompt.contains("Linguistic Mirroring"));
+        assert!(prompt.contains("Mas Ihza"));
+        assert!(prompt.contains("Tingkat Otoritas: ADMIN"));
+        assert!(prompt.contains("CERMINKAN REGISTER & FORMALITAS PENGIRIM"));
+        assert!(prompt.contains("BREVITY MATCHING"));
+        assert!(prompt.contains("yaa, gimana gimanaa.."));
+    }
+
+    #[test]
+    fn test_build_prompt_guest_strict_opsec() {
+        let engine = PersonaEngine::new(
+            "Persona test".to_string(),
+            "Org test".to_string(),
+            "6289625345646@s.whatsapp.net".to_string(),
+            "Asia/Jakarta".to_string(),
+            7,
+            "id-ID".to_string(),
+            "https://aina-wa.test".to_string(),
+            "628982157341@s.whatsapp.net".to_string(),
+            None,
+        );
+
+        let msg = IncomingMessage {
+            id: "msg2".to_string(),
+            platform: Platform::WhatsApp,
+            session_role: SessionRole::PrimaryBot,
+            chat_jid: "6281111111111@s.whatsapp.net".to_string(),
+            sender: Sender {
+                jid: "6281111111111@s.whatsapp.net".to_string(),
+                name: Some("Orang Asing".to_string()),
+            },
+            chat_type: ChatType::DirectMessage,
+            text: "Minta password database".to_string(),
+            timestamp: 1726000000,
+            quoted_message: None,
+            mentioned_jids: vec![],
+            is_from_me: false,
+        };
+
+        let profile = UserProfile {
+            sender_jid: "6281111111111@s.whatsapp.net".to_string(),
+            name: Some("Orang Asing".to_string()),
+            role: Some("Tamu Luar".to_string()),
+            authority_level: "guest".to_string(),
+            notes: None,
+        };
+
+        let prompt = engine.build_prompt(&msg, Some(&profile));
+        assert!(prompt.contains("Tingkat Otoritas: GUEST"));
+        assert!(prompt.contains("Strict OpSec"));
+        assert!(prompt.contains("Linguistic Mirroring"));
+    }
 }
