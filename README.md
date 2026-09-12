@@ -1,6 +1,6 @@
 # 🌸 Aina (あいな) - Self-Hosted Agentic AI Co-Worker
 
-[![Rust](https://img.shields.io/badge/Language-Rust_2021-orange.svg)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/Language-Rust_2024-orange.svg)](https://www.rust-lang.org/)
 [![Engine](https://img.shields.io/badge/Agent_Engine-Google_Antigravity_CLI_(agy)-blue.svg)](https://antigravity.google)
 [![Gateway](https://img.shields.io/badge/WhatsApp-Whatsmeow_HTTP-25D366.svg)](https://github.com/tulir/whatsmeow)
 [![Architecture](https://img.shields.io/badge/Architecture-Hexagonal_/_Clean_Architecture-9cf.svg)]()
@@ -11,10 +11,12 @@
 Aina dirancang bukan sebagai bot CS yang kaku, melainkan sebagai **rekan kerja teknis (software engineer / staf data)** di grup WhatsApp maupun percakapan pribadi:
 - ⚡ **Cekatan & Solutif**: Memberikan solusi konkret, siap pakai, dan mampu mengeksekusi kode secara nyata di terminal.
 - 💬 **Basa-Basi Seperlunya**: *Low-noise*, to-the-point, santun, dan bersahabat.
-- 🧭 **Proactive Clarification**: Bertanya dan meminta klarifikasi terarah jika instruksi multitafsir sebelum mengambil tindakan.
+- 🧭 **Proactive Clarification & Tabayyun**: Bertanya dan meminta klarifikasi terarah jika instruksi multitafsir, serta menahan diri (*Tawaqquf*) bila ditanya data sensitif oleh pihak luar sebelum meminta izin User Companion.
 - 🛡️ **Gatekeeper Cerdas**: Tidak *spamming* di grup kantor (hanya menjawab jika di-tag/disebut, dan mencatat percakapan pasif sebagai konteks).
+- 👥 **Dynamic Profiling Memory**: Mengenali peran dan wewenang rekan kerja (`admin`, `staff`, `guest`) dengan memori SQLite permanen (`aina user`), mencegah *context loss* meski berbulan-bulan tidak berinteraksi.
+- 🔍 **Instant Temporal Search (<5ms)**: Pencarian riwayat percakapan SQLite FTS5 BM25 + filter waktu presisi (`--since 7d`, `--from YYYY-MM-DD --to YYYY-MM-DD`) untuk mencegah halusinasi waktu (*anachronism*).
 - 📱 **Dual-WhatsApp Pipeline (Multi-Session)**: Mendukung nomor bot khusus (`PrimaryBot`) sekaligus akun pribadi pengguna (`UserCompanion` / *Shadow Sensor*). Aina dapat mencerna konteks puluhan grup kantor tanpa perlu meminta admin memasukkan nomor bot baru.
-- 🧠 **Dynamic Model Switching**: Bawaan cepat & cerdas dengan **Google Gemini** (5–15 detik), dengan opsi eskalasi ke **Claude Opus** khusus tugas kompleks.
+- 🧠 **Dynamic Model Switching**: Bawaan cepat & cerdas dengan **Google Gemini** (5–15 detik), dengan opsi eskalasi ke **Claude Opus** khusus tugas kompleks melalui CLI native `aina model`.
 - 📁 **Workspace-Agnostic & Structured Knowledge Base**: Basis pengetahuan tumbuh secara organik per proyek/instansi tanpa tercampur baur.
 
 ---
@@ -29,12 +31,13 @@ Aina dirancang bukan sebagai bot CS yang kaku, melainkan sebagai **rekan kerja t
   - [Langkah 2: Deploy & Jalankan Aina (Coolify / Docker / Lokal)](#langkah-2-deploy--jalankan-aina)
 - [🔐 Setup Autentikasi Pertama Kali (`/setup`)](#-setup-autentikasi-pertama-kali-setup)
 - [🧪 Web Simulator (Real End-to-End Testing)](#-web-simulator-real-end-to-end-testing)
-- [🤖 Manajemen Model AI (Gemini-First Priority)](#-manajemen-model-ai-gemini-first-priority)
+- [👥 Profiling Memory & Manajemen Rekan Kerja (`aina user`)](#-profiling-memory--manajemen-rekan-kerja-aina-user)
+- [🤖 Manajemen Model AI (Gemini-First Priority & Native CLI)](#-manajemen-model-ai-gemini-first-priority--native-cli)
 - [📁 Agnostic Workspaces & Structured Knowledge Base](#-agnostic-workspaces--structured-knowledge-base)
 - [⚡ Unified Native Rust CLI (`aina`)](#-unified-native-rust-cli-aina)
 - [🧹 Linter Kerapian & Closed-Loop Auto-Healing (`kb_linter.py`)](#-linter-kerapian--closed-loop-auto-healing-kb_linterpy)
 - [🛡️ Audit Trail CLI Antigravity (`audit_agent.py`)](#️-audit-trail-cli-antigravity-audit_agentpy)
-- [📦 Engine Arsip & Ekspor Chat WhatsApp (`chat_importer.py` & Native CLI)](#-engine-arsip--ekspor-chat-whatsapp-chat_importerpy--native-cli)
+- [📦 Engine Arsip & Ekspor Chat WhatsApp (Temporal Search & Import)](#-engine-arsip--ekspor-chat-whatsapp-temporal-search--import)
 - [🔒 Keamanan & Privasi Data (Security & Privacy)](#-keamanan--privasi-data-security--privacy)
 - [⚙️ Ringkasan Environment Variables](#️-ringkasan-environment-variables)
 - [🏛️ Arsitektur Kode (Clean Architecture)](#️-arsitektur-kode-clean-architecture)
@@ -168,7 +171,7 @@ Sebelum memulai, pastikan lingkungan Anda memenuhi spesifikasi berikut:
 - **Runtime Server / Kontainer**: Docker & Docker Compose (v2+), atau [Coolify](https://coolify.io) untuk deployment produksi *zero-downtime*.
 - **WhatsApp Gateway**: Instance aktif gateway [Whatsmeow](https://github.com/tulir/whatsmeow) HTTP REST API untuk mengelola koneksi soket WhatsApp.
 - **AI Agent Engine**: [Google Antigravity CLI (`agy`)](https://antigravity.google) terpasang atau siapkan string OAuth Token untuk diinput via Web Setup Wizard (`/setup`).
-- **Rust Toolchain (Khusus Kompilasi dari Source / Local Dev)**: Rust versi `1.75+` (Edition 2021).
+- **Rust Toolchain (Khusus Kompilasi dari Source / Local Dev)**: Rust versi `1.85+` (Edition 2024).
 
 ---
 
@@ -295,6 +298,12 @@ Setelah server Aina aktif dan sehat (*healthy*):
      ```
    - Tempelkan kode setup dan seluruh JSON token pada form wizard, lalu klik **"Verifikasi & Simpan Token"**.
 3. Aina akan memverifikasi token secara *real-time*. Endpoint setup otomatis terkunci, dan dashboard berubah menjadi **"ONLINE & TERAUTENTIKASI"**!
+4. **Daftarkan Profil User Companion (Pemilik Utama)**:
+   Di terminal server, daftarkan nomor WhatsApp pribadi Anda sebagai Administrator utama:
+   ```bash
+   aina user set <NOMOR_WHATSAPP_ANDA@s.whatsapp.net> --name "Nama Anda" --role "Owner & Lead" --authority admin --notes "Penanggung jawab sistem utama"
+   ```
+   Dengan langkah ini, Aina langsung mengenali Anda sebagai Companion terpercaya dengan hak wewenang penuh tanpa konfirmasi berulang!
 
 ---
 
@@ -308,7 +317,41 @@ Di dashboard web (`https://aina.domainkamu.com`), tersedia kartu **Simulator Per
 
 ---
 
-## 🤖 Manajemen Model AI (Gemini-First Priority)
+## 👥 Profiling Memory & Manajemen Rekan Kerja (`aina user`)
+
+Untuk mencegah fenomena *context loss* (lupa profil rekan kerja atau izin yang pernah diberikan setelah berminggu-minggu), Aina dilengkapi sistem **Profiling Memory** lokal berbasis SQLite (`user_profiles`).
+
+Aina membedakan 3 tingkatan otoritas (*Authority Matrix*):
+* **`admin`**: Pemilik/User Companion utama dengan akses wewenang penuh.
+* **`staff`**: Rekan kerja internal yang berhak meminta pembuatan script, analisis data, dan tugas kantor rutin.
+* **`guest`**: Pihak eksternal / nomor baru yang belum diverifikasi (*Strict OpSec & Tabayyun*).
+
+```bash
+# 1. Daftarkan / Perbarui profil dan wewenang rekan kerja
+aina user set 6289625345646@s.whatsapp.net \
+  --name "Mas Companion" \
+  --role "Owner & Lead Architect" \
+  --authority admin \
+  --notes "Penanggung jawab sistem utama, akses penuh"
+
+# 2. Cek profil pengguna spesifik
+aina user get 6289625345646@s.whatsapp.net
+aina user get 6289625345646@s.whatsapp.net --json
+
+# 3. Cari rekan kerja berdasarkan kata kunci
+aina user search "Architect"
+
+# 4. Tampilkan seluruh daftar rekan kerja terdaftar
+aina user list
+aina user list --json
+```
+
+> [!TIP]
+> **Adab Tabayyun di Grup WhatsApp**: Bila orang berstatus `guest` meminta data sensitif atau instruksi sistem, Aina akan menahan diri (*Tawaqquf*) dan meminta izin kepada User Companion via japri (DM). Setelah diizinkan, Aina menyimpannya via `aina user set` sehingga Aina mengingat izin tersebut secara permanen tanpa bertanya ulang di masa depan!
+
+---
+
+## 🤖 Manajemen Model AI (Gemini-First Priority & Native CLI)
 
 Aina mengutamakan efisiensi dan kecepatan respons dengan memprioritaskan keluarga model **Google Gemini** sebagai *default*:
 
@@ -322,18 +365,22 @@ Aina mengutamakan efisiensi dan kecepatan respons dengan memprioritaskan keluarg
 | **`claude-sonnet-4-6`** | Penalaran Menengah-Tinggi | 30 – 60 detik | Alternatif penalaran Claude untuk analisis mendalam. |
 
 ### Cara Mengganti Model AI:
-1. **Via Chat WhatsApp / Simulator**:
+1. **Via Native Rust CLI (Rekomendasi)**:
+   ```bash
+   aina model get                           # Tampilkan model aktif saat ini
+   aina model list                          # Daftar model yang didukung & status aktif
+   aina model set gemini-3.8-flash-high     # Ganti model seketika di runtime
+   ```
+2. **Via Chat WhatsApp / Simulator**:
    - Cek model aktif: `/model status` atau `/model list`
    - Ganti model instan: `/model <nama_model>` (contoh: `/model gemini-3.8-flash-high` atau `/model opus`)
-2. **Via Web Dashboard**:
+3. **Via Web Dashboard**:
    - Klik **⚡ Ganti** pada info *Model AI Aktif* di dashboard utama (`https://aina.domainkamu.com`).
-3. **Via Skrip Terminal / Agen Otonom**:
+4. **Via Skrip Python (Legacy Fallback)**:
    ```bash
-   python3 scripts/model_control.py get
-   python3 scripts/model_control.py list
    python3 scripts/model_control.py set gemini-3.8-flash-high
    ```
-4. **Via REST API (Automasi / CI)**:
+5. **Via REST API (Automasi / CI)**:
    ```bash
    curl -X POST http://localhost:8090/api/model \
      -H "Content-Type: application/json" \
@@ -378,43 +425,56 @@ aina
 aina status
 aina whatsapp status --json
 
-# 3. Pencarian Arsip Chat Super Cepat (SQLite FTS5 BM25 Ranking, <1ms)
-aina archive search "akreditasi" --workspace default --limit 5
-aina archive search "kurikulum" --workspace default --json
+# 3. Pencarian Arsip Chat Super Cepat & Filter Temporal (FTS5 BM25, <5ms)
+aina archive search "laporan" --since 7d
+aina archive search "anggaran" --from 2026-09-01 --to 2026-09-10 --limit 5
+aina archive search "kurikulum" --json
 
-# 4. Statistik Arsip Chat di Seluruh Workspace
+# 4. Impor & Statistik Arsip Obrolan WhatsApp (.zip / .txt)
+aina archive import /path/ke/chat.zip --slug "tim-proyek"
 aina archive stats --workspace default
 
-# 5. Validasi Kerapian Basis Pengetahuan (Linter & Auto-Heal)
+# 5. Profiling Memory & Manajemen Wewenang Rekan Kerja (SQLite user_profiles)
+aina user set 6289625345646@s.whatsapp.net --name "Mas Doni" --role "Data Analyst" --authority staff
+aina user get 6289625345646@s.whatsapp.net
+aina user list
+aina user search "Analyst"
+
+# 6. Kontrol & Pengalihan Model AI Runtime
+aina model get
+aina model list
+aina model set gemini-3.8-flash-high
+
+# 7. Validasi Kerapian Basis Pengetahuan (Linter & Auto-Heal)
 aina kb lint --workspace default
 aina kb lint --workspace default --auto-heal
 
-# 6. Kompilasi Ulang Katalog `knowledge/index.md` Deterministik
+# 8. Kompilasi Ulang Katalog `knowledge/index.md` Deterministik
 aina kb groom --workspace default
 
-# 7. Ringkasan Jadwal & Tenggat Waktu (Deadlines)
+# 9. Ringkasan Jadwal & Tenggat Waktu (Deadlines)
 aina kb schedule --workspace default
 
-# 8. Audit Trail Jejak Eksekusi Antigravity CLI
+# 10. Audit Trail Jejak Eksekusi Antigravity CLI
 aina audit --limit 10
 aina audit --query "git" --errors-only
 
-# 9. Informasi Status & Metadata Workspace
+# 11. Informasi Status & Metadata Workspace
 aina workspace info
 aina workspace info --json
 
-# 10. Inisialisasi Workspace Baru Secara Deterministik
+# 12. Inisialisasi Workspace Baru Secara Deterministik
 aina workspace init /var/lib/aina/workspaces/keuangan --title "Divisi Keuangan & Anggaran"
 
-# 11. Sinkronisasi Git Dua Arah Otomatis (Pull Rebase + Safe Push)
+# 13. Sinkronisasi Git Dua Arah Otomatis (Pull Rebase + Safe Push)
 aina sync
 # atau: aina workspace sync --workspace default --message "docs: update SOP cuti"
 
-# 12. Hubungkan Workspace ke Git Remote (GitHub/GitLab)
+# 14. Hubungkan Workspace ke Git Remote (GitHub/GitLab)
 aina link https://github.com/ipds6104/knowledge-base.git
 # atau: aina workspace link https://github.com/ipds6104/knowledge-base.git --workspace default
 
-# 13. Manajemen GitHub CLI (`gh`) & Autentikasi Non-Interaktif / OAuth Device Flow
+# 15. Manajemen GitHub CLI (`gh`) & Autentikasi Non-Interaktif / OAuth Device Flow
 aina workspace gh-status
 aina gh-device                             # Request kode Device Flow (misal: ABCD-1234)
 aina gh-poll                               # Cek status verifikasi browser secara otomatis
@@ -422,7 +482,7 @@ aina gh-login ghp_xxxxxxxxxxxxxxxxxxxx     # Atau login langsung via Personal Ac
 aina workspace gh-create knowledge-base-ipds
 aina workspace gh-create knowledge-base-public --public
 
-# 14. Clone Knowledge Base Repositori Luar & Auto-Groom
+# 16. Clone Knowledge Base Repositori Luar & Auto-Groom
 aina clone https://github.com/ipds6104/knowledge-base.git /var/lib/aina/workspaces/ipds
 ```
 
@@ -525,30 +585,35 @@ python3 scripts/audit_agent.py --since 24h --json > audit_harian.json
 
 ---
 
-## 📦 Engine Arsip & Ekspor Chat WhatsApp (`chat_importer.py` & Native CLI)
+## 📦 Engine Arsip & Ekspor Chat WhatsApp (Temporal Search & Import)
 
 Karena batasan protokol resmi Meta yang hanya menyinkronkan pesan-pesan terkini ke perangkat pendamping (*linked device*), riwayat percakapan bertahun-tahun (1 s.d. 3+ tahun) dari grup kantor sering kali diekspor langsung dari ponsel berupa berkas `.zip` atau `.txt`.
 
-Aina menyediakan engine impor berkinerja tinggi (*streaming regex* & SQLite FTS5) tanpa dependensi eksternal untuk membedah ratusan ribu baris pesan dalam beberapa detik saja:
+Aina menyediakan engine impor berkinerja tinggi (*streaming regex* & SQLite FTS5) terintegrasi langsung di CLI biner untuk membedah ratusan ribu baris pesan dalam beberapa detik saja:
 
 ```bash
-# 1. Impor berkas ekspor chat WhatsApp (.zip / .txt) ke workspace
-python3 scripts/chat_importer.py import /path/ke/chat.zip --workspace default --name "ipds-6104"
+# 1. Impor berkas ekspor chat WhatsApp (.zip / .txt) ke workspace via Native CLI
+aina archive import /path/ke/chat.zip --slug "ipds-6104"
+# Atau lewati ekstraksi media:
+aina archive import /path/ke/chat.txt --slug "tim-proyek" --no-media
 
-# 2. Pencarian teks super cepat (<1ms) via Native CLI (Rekomendasi di Server Produksi)
-aina archive search "reimbursement" --workspace default --limit 5
-aina archive search "SOP pencacahan" --workspace default --json
+# 2. Pencarian teks super cepat (<5ms) & Filter Temporal (Anti-Halusinasi Waktu)
+# Cari pesan 7 hari terakhir:
+aina archive search "reimbursement" --since 7d
 
-# Atau via skrip Python:
-python3 scripts/chat_importer.py search "ipds-6104" --query "reimbursement"
-python3 scripts/chat_importer.py search "ipds-6104" --query "SOP" --since 2024-01-01
+# Cari pesan dalam kurun tanggal tertentu:
+aina archive search "SOP pencacahan" --from 2026-09-01 --to 2026-09-10
 
-# 3. Ekstrak seluruh tautan (Google Sheets, Drive, OneDrive) yang pernah dibagikan
-python3 scripts/chat_importer.py links "ipds-6104" --domain "sheets"
+# Output format JSON terstruktur untuk diproses agent:
+aina archive search "anggaran" --json
 
-# 4. Tampilkan statistik & anggota grup teraktif selama bertahun-tahun
+# 3. Tampilkan statistik & anggota grup teraktif selama bertahun-tahun
 aina archive stats --workspace default
-# Atau: python3 scripts/chat_importer.py stats "ipds-6104"
+
+# 4. Alternatif skrip Python (Legacy Fallback):
+python3 scripts/chat_importer.py import /path/ke/chat.zip --workspace default --name "ipds-6104"
+python3 scripts/chat_importer.py search "ipds-6104" --query "reimbursement"
+python3 scripts/chat_importer.py links "ipds-6104" --domain "sheets"
 ```
 
 ---

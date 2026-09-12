@@ -38,12 +38,13 @@
 
 ---
 
-## 4. Utilitas Kontrol Model AI (Model Controller)
+## 4. Utilitas Kontrol Model AI (Native CLI & Skrip)
 
-Tersedia skrip utilitas di `scripts/model_control.py`:
-- `python3 scripts/model_control.py get` : Cek model AI yang aktif saat ini.
-- `python3 scripts/model_control.py list`: Lihat daftar seluruh model yang didukung.
-- `python3 scripts/model_control.py set <model_name>`: Alihkan model aktif (prioritas keluarga Gemini, Opus hanya bila diminta eksplisit).
+Gunakan perintah native `aina model`:
+- `aina model get`: Cek model AI yang aktif saat ini.
+- `aina model list`: Lihat daftar seluruh model yang didukung dan status aktifnya.
+- `aina model set <model_name>`: Alihkan model aktif di runtime (prioritas keluarga Gemini, Opus hanya bila diminta eksplisit).
+*(Atau via skrip fallback: `python3 scripts/model_control.py [get|list|set <model>]`)*
 
 ---
 
@@ -54,13 +55,18 @@ Tersedia skrip utilitas di `scripts/model_control.py`:
    - `knowledge/procedures.md`: Catat SOP dan panduan alur kerja universal.
    - `knowledge/kegiatan/<slug>/<periode>/README.md`: Untuk kegiatan/survei/proyek berbasis waktu, simpan terpisah dengan metadata YAML frontmatter (`nama`, `kategori`, `rutinitas`, `frekuensi`, `status`, `deadlines`).
 2. **Pelacakan Agenda & Deadlines**:
-   - Gunakan `python3 scripts/workspace_manager.py schedule [--week | --month | --overdue]` untuk menjawab agenda kerja secara faktual dan tepat waktu tanpa spekulasi.
+   - Gunakan `aina kb schedule` (atau `python3 scripts/workspace_manager.py schedule [--week | --month | --overdue]`) untuk menjawab agenda kerja secara faktual dan tepat waktu tanpa spekulasi.
 3. **Merapikan Indeks (Grooming)**:
-   - Jalankan `python3 scripts/workspace_manager.py groom <workspace>` secara berkala agar ringkasan terkompilasi di `knowledge/index.md` selalu mutakhir untuk progressive retrieval.
+   - Jalankan `aina kb groom` (atau `python3 scripts/workspace_manager.py groom <workspace>`) secara berkala agar ringkasan terkompilasi di `knowledge/index.md` selalu mutakhir untuk progressive retrieval.
 4. **Pendeteksi Ketidakrapian Deterministik (Linter)**:
-   - Jalankan `python3 scripts/kb_linter.py <workspace> [--auto-heal]` untuk memverifikasi kerapian struktur folder, metadata frontmatter, dan integritas tanggal tanpa mengonsumsi kuota token LLM.
+   - Jalankan `aina kb lint [--auto-heal]` (atau `python3 scripts/kb_linter.py <workspace> [--auto-heal]`) untuk memverifikasi kerapian struktur folder, metadata frontmatter, dan integritas tanggal tanpa mengonsumsi kuota token LLM.
 5. **Audit Jejak Aksi Mandiri**:
-   - Jalankan `python3 scripts/audit_agent.py [--since <durasi> | --query <kata_kunci>]` untuk memeriksa riwayat perintah bash dan pengeditan berkas yang pernah dilakukan.
-6. **Penyimpanan & Pencarian Arsip Chat (.zip / .txt)**:
-   - Simpan berkas ekspor chat jangka panjang di `data/chats/<slug>/`.
-   - Gunakan `python3 scripts/chat_importer.py search <slug> -q "<query>"` untuk melakukan pencarian full-text deterministik tanpa membanjiri konteks LLM.
+   - Jalankan `aina audit [--limit 10 | --query <kata_kunci>]` (atau `python3 scripts/audit_agent.py [--since <durasi> | --query <kata_kunci>]`) untuk memeriksa riwayat perintah bash dan pengeditan berkas yang pernah dilakukan.
+6. **Penyimpanan & Pencarian Arsip Chat Berbasis Waktu**:
+   - Impor riwayat chat WhatsApp: `aina archive import <path_ke_zip> [--slug <nama>]`
+   - Cari riwayat chat dengan filter temporal: `aina archive search "<query>" --since 7d` (atau `--from YYYY-MM-DD --to YYYY-MM-DD`) untuk mencegah halusinasi anachronistic.
+7. **Manajemen Profil & Otoritas Rekan Kerja (Profiling Memory)**:
+   - Periksa wewenang pengirim: `aina user get <sender_jid>`
+   - Daftarkan/simpan izin rekan kerja: `aina user set <sender_jid> --name "<nama>" --role "<peran>" --authority <admin|staff|guest> --notes "<izin>"`
+   - Cari rekan kerja: `aina user search "<kata_kunci>"`
+   - Tampilkan seluruh daftar: `aina user list`

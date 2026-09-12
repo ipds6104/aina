@@ -6,7 +6,7 @@ Terima kasih atas minat Anda untuk berkontribusi pada proyek **Aina**! Proyek in
 
 ## 🛠️ Prasyarat Pengembangan (Prerequisites)
 
-1. **Rust Toolchain**: Rust 2021 edition (disarankan versi `1.75+`).
+1. **Rust Toolchain**: Rust 2024 edition (disarankan versi `1.85+`).
    ```bash
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
    ```

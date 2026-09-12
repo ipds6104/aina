@@ -16,9 +16,13 @@
 - Simpan skrip automasi di subdirektori `scripts/`.
 - Simpan berkas hasil olahan data atau unduhan sementara di subdirektori `data/`.
 
-## 3. Grooming & Pelacakan Jadwal
-- Gunakan `python3 scripts/workspace_manager.py schedule` untuk melihat jadwal agenda kantor.
-- Jalankan `python3 scripts/workspace_manager.py groom default` untuk memperbarui indeks pengetahuan.
+## 3. Grooming, Pelacakan Jadwal, & Utilitas Native CLI (`aina`)
+- **Agenda & Deadlines**: Jalankan `aina kb schedule` (atau `python3 scripts/workspace_manager.py schedule`).
+- **Grooming Pengetahuan**: Jalankan `aina kb groom` untuk memperbarui indeks katalog `knowledge/index.md`.
+- **Kerapian Pengetahuan**: Jalankan `aina kb lint --auto-heal` untuk memvalidasi dan merapikan format berkas.
+- **Pencarian Riwayat Chat**: Jalankan `aina archive search "<query>" --since 7d` (atau `--from YYYY-MM-DD --to YYYY-MM-DD`).
+- **Profil & Otoritas Rekan Kerja**: Jalankan `aina user get <sender_jid>` dan `aina user set <sender_jid> ...` untuk mengelola hak wewenang.
+- **Kontrol Model AI**: Jalankan `aina model get`, `aina model list`, atau `aina model set <model>`.
 
 ## 4. Eksekusi Perintah Non-Interaktif & GitHub Auth
 - Dilarang keras mengeksekusi perintah CLI interaktif yang memblokir stdin (seperti `gh auth login` interaktif/web, `passwd`, `apt` tanpa `-y`, dll.) karena akan hang hingga timeout 300+ detik.

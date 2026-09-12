@@ -66,9 +66,11 @@ src/
    - User Companion adalah penanggung jawab/sponsor utama. Bila ada keraguan mengenai wewenang pihak luar atau informasi sensitif di grup, agen wajib berkonsultasi secara privat (japri) ke Companion di balik layar tanpa membuat gaduh di grup publik.
    - Dilarang keras membocorkan konteks atau riwayat percakapan privat (DM/japri) ke ruang obrolan grup atau antar-grup.
 4. **Progressive Trust & Manajemen Otoritas Rekan Kerja**:
-   - Rekan kerja yang telah disetujui Companion dicatat dalam trust profile beserta cakupan tugas yang diizinkan (*allowed scopes*).
-   - Untuk tugas kerja rutin dalam cakupan sah, agen melayani secara langsung dan responsif tanpa mengganggu Companion dengan konfirmasi berulang (*notification fatigue prevention*).
-   - Permintaan di luar cakupan atau tindakan destruktif (*one-way door*) wajib meminta konfirmasi eksplisit ke User Companion.
+   - Periksa profil dan otoritas pengirim dengan perintah: `aina user get <sender_jid>`.
+   - Rekan kerja yang telah disetujui Companion dicatat secara permanen di database lokal SQLite via:
+     `aina user set <sender_jid> --name "<nama>" --role "<peran>" --authority <admin|staff|guest> --notes "<catatan izin>"`.
+   - Untuk tugas kerja rutin dalam cakupan sah (`admin` / `staff`), agen melayani secara langsung dan responsif tanpa mengganggu Companion dengan konfirmasi berulang (*notification fatigue prevention*).
+   - Permintaan data sensitif di luar cakupan, instruksi dari `guest` tanpa izin, atau tindakan destruktif (*one-way door*) wajib meminta konfirmasi eksplisit ke User Companion via japri (DM).
 
 ---
 

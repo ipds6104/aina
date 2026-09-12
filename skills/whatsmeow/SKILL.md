@@ -82,6 +82,17 @@ When an authorized user asks to search specific conversations or topics:
    ```
 2. Analisis `matches` yang ditemukan untuk menjawab pertanyaan spesifik pengguna.
 
+> [!TIP]
+> **Pencarian Riwayat Lokal Super Cepat (<5ms) via Native CLI (`aina archive search`)**:
+> Untuk menelusuri riwayat pesan yang telah tercatat di SQLite lokal (`aina.db` atau `messages.db`) dengan filter waktu presisi tanpa membebani gateway Whatsmeow:
+> ```bash
+> # Cari obrolan 7 hari terakhir
+> aina archive search "kata kunci" --since 7d
+>
+> # Cari obrolan rentang tanggal spesifik
+> aina archive search "kata kunci" --from 2026-09-01 --to 2026-09-10
+> ```
+
 ### SOP 4: Exporting Group Chat Backups
 When an authorized user requests a chat backup or comprehensive audit log:
 1. Execute the backup command:
