@@ -6,7 +6,7 @@ pub mod message;
 pub mod persona;
 pub mod sensor;
 
-pub use archive::ArchiveEngine;
+pub use archive::{ArchiveEngine, ArchiveSearchFilter};
 pub use audit::AuditEngine;
 pub use gatekeeper::Gatekeeper;
 pub use knowledge::KnowledgeEngine;

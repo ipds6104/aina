@@ -24,6 +24,79 @@ pub struct ArchiveStats {
     pub file_size_bytes: u64,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ArchiveSearchFilter {
+    pub query: String,
+    pub limit: usize,
+    pub since: Option<String>,
+    pub from_date: Option<String>,
+    pub to_date: Option<String>,
+}
+
+pub fn parse_since_to_timestamp(since_str: &str) -> Option<String> {
+    let s = since_str.trim().to_lowercase();
+    let (val_str, unit) = if let Some(stripped) = s.strip_suffix('d') {
+        (stripped, 'd')
+    } else if let Some(stripped) = s.strip_suffix('h') {
+        (stripped, 'h')
+    } else if let Some(stripped) = s.strip_suffix('m') {
+        (stripped, 'm')
+    } else if let Some(stripped) = s.strip_suffix('s') {
+        (stripped, 's')
+    } else if s.chars().all(|c| c.is_ascii_digit()) {
+        (s.as_str(), 'd')
+    } else {
+        return None;
+    };
+
+    let val: u64 = val_str.parse().ok()?;
+    let secs = match unit {
+        's' => val,
+        'm' => val * 60,
+        'h' => val * 3600,
+        'd' => val * 86400,
+        _ => return None,
+    };
+
+    let now_epoch = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    let cutoff_epoch = now_epoch.saturating_sub(secs) as i64;
+    let days = cutoff_epoch.div_euclid(86400);
+    let rem = cutoff_epoch.rem_euclid(86400);
+    let hh = rem / 3600;
+    let mm = (rem % 3600) / 60;
+    let ss = rem % 60;
+
+    let z = days + 719468;
+    let era = (if z >= 0 { z } else { z - 146096 }) / 146097;
+    let doe = (z - era * 146097) as u32;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = (yoe as i64) + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let final_y = if m <= 2 { y + 1 } else { y };
+
+    Some(format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02}", final_y, m, d, hh, mm, ss))
+}
+
+pub fn normalize_datetime(dt_str: &str, is_end_of_day: bool) -> String {
+    let trimmed = dt_str.trim();
+    if trimmed.len() == 10 && trimmed.chars().nth(4) == Some('-') && trimmed.chars().nth(7) == Some('-') {
+        if is_end_of_day {
+            format!("{} 23:59:59", trimmed)
+        } else {
+            format!("{} 00:00:00", trimmed)
+        }
+    } else {
+        trimmed.to_string()
+    }
+}
+
 pub struct ArchiveEngine;
 
 impl ArchiveEngine {
@@ -74,16 +147,23 @@ impl ArchiveEngine {
             }
         }
 
+        // 4. Check DATABASE_PATH env if specified explicitly
+        if let Ok(db_env) = std::env::var("DATABASE_PATH") {
+            let p = PathBuf::from(db_env);
+            if p.is_file() {
+                dbs.push(p);
+            }
+        }
+
         dbs.sort();
         dbs.dedup();
         dbs
     }
 
-    /// Search a single archive database using FTS5 (BM25 ranking) with fallback to LIKE
-    pub fn search_single_archive<P: AsRef<Path>>(
+    /// Search a single archive database using full filter (FTS5 BM25, temporal range, or LIKE fallback)
+    pub fn search_single_archive_with_filter<P: AsRef<Path>>(
         db_path: P,
-        query: &str,
-        limit: usize,
+        filter: &ArchiveSearchFilter,
     ) -> anyhow::Result<Vec<ArchiveMessage>> {
         let path = db_path.as_ref();
         let archive_name = if path.file_name().and_then(|s| s.to_str()) == Some("messages.db") {
@@ -105,78 +185,159 @@ impl ArchiveEngine {
              PRAGMA busy_timeout = 2000;",
         )?;
 
-        // Check if messages_fts exists
-        let has_fts: bool = conn
-            .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='messages_fts'",
-                [],
-                |row| row.get::<_, i64>(0),
-            )
-            .map(|c| c > 0)
-            .unwrap_or(false);
+        // Determine table name: "messages" (archive) or "message_history" (live database)
+        let (table_name, text_col, sender_col, time_col) = {
+            let has_messages: bool = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='messages'",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .map(|c| c > 0)
+                .unwrap_or(false);
 
-        // Check text column name in `messages`: either "text" or "message"
-        let text_col = {
-            let mut col = "message";
-            if let Ok(mut stmt) = conn.prepare("PRAGMA table_info(messages)") {
-                if let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(1)) {
-                    for name in rows.flatten() {
-                        if name.eq_ignore_ascii_case("text") {
-                            col = "text";
-                            break;
+            let has_message_history: bool = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='message_history'",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .map(|c| c > 0)
+                .unwrap_or(false);
+
+            if has_messages {
+                let mut col = "message";
+                if let Ok(mut stmt) = conn.prepare("PRAGMA table_info(messages)") {
+                    if let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(1)) {
+                        for name in rows.flatten() {
+                            if name.eq_ignore_ascii_case("text") {
+                                col = "text";
+                                break;
+                            }
+                        }
+                    }
+                }
+                ("messages", col, "sender", "timestamp")
+            } else if has_message_history {
+                ("message_history", "text", "sender_jid", "created_at")
+            } else {
+                return Ok(Vec::new());
+            }
+        };
+
+        let cutoff_from: Option<String> = filter
+            .from_date
+            .as_deref()
+            .map(|d| normalize_datetime(d, false))
+            .or_else(|| filter.since.as_deref().and_then(parse_since_to_timestamp));
+
+        let cutoff_to: Option<String> = filter
+            .to_date
+            .as_deref()
+            .map(|d| normalize_datetime(d, true));
+
+        let query_trimmed = filter.query.trim();
+        let mut results = Vec::new();
+
+        if !query_trimmed.is_empty() {
+            // Check if messages_fts exists
+            let has_fts: bool = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='messages_fts'",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .map(|c| c > 0)
+                .unwrap_or(false);
+
+            if has_fts {
+                let sanitized_query = query_trimmed.replace('"', "\"\"");
+                let match_expr = format!("\"{}\"", sanitized_query);
+
+                // Try JOIN query with external content table
+                let sql_join = format!(
+                    "SELECT m.id, m.{}, m.{}, m.{}, bm25(messages_fts) as rank
+                     FROM messages_fts
+                     JOIN {} m ON messages_fts.rowid = m.id
+                     WHERE messages_fts MATCH ?1
+                       AND (?2 IS NULL OR m.{} >= ?2)
+                       AND (?3 IS NULL OR m.{} <= ?3)
+                     ORDER BY rank ASC
+                     LIMIT ?4",
+                    time_col, sender_col, text_col, table_name, time_col, time_col
+                );
+
+                if let Ok(mut stmt) = conn.prepare(&sql_join) {
+                    if let Ok(rows) = stmt.query_map(
+                        params![match_expr, cutoff_from, cutoff_to, filter.limit as i64],
+                        |row| {
+                            Ok(ArchiveMessage {
+                                id: row.get(0)?,
+                                timestamp: row.get(1)?,
+                                sender: row.get(2)?,
+                                message: row.get(3)?,
+                                rank: row.get(4)?,
+                                archive_name: archive_name.clone(),
+                            })
+                        },
+                    ) {
+                        for msg in rows.flatten() {
+                            results.push(msg);
                         }
                     }
                 }
             }
-            col
-        };
 
-        let mut results = Vec::new();
+            // Fallback to LIKE search on detected table
+            if results.is_empty() {
+                let like_expr = format!("%{}%", query_trimmed);
+                let sql = format!(
+                    "SELECT id, {}, {}, {}, 0.0 as rank
+                     FROM {}
+                     WHERE {} LIKE ?1
+                       AND (?2 IS NULL OR {} >= ?2)
+                       AND (?3 IS NULL OR {} <= ?3)
+                     ORDER BY {} DESC
+                     LIMIT ?4",
+                    time_col, sender_col, text_col, table_name, text_col, time_col, time_col, time_col
+                );
 
-        if has_fts {
-            let sanitized_query = query.replace('"', "\"\"");
-            let match_expr = format!("\"{}\"", sanitized_query);
-
-            // 1. Try JOIN query with messages table (canonical for FTS5 external content table)
-            let sql_join = format!(
-                "SELECT m.id, m.timestamp, m.sender, m.{}, bm25(messages_fts) as rank
-                 FROM messages_fts
-                 JOIN messages m ON messages_fts.rowid = m.id
-                 WHERE messages_fts MATCH ?1
-                 ORDER BY rank ASC
-                 LIMIT ?2",
-                text_col
-            );
-
-            if let Ok(mut stmt) = conn.prepare(&sql_join) {
-                if let Ok(rows) = stmt.query_map(params![match_expr, limit as i64], |row| {
-                    Ok(ArchiveMessage {
-                        id: row.get(0)?,
-                        timestamp: row.get(1)?,
-                        sender: row.get(2)?,
-                        message: row.get(3)?,
-                        rank: row.get(4)?,
-                        archive_name: archive_name.clone(),
-                    })
-                }) {
-                    for msg in rows.flatten() {
-                        results.push(msg);
+                if let Ok(mut stmt) = conn.prepare(&sql) {
+                    if let Ok(rows) = stmt.query_map(
+                        params![like_expr, cutoff_from, cutoff_to, filter.limit as i64],
+                        |row| {
+                            Ok(ArchiveMessage {
+                                id: row.get(0)?,
+                                timestamp: row.get(1)?,
+                                sender: row.get(2)?,
+                                message: row.get(3)?,
+                                rank: row.get(4)?,
+                                archive_name: archive_name.clone(),
+                            })
+                        },
+                    ) {
+                        for msg in rows.flatten() {
+                            results.push(msg);
+                        }
                     }
                 }
             }
+        } else {
+            // No keyword query: retrieve recent messages within temporal bounds
+            let sql = format!(
+                "SELECT id, {}, {}, {}, 0.0 as rank
+                 FROM {}
+                 WHERE (?1 IS NULL OR {} >= ?1)
+                   AND (?2 IS NULL OR {} <= ?2)
+                 ORDER BY {} DESC
+                 LIMIT ?3",
+                time_col, sender_col, text_col, table_name, time_col, time_col, time_col
+            );
 
-            // 2. If results still empty, try direct SELECT from messages_fts (standalone virtual table)
-            if results.is_empty() {
-                let sql_direct = format!(
-                    "SELECT rowid, timestamp, sender, {}, bm25(messages_fts) as rank
-                     FROM messages_fts
-                     WHERE messages_fts MATCH ?1
-                     ORDER BY rank ASC
-                     LIMIT ?2",
-                    text_col
-                );
-                if let Ok(mut stmt) = conn.prepare(&sql_direct) {
-                    if let Ok(rows) = stmt.query_map(params![match_expr, limit as i64], |row| {
+            if let Ok(mut stmt) = conn.prepare(&sql) {
+                if let Ok(rows) = stmt.query_map(
+                    params![cutoff_from, cutoff_to, filter.limit as i64],
+                    |row| {
                         Ok(ArchiveMessage {
                             id: row.get(0)?,
                             timestamp: row.get(1)?,
@@ -185,38 +346,8 @@ impl ArchiveEngine {
                             rank: row.get(4)?,
                             archive_name: archive_name.clone(),
                         })
-                    }) {
-                        for msg in rows.flatten() {
-                            results.push(msg);
-                        }
-                    }
-                }
-            }
-        }
-
-        // If FTS5 gave no results or failed, fallback to LIKE search on `messages` table
-        if results.is_empty() {
-            let like_expr = format!("%{}%", query);
-            let sql = format!(
-                "SELECT id, timestamp, sender, {}, 0.0 as rank
-                 FROM messages
-                 WHERE {} LIKE ?1
-                 ORDER BY timestamp DESC
-                 LIMIT ?2",
-                text_col, text_col
-            );
-
-            if let Ok(mut stmt) = conn.prepare(&sql) {
-                if let Ok(rows) = stmt.query_map(params![like_expr, limit as i64], |row| {
-                    Ok(ArchiveMessage {
-                        id: row.get(0)?,
-                        timestamp: row.get(1)?,
-                        sender: row.get(2)?,
-                        message: row.get(3)?,
-                        rank: row.get(4)?,
-                        archive_name: archive_name.clone(),
-                    })
-                }) {
+                    },
+                ) {
                     for msg in rows.flatten() {
                         results.push(msg);
                     }
@@ -228,33 +359,67 @@ impl ArchiveEngine {
         Ok(results)
     }
 
-    /// Search across all archives in the workspace
-    pub fn search_all<P: AsRef<Path>>(
-        workspace_dir: P,
+    /// Search a single archive database using FTS5 (BM25 ranking) with fallback to LIKE (convenience)
+    #[allow(dead_code)]
+    pub fn search_single_archive<P: AsRef<Path>>(
+        db_path: P,
         query: &str,
         limit: usize,
+    ) -> anyhow::Result<Vec<ArchiveMessage>> {
+        Self::search_single_archive_with_filter(
+            db_path,
+            &ArchiveSearchFilter {
+                query: query.to_string(),
+                limit,
+                ..Default::default()
+            },
+        )
+    }
+
+    /// Search across all archives in the workspace with temporal filters
+    pub fn search_all_with_filter<P: AsRef<Path>>(
+        workspace_dir: P,
+        filter: &ArchiveSearchFilter,
     ) -> anyhow::Result<Vec<ArchiveMessage>> {
         let archives = Self::discover_archives(workspace_dir);
         let mut all_results = Vec::new();
 
         for db in archives {
-            if let Ok(mut msgs) = Self::search_single_archive(&db, query, limit) {
+            if let Ok(mut msgs) = Self::search_single_archive_with_filter(&db, filter) {
                 all_results.append(&mut msgs);
             }
         }
 
-        // Sort by rank ascending (lower BM25 is better match in SQLite FTS5)
+        // Sort by rank ascending, then timestamp descending
         all_results.sort_by(|a, b| {
-            a.rank
-                .partial_cmp(&b.rank)
-                .unwrap_or(std::cmp::Ordering::Equal)
+            match a.rank.partial_cmp(&b.rank).unwrap_or(std::cmp::Ordering::Equal) {
+                std::cmp::Ordering::Equal => b.timestamp.cmp(&a.timestamp),
+                other => other,
+            }
         });
 
-        if all_results.len() > limit {
-            all_results.truncate(limit);
+        if all_results.len() > filter.limit {
+            all_results.truncate(filter.limit);
         }
 
         Ok(all_results)
+    }
+
+    /// Search across all archives in the workspace (convenience)
+    #[allow(dead_code)]
+    pub fn search_all<P: AsRef<Path>>(
+        workspace_dir: P,
+        query: &str,
+        limit: usize,
+    ) -> anyhow::Result<Vec<ArchiveMessage>> {
+        Self::search_all_with_filter(
+            workspace_dir,
+            &ArchiveSearchFilter {
+                query: query.to_string(),
+                limit,
+                ..Default::default()
+            },
+        )
     }
 
     /// Retrieve statistics for an archive database
@@ -276,13 +441,28 @@ impl ArchiveEngine {
         let file_size_bytes = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
         let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
 
+        let has_messages: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='messages'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|c| c > 0)
+            .unwrap_or(false);
+
+        let (table_name, sender_col, time_col) = if has_messages {
+            ("messages", "sender", "timestamp")
+        } else {
+            ("message_history", "sender_jid", "created_at")
+        };
+
         let total_messages: i64 = conn
-            .query_row("SELECT COUNT(*) FROM messages", [], |row| row.get(0))
+            .query_row(&format!("SELECT COUNT(*) FROM {}", table_name), [], |row| row.get(0))
             .unwrap_or(0);
 
         let total_participants: i64 = conn
             .query_row(
-                "SELECT COUNT(DISTINCT sender) FROM messages WHERE sender != 'System'",
+                &format!("SELECT COUNT(DISTINCT {}) FROM {} WHERE {} != 'System'", sender_col, table_name, sender_col),
                 [],
                 |row| row.get(0),
             )
@@ -290,7 +470,7 @@ impl ArchiveEngine {
 
         let earliest_date: Option<String> = conn
             .query_row(
-                "SELECT MIN(timestamp) FROM messages WHERE timestamp IS NOT NULL AND timestamp != ''",
+                &format!("SELECT MIN({}) FROM {} WHERE {} IS NOT NULL AND {} != ''", time_col, table_name, time_col, time_col),
                 [],
                 |row| row.get(0),
             )
@@ -298,7 +478,7 @@ impl ArchiveEngine {
 
         let latest_date: Option<String> = conn
             .query_row(
-                "SELECT MAX(timestamp) FROM messages WHERE timestamp IS NOT NULL AND timestamp != ''",
+                &format!("SELECT MAX({}) FROM {} WHERE {} IS NOT NULL AND {} != ''", time_col, table_name, time_col, time_col),
                 [],
                 |row| row.get(0),
             )
@@ -386,10 +566,50 @@ mod tests {
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].sender, "Budi");
 
-        let stats = ArchiveEngine::get_all_stats(&temp_dir).unwrap();
-        assert_eq!(stats.len(), 1);
-        assert_eq!(stats[0].total_messages, 3);
-        assert_eq!(stats[0].total_participants, 2);
+        let db_path = temp_dir.join("knowledge").join("archives").join("chat_test.db");
+        let stats = ArchiveEngine::get_stats(&db_path).unwrap();
+        assert_eq!(stats.total_messages, 3);
+        assert_eq!(stats.total_participants, 2);
+
+        let all_stats = ArchiveEngine::get_all_stats(&temp_dir).unwrap();
+        assert_eq!(all_stats.len(), 1);
+
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn test_search_live_message_history() {
+        let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let temp_dir = std::env::temp_dir().join(format!("aina_test_live_db_{}", id));
+        let data_dir = temp_dir.join("data");
+        std::fs::create_dir_all(&data_dir).unwrap();
+        let db_path = data_dir.join("aina.db");
+
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE message_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_jid TEXT NOT NULL,
+                sender_jid TEXT NOT NULL,
+                text TEXT NOT NULL,
+                is_from_me BOOLEAN NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            INSERT INTO message_history (id, chat_jid, sender_jid, text, is_from_me, created_at) VALUES
+                (1, 'group1@g.us', '628123456@s.whatsapp.net', 'Apakah server redis sudah di-deploy?', 0, '2026-09-10 08:00:00'),
+                (2, 'group1@g.us', 'bot@s.whatsapp.net', 'Sudah aktif di port 6379 mas.', 1, '2026-09-10 08:01:00');",
+        )
+        .unwrap();
+
+        let results = ArchiveEngine::search_single_archive(&db_path, "redis", 10).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].sender, "628123456@s.whatsapp.net");
+        assert!(results[0].message.contains("redis"));
+
+        let stats = ArchiveEngine::get_stats(&db_path).unwrap();
+        assert_eq!(stats.total_messages, 2);
+        assert_eq!(stats.total_participants, 2);
+
         let _ = std::fs::remove_dir_all(temp_dir);
     }
 }

@@ -1,5 +1,5 @@
 use crate::core::domain::knowledge::GhPollStatus;
-use crate::core::domain::{ArchiveEngine, AuditEngine, KnowledgeEngine};
+use crate::core::domain::{ArchiveEngine, ArchiveSearchFilter, AuditEngine, KnowledgeEngine};
 use std::path::{Path, PathBuf};
 
 pub struct CliDispatcher;
@@ -13,11 +13,14 @@ PENGGUNAAN:
     aina [SUBCOMMAND] [OPTIONS]
     aina [server | daemon]    # Menjalankan daemon webhook Aina (default)
 
-SUBCOMMANDS:
-    archive search <query>    Pencarian instan riwayat obrolan (SQLite FTS5 BM25)
+    archive search [query]    Pencarian instan riwayat obrolan (FTS5 BM25 + Filter Temporal)
                               Options:
-                                --workspace, -w <dir>   Path workspace (default: workspaces/default)
+                                --since, -s <durasi>    Filter durasi lampau (misal: 1h, 24h, 7d, 30d)
+                                --days, -d <n>          Filter n hari terakhir (alias cepat --since nd)
+                                --from <YYYY-MM-DD>     Filter tanggal/waktu awal (misal: 2026-09-01)
+                                --to <YYYY-MM-DD>       Filter tanggal/waktu akhir (misal: 2026-09-10)
                                 --limit, -l <n>         Batas hasil (default: 10)
+                                --workspace, -w <dir>   Path workspace (default: workspaces/default)
                                 --json                  Output format JSON terstruktur
 
     archive stats             Statistik arsip obrolan di workspace
@@ -93,6 +96,25 @@ SUBCOMMANDS:
 
     status                    Alias cepat untuk `whatsapp status`
 
+    user list                 Daftar seluruh profil rekan kerja & wewenang (Profiling Memory)
+                              Options:
+                                --json                  Output format JSON terstruktur
+
+    user get <jid>            Detail profil & wewenang rekan kerja spesifik
+                              Options:
+                                --json                  Output format JSON terstruktur
+
+    user set <jid>            Perbarui/simpan profil & wewenang rekan kerja
+                              Options:
+                                --name <nama>           Nama rekan kerja
+                                --role <peran>          Peran / jabatan tim
+                                --authority <level>     Tingkat wewenang (admin | staff | guest)
+                                --notes <catatan>       Catatan otorisasi & izin yang diberikan
+
+    user search <query>       Cari profil rekan kerja berdasarkan kata kunci
+                              Options:
+                                --json                  Output format JSON terstruktur
+
     help, --help, -h          Tampilkan panduan ini
 "#
         );
@@ -122,6 +144,7 @@ SUBCOMMANDS:
             "audit" => Self::handle_audit(&args[2..]),
             "whatsapp" | "wa" => Self::handle_whatsapp(&args[2..]),
             "status" => Self::handle_whatsapp(&args[1..]),
+            "user" | "profile" => Self::handle_user(&args[2..]),
             _ => {
                 eprintln!("Subcommand tidak dikenal: `{}`. Ketik `aina help`.", cmd);
                 std::process::exit(1);
@@ -203,14 +226,37 @@ SUBCOMMANDS:
 
         match sub {
             "search" => {
-                let mut query = None;
+                let mut query = String::new();
                 let mut limit = 10;
+                let mut since: Option<String> = None;
+                let mut from_date: Option<String> = None;
+                let mut to_date: Option<String> = None;
 
                 let mut idx = 1;
                 while idx < args.len() {
                     let arg = &args[idx];
                     if (arg == "--limit" || arg == "-l") && idx + 1 < args.len() {
                         limit = args[idx + 1].parse().unwrap_or(10);
+                        idx += 2;
+                        continue;
+                    }
+                    if (arg == "--since" || arg == "-s") && idx + 1 < args.len() {
+                        since = Some(args[idx + 1].clone());
+                        idx += 2;
+                        continue;
+                    }
+                    if (arg == "--days" || arg == "-d") && idx + 1 < args.len() {
+                        since = Some(format!("{}d", args[idx + 1]));
+                        idx += 2;
+                        continue;
+                    }
+                    if arg == "--from" && idx + 1 < args.len() {
+                        from_date = Some(args[idx + 1].clone());
+                        idx += 2;
+                        continue;
+                    }
+                    if arg == "--to" && idx + 1 < args.len() {
+                        to_date = Some(args[idx + 1].clone());
                         idx += 2;
                         continue;
                     }
@@ -222,33 +268,56 @@ SUBCOMMANDS:
                         idx += 1;
                         continue;
                     }
-                    if query.is_none() {
-                        query = Some(arg.as_str());
+                    if query.is_empty() && !arg.starts_with('-') {
+                        query = arg.clone();
                     }
                     idx += 1;
                 }
 
-                let q = match query {
-                    Some(q) => q,
-                    None => {
-                        eprintln!("Error: Kata kunci pencarian wajib disertakan.");
-                        std::process::exit(1);
-                    }
+                if query.trim().is_empty() && since.is_none() && from_date.is_none() && to_date.is_none() {
+                    eprintln!("Error: Harap sertakan kata kunci pencarian atau filter waktu (--since / --days / --from / --to).");
+                    std::process::exit(1);
+                }
+
+                let filter = ArchiveSearchFilter {
+                    query: query.clone(),
+                    limit,
+                    since: since.clone(),
+                    from_date: from_date.clone(),
+                    to_date: to_date.clone(),
                 };
 
-                let results = ArchiveEngine::search_all(&ws, q, limit)?;
+                let results = ArchiveEngine::search_all_with_filter(&ws, &filter)?;
 
                 if is_json {
                     println!("{}", serde_json::to_string_pretty(&results)?);
                 } else {
+                    let query_label = if query.is_empty() { "(Semua Topik)" } else { &query };
+                    let mut filter_desc = Vec::new();
+                    if let Some(s) = &since {
+                        filter_desc.push(format!("sejak {} terakhir", s));
+                    }
+                    if let Some(f) = &from_date {
+                        filter_desc.push(format!("dari {}", f));
+                    }
+                    if let Some(t) = &to_date {
+                        filter_desc.push(format!("s.d. {}", t));
+                    }
+                    let extra_info = if filter_desc.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" [{}]", filter_desc.join(", "))
+                    };
+
                     println!(
-                        "🔍 Hasil Pencarian Arsip [{}]: {} ditemukan (limit: {})\n",
-                        q,
+                        "🔍 Hasil Pencarian Arsip [{}{}]: {} pesan ditemukan (limit: {})\n",
+                        query_label,
+                        extra_info,
                         results.len(),
                         limit
                     );
                     if results.is_empty() {
-                        println!("(Tidak ada percakapan yang cocok)");
+                        println!("(Tidak ada percakapan yang cocok dengan kriteria pencarian)");
                     } else {
                         for (i, r) in results.iter().enumerate() {
                             println!(
@@ -754,6 +823,255 @@ SUBCOMMANDS:
             }
             _ => {
                 println!("Penggunaan: aina whatsapp status [--json]");
+                Ok(())
+            }
+        }
+    }
+
+    fn handle_user(args: &[String]) -> anyhow::Result<()> {
+        if args.is_empty() {
+            println!(
+                r#"Penggunaan manajemen profil & wewenang rekan kerja (Aina Profiling Memory):
+    aina user list [--json]
+    aina user get <jid_atau_nama> [--json]
+    aina user set <jid> [--name <nama>] [--role <peran>] [--authority <admin|staff|guest>] [--notes <catatan>]
+    aina user search <query> [--json]
+"#
+            );
+            return Ok(());
+        }
+
+        let config_path = std::env::var("AINA_CONFIG").unwrap_or_else(|_| "config/config.yaml".to_string());
+        let config = crate::config::AppConfig::load_from_file_or_default(&config_path);
+        let db_path = std::env::var("DATABASE_PATH").unwrap_or(config.database.path);
+
+        let conn = match rusqlite::Connection::open(&db_path) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("⚠️ Tidak dapat membuka database di {}: {}", db_path, e);
+                std::process::exit(1);
+            }
+        };
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS user_profiles (
+                sender_jid TEXT PRIMARY KEY,
+                name TEXT,
+                role TEXT,
+                authority_level TEXT NOT NULL DEFAULT 'staff',
+                notes TEXT,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )",
+            [],
+        )?;
+
+        let subcmd = args[0].as_str();
+        match subcmd {
+            "list" | "ls" => {
+                let as_json = args.iter().any(|a| a == "--json");
+                let mut stmt = conn.prepare(
+                    "SELECT sender_jid, name, role, authority_level, notes, updated_at
+                     FROM user_profiles
+                     ORDER BY updated_at DESC",
+                )?;
+
+                let rows = stmt.query_map([], |row| {
+                    Ok(serde_json::json!({
+                        "sender_jid": row.get::<_, String>(0)?,
+                        "name": row.get::<_, Option<String>>(1)?,
+                        "role": row.get::<_, Option<String>>(2)?,
+                        "authority_level": row.get::<_, String>(3)?,
+                        "notes": row.get::<_, Option<String>>(4)?,
+                        "updated_at": row.get::<_, Option<String>>(5)?,
+                    }))
+                })?;
+
+                let mut profiles = Vec::new();
+                for r in rows.flatten() {
+                    profiles.push(r);
+                }
+
+                if as_json {
+                    println!("{}", serde_json::to_string_pretty(&profiles)?);
+                    return Ok(());
+                }
+
+                println!("👤 Profil Pengguna Terdaftar (Aina Profiling Memory & Access Control)");
+                println!("================================================================================");
+                if profiles.is_empty() {
+                    println!("(Belum ada profil pengguna tersimpan)");
+                } else {
+                    for p in &profiles {
+                        let jid = p["sender_jid"].as_str().unwrap_or("-");
+                        let name = p["name"].as_str().unwrap_or("-");
+                        let role = p["role"].as_str().unwrap_or("-");
+                        let auth = p["authority_level"].as_str().unwrap_or("staff").to_uppercase();
+                        let notes = p["notes"].as_str().unwrap_or("-");
+                        println!("• {} ({})", name, jid);
+                        println!("  Peran: {} | Otoritas: {}", role, auth);
+                        println!("  Catatan / Izin: {}", notes);
+                        println!("--------------------------------------------------------------------------------");
+                    }
+                }
+                Ok(())
+            }
+            "get" => {
+                if args.len() < 2 {
+                    eprintln!("Format salah. Contoh: aina user get 628123456789@s.whatsapp.net");
+                    std::process::exit(1);
+                }
+                let target = &args[1];
+                let as_json = args.iter().any(|a| a == "--json");
+                let target_like = format!("%{}%", target);
+
+                let mut stmt = conn.prepare(
+                    "SELECT sender_jid, name, role, authority_level, notes, updated_at
+                     FROM user_profiles
+                     WHERE sender_jid = ?1 OR sender_jid LIKE ?2 OR name LIKE ?2
+                     LIMIT 1",
+                )?;
+
+                let mut rows = stmt.query(rusqlite::params![target, target_like])?;
+                if let Some(row) = rows.next()? {
+                    let jid: String = row.get(0)?;
+                    let name: Option<String> = row.get(1)?;
+                    let role: Option<String> = row.get(2)?;
+                    let auth: String = row.get(3)?;
+                    let notes: Option<String> = row.get(4)?;
+                    let updated: Option<String> = row.get(5)?;
+
+                    if as_json {
+                        let val = serde_json::json!({
+                            "sender_jid": jid,
+                            "name": name,
+                            "role": role,
+                            "authority_level": auth,
+                            "notes": notes,
+                            "updated_at": updated,
+                        });
+                        println!("{}", serde_json::to_string_pretty(&val)?);
+                    } else {
+                        println!("👤 Detail Profil Pengguna");
+                        println!("• WhatsApp JID : {}", jid);
+                        println!("• Nama         : {}", name.as_deref().unwrap_or("-"));
+                        println!("• Peran / Tim  : {}", role.as_deref().unwrap_or("-"));
+                        println!("• Otoritas     : {}", auth.to_uppercase());
+                        println!("• Catatan/Izin : {}", notes.as_deref().unwrap_or("-"));
+                        println!("• Terakhir Update: {}", updated.as_deref().unwrap_or("-"));
+                    }
+                } else {
+                    println!("⚠️ Profil untuk `{}` tidak ditemukan.", target);
+                }
+                Ok(())
+            }
+            "set" => {
+                if args.len() < 2 {
+                    eprintln!("Format salah. Contoh: aina user set 628123456789@s.whatsapp.net --name 'Budi' --role 'Developer' --authority staff --notes 'Diizinkan akses rekap'");
+                    std::process::exit(1);
+                }
+                let jid = if args[1].contains('@') {
+                    args[1].clone()
+                } else {
+                    format!("{}@s.whatsapp.net", args[1])
+                };
+
+                let mut name: Option<String> = None;
+                let mut role: Option<String> = None;
+                let mut authority: Option<String> = None;
+                let mut notes: Option<String> = None;
+
+                let mut i = 2;
+                while i < args.len() {
+                    match args[i].as_str() {
+                        "--name" | "-n" if i + 1 < args.len() => {
+                            name = Some(args[i + 1].clone());
+                            i += 2;
+                        }
+                        "--role" | "-r" if i + 1 < args.len() => {
+                            role = Some(args[i + 1].clone());
+                            i += 2;
+                        }
+                        "--authority" | "-a" if i + 1 < args.len() => {
+                            authority = Some(args[i + 1].to_lowercase());
+                            i += 2;
+                        }
+                        "--notes" | "-m" if i + 1 < args.len() => {
+                            notes = Some(args[i + 1].clone());
+                            i += 2;
+                        }
+                        _ => i += 1,
+                    }
+                }
+
+                conn.execute(
+                    "INSERT INTO user_profiles (sender_jid, name, role, authority_level, notes, updated_at)
+                     VALUES (?1, ?2, ?3, COALESCE(?4, 'staff'), ?5, CURRENT_TIMESTAMP)
+                     ON CONFLICT(sender_jid) DO UPDATE SET
+                         name = COALESCE(?2, user_profiles.name),
+                         role = COALESCE(?3, user_profiles.role),
+                         authority_level = COALESCE(?4, user_profiles.authority_level),
+                         notes = COALESCE(?5, user_profiles.notes),
+                         updated_at = CURRENT_TIMESTAMP",
+                    rusqlite::params![jid, name, role, authority, notes],
+                )?;
+
+                println!("✅ Profil pengguna `{}` berhasil diperbarui di Aina Profiling Memory.", jid);
+                Ok(())
+            }
+            "search" | "find" => {
+                if args.len() < 2 {
+                    eprintln!("Format salah. Contoh: aina user search 'Budi'");
+                    std::process::exit(1);
+                }
+                let q = &args[1];
+                let as_json = args.iter().any(|a| a == "--json");
+                let like_expr = format!("%{}%", q);
+
+                let mut stmt = conn.prepare(
+                    "SELECT sender_jid, name, role, authority_level, notes, updated_at
+                     FROM user_profiles
+                     WHERE sender_jid LIKE ?1 OR name LIKE ?1 OR role LIKE ?1 OR notes LIKE ?1
+                     ORDER BY updated_at DESC",
+                )?;
+
+                let rows = stmt.query_map(rusqlite::params![like_expr], |row| {
+                    Ok(serde_json::json!({
+                        "sender_jid": row.get::<_, String>(0)?,
+                        "name": row.get::<_, Option<String>>(1)?,
+                        "role": row.get::<_, Option<String>>(2)?,
+                        "authority_level": row.get::<_, String>(3)?,
+                        "notes": row.get::<_, Option<String>>(4)?,
+                        "updated_at": row.get::<_, Option<String>>(5)?,
+                    }))
+                })?;
+
+                let mut matches = Vec::new();
+                for r in rows.flatten() {
+                    matches.push(r);
+                }
+
+                if as_json {
+                    println!("{}", serde_json::to_string_pretty(&matches)?);
+                    return Ok(());
+                }
+
+                println!("🔍 Hasil Pencarian Profil untuk kata kunci `{}` (Ditemukan: {})", q, matches.len());
+                println!("================================================================================");
+                for m in &matches {
+                    let jid = m["sender_jid"].as_str().unwrap_or("-");
+                    let name = m["name"].as_str().unwrap_or("-");
+                    let role = m["role"].as_str().unwrap_or("-");
+                    let auth = m["authority_level"].as_str().unwrap_or("staff").to_uppercase();
+                    let notes = m["notes"].as_str().unwrap_or("-");
+                    println!("• {} ({})", name, jid);
+                    println!("  Peran: {} | Otoritas: {}", role, auth);
+                    println!("  Catatan / Izin: {}", notes);
+                    println!("--------------------------------------------------------------------------------");
+                }
+                Ok(())
+            }
+            _ => {
+                eprintln!("Subcommand user tidak dikenal: `{}`. Pilihan: list, get, set, search.", subcmd);
                 Ok(())
             }
         }
