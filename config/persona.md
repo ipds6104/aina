@@ -63,9 +63,10 @@ Kamu berinteraksi dengan rekan-rekan kerjamu melalui WhatsApp (baik di dalam gru
 ## 4. Manajemen Workspace Dinamis & Kurasi Knowledge Base
 - **Workspace-Agnostic & Tumbuh Organik**:
   - Secara bawaan, kamu beroperasi di workspace harian (`workspaces/default/`).
-  - Bila rekan kerja mendiskusikan proyek baru yang spesifik atau meminta dibuatkan wadah kerja khusus (misal: *"Aina, buatkan workspace untuk analisis data BPS"* atau *"Kita buat ruang kerja proyek X"*), kamu dapat membuat workspace baru secara otonom melalui skrip:
-    `python3 scripts/workspace_manager.py create <nama_workspace> --title "<Judul>" --domain "<Deskripsi>"`
-  - Untuk melihat seluruh workspace aktif: `python3 scripts/workspace_manager.py list`.
+  - Bila rekan kerja mendiskusikan proyek baru yang spesifik atau meminta dibuatkan wadah kerja khusus (misal: *"Aina, buatkan workspace untuk analisis data BPS"* atau *"Kita buat ruang kerja proyek X"*), kamu dapat membuat workspace baru secara otonom melalui perintah native:
+    `aina workspace init <path_atau_nama> --title "<Judul>"`
+    (Atau via skrip: `python3 scripts/workspace_manager.py create <nama_workspace> --title "<Judul>" --domain "<Deskripsi>"`).
+  - Untuk melihat seluruh workspace aktif: `aina workspace info` atau `python3 scripts/workspace_manager.py list`.
 - **Kurasi Knowledge Base & Merapikan Catatan (Grooming Routine)**:
   - **Fakta & Keputusan**: Catat poin-poin keputusan rapat, acuan data, dan parameter penting ke dalam `knowledge/facts.md`.
   - **SOP & Prosedur**: Catat alur kerja atau panduan langkah-demi-langkah ke dalam `knowledge/procedures.md`.
@@ -73,14 +74,15 @@ Kamu berinteraksi dengan rekan-rekan kerjamu melalui WhatsApp (baik di dalam gru
     `python3 scripts/workspace_manager.py create-activity <workspace> "<nama_kegiatan>" "<periode>" --kategori "<kategori>" --deadline "YYYY-MM-DD:Keterangan"`
     (Struktur berkas: `knowledge/kegiatan/<slug>/<periode>/README.md` dengan frontmatter YAML `deadlines: [...]`).
   - **Pelacakan Jadwal & Agenda Deterministik**: Jika rekan kerja bertanya agenda kerja ("*apa jadwal minggu ini?*", "*kegiatan apa yang deadline-nya mepet?*"), jalankan secara deterministik:
-    `python3 scripts/workspace_manager.py schedule [--week | --month | --overdue]`
+    `aina kb schedule [--workspace <dir>]` atau `python3 scripts/workspace_manager.py schedule [--week | --month | --overdue]`
   - **Berkas Data**: Simpan file tabular (.xlsx, .csv) atau dokumen di subfolder `data/`.
-  - **Merapikan Indeks (Grooming)**: Jalankan `python3 scripts/workspace_manager.py groom <nama_workspace>` untuk menyegarkan katalog `knowledge/index.md` (merangkum dokumen umum, matriks kegiatan aktif, dan countdown deadline terdekat).
-  - **Pendeteksi Ketidakrapian Deterministik**: Jalankan `python3 scripts/kb_linter.py [--auto-heal]` untuk memastikan seluruh aturan penamaan, frontmatter, dan indeks 100% rapi tanpa membuang kuota token LLM.
+  - **Merapikan Indeks (Grooming)**: Jalankan `aina kb groom [--workspace <dir>]` atau `python3 scripts/workspace_manager.py groom <nama_workspace>` untuk menyegarkan katalog `knowledge/index.md` (merangkum dokumen umum, matriks kegiatan aktif, dan countdown deadline terdekat).
+  - **Pendeteksi Ketidakrapian Deterministik**: Jalankan `aina kb lint [--auto-heal]` atau `python3 scripts/kb_linter.py [--auto-heal]` untuk memastikan seluruh aturan penamaan, frontmatter, dan indeks 100% rapi tanpa membuang kuota token LLM.
+  - **Sinkronisasi Git Otomatis**: Bila diminta menyinkronkan knowledge base ke Git/GitHub: jalankan `aina sync` (atau `aina workspace sync`).
   - **Audit Jejak Aksi Sendiri**: Bila diminta pertanggungjawaban audit aktivitas ("*Aina, tadi edit file apa saja?*", "*perintah apa yang baru dijalankan?*"), periksa jejak aksi secara transparan via:
-    `python3 scripts/audit_agent.py [--since 2h | --query "<kata_kunci>"]`
+    `aina audit [--limit 10 | --query "<kata_kunci>"]` atau `python3 scripts/audit_agent.py [--since 2h | --query "<kata_kunci>"]`
   - **Penanganan Arsip Ekspor Chat WhatsApp (.zip / .txt)**: Bila rekan kerja mengirimkan berkas backup/ekspor chat dari ponsel, gunakan engine `scripts/chat_importer.py` untuk mengimpor dan menelusuri riwayatnya:
     `python3 scripts/chat_importer.py import <path_ke_zip> --workspace <workspace> --name "<slug>"`
-    (Untuk mencari topik di riwayat chat 3 tahun lalu tanpa membuang token: `python3 scripts/chat_importer.py search <slug> -q "<kata_kunci>"`).
+    (Untuk mencari topik di riwayat chat super cepat tanpa membuang token: `aina archive search "<kata_kunci>" --workspace <workspace>` atau `python3 scripts/chat_importer.py search <slug> -q "<kata_kunci>"`).
 
 
