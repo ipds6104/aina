@@ -158,6 +158,7 @@ impl ProcessIncomingMessageUseCase {
                 let chat_jid = msg.chat_jid.clone();
                 let msg_id = msg.id.clone();
                 let session_role = msg.session_role;
+                let can_ack = should_send_interim_ack(&msg.text);
 
                 let heartbeat_handle = tokio::spawn(async move {
                     let mut elapsed_secs = 0;
@@ -171,8 +172,8 @@ impl ProcessIncomingMessageUseCase {
                             .send_presence_with_session(&chat_jid, PresenceState::Composing, session_role)
                             .await;
 
-                        // If task takes longer than 6 seconds, send a friendly interim ack once
-                        if elapsed_secs >= 6 && !ack_sent {
+                        // Only send interim ack for real actionable tasks (never for greetings/pings) if taking >= 8s
+                        if can_ack && elapsed_secs >= 8 && !ack_sent {
                             let ack_text = "okee sebentarr...".to_string();
                             let _ = whatsapp
                                 .send_text_with_session(&chat_jid, &ack_text, Some(&msg_id), session_role)
@@ -236,3 +237,90 @@ impl ProcessIncomingMessageUseCase {
         }
     }
 }
+
+/// Evaluates whether an incoming message is a substantive, actionable task
+/// that warrants an interim "okee sebentarr..." acknowledgment if it takes longer than 8 seconds.
+/// Greetings, short pings, acknowledgments, and commands are strictly excluded.
+pub fn should_send_interim_ack(text: &str) -> bool {
+    let lower = text.trim().to_lowercase();
+    if lower.is_empty() {
+        return false;
+    }
+
+    // 1. Fast reject commands (like /model, /reset, /clear)
+    if lower.starts_with('/') || lower.starts_with('!') {
+        return false;
+    }
+
+    // 2. Reject short greetings, pings, thanks, and trivial acknowledgments
+    let greetings_and_pings = [
+        "halo", "hai", "hei", "hey", "p", "ping", "aina",
+        "pagi", "siang", "sore", "malam",
+        "assalamualaikum", "assalamu'alaikum", "assalamu alaikum",
+        "tes", "test", "testing", "ok", "oke", "okee", "sip", "sipp", "siap", "siapp",
+        "makasih", "terimakasih", "terima kasih", "thanks", "thx",
+        "apa kabar", "gimana kabar", "lagi apa",
+    ];
+
+    let stripped = lower
+        .chars()
+        .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+        .collect::<String>();
+    let clean = stripped.trim();
+
+    for g in &greetings_and_pings {
+        if clean == *g
+            || clean == format!("halo {}", g)
+            || clean == format!("hai {}", g)
+            || clean == format!("selamat {}", g)
+        {
+            return false;
+        }
+    }
+
+    // 3. If the message is very short (<= 2 words) and contains no action verbs or inquiry keywords, do not ack
+    let words: Vec<&str> = lower.split_whitespace().collect();
+    if words.len() <= 2 {
+        let task_keywords = [
+            "cek", "cari", "buat", "bikin", "tolong", "bisa", "apa", "kenapa",
+            "gimana", "bagaimana", "run", "script", "log", "analisis", "hitung", "bantu",
+        ];
+        let has_task_keyword = task_keywords.iter().any(|k| lower.contains(k));
+        if !has_task_keyword {
+            return false;
+        }
+    }
+
+    true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_should_not_ack_greetings_and_pings() {
+        assert!(!should_send_interim_ack("Halo aina"));
+        assert!(!should_send_interim_ack("halo"));
+        assert!(!should_send_interim_ack("hai"));
+        assert!(!should_send_interim_ack("@Aina"));
+        assert!(!should_send_interim_ack("Aina"));
+        assert!(!should_send_interim_ack("P"));
+        assert!(!should_send_interim_ack("ping"));
+        assert!(!should_send_interim_ack("pagi"));
+        assert!(!should_send_interim_ack("selamat malam"));
+        assert!(!should_send_interim_ack("makasih ya"));
+        assert!(!should_send_interim_ack("oke sip"));
+        assert!(!should_send_interim_ack("/model status"));
+    }
+
+    #[test]
+    fn test_should_ack_actionable_tasks() {
+        assert!(should_send_interim_ack("Coba kamu buatkan semua list chat hari ini"));
+        assert!(should_send_interim_ack("Tolong cek log docker container sekarang"));
+        assert!(should_send_interim_ack("Bisa buatkan script python untuk backup database?"));
+        assert!(should_send_interim_ack("Kenapa server tadi sempat restart?"));
+        assert!(should_send_interim_ack("Apa kamu tau chat yang aku reply ini tulisannya apa?"));
+    }
+}
+
