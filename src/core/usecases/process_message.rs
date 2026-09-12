@@ -153,14 +153,48 @@ impl ProcessIncomingMessageUseCase {
                 // 5. Build prompt incorporating persona, organization context, and profiling
                 let prompt = self.persona_engine.build_prompt(&msg, profile.as_ref());
 
+                // Start async presence heartbeat + fast ack timer if execution takes long
+                let whatsapp = Arc::clone(&self.whatsapp);
+                let chat_jid = msg.chat_jid.clone();
+                let msg_id = msg.id.clone();
+                let session_role = msg.session_role;
+                let caller_name = msg.sender.name.clone().unwrap_or_else(|| "Kak".to_string());
+
+                let heartbeat_handle = tokio::spawn(async move {
+                    let mut elapsed_secs = 0;
+                    let mut ack_sent = false;
+                    loop {
+                        tokio::time::sleep(tokio::time::Duration::from_secs(4)).await;
+                        elapsed_secs += 4;
+
+                        // Keep typing presence alive on WhatsApp
+                        let _ = whatsapp
+                            .send_presence_with_session(&chat_jid, PresenceState::Composing, session_role)
+                            .await;
+
+                        // If task takes longer than 6 seconds, send a friendly interim ack once
+                        if elapsed_secs >= 6 && !ack_sent {
+                            let ack_text = format!("_Sebentar ya {}, sedang Aina telusuri dan siapkan..._ ⏳", caller_name);
+                            let _ = whatsapp
+                                .send_text_with_session(&chat_jid, &ack_text, Some(&msg_id), session_role)
+                                .await;
+                            ack_sent = true;
+                        }
+                    }
+                });
+
                 // 6. Execute Antigravity agent CLI
                 let agent_res = match self
                     .agent_engine
                     .execute(existing_conv_id.as_deref(), &prompt)
                     .await
                 {
-                    Ok(res) => res,
+                    Ok(res) => {
+                        heartbeat_handle.abort();
+                        res
+                    }
                     Err(e) => {
+                        heartbeat_handle.abort();
                         error!("Agent engine failed to execute: {}", e);
                         let err_reply = "Maaf, terjadi kesalahan saat memproses permintaan Anda. Silakan coba sesaat lagi.";
                         let _ = self
