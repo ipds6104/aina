@@ -26,7 +26,7 @@ Aina dirancang bukan sebagai bot CS yang kaku, melainkan sebagai **rekan kerja t
   - [📲 Panduan Praktis Menghubungkan Sensor WhatsApp](#-panduan-praktis-menghubungkan-sensor-whatsapp-getting-started)
 - [🏗️ Alur Konteks ke Knowledge Base (Pipeline Architecture)](#️-alur-konteks-ke-knowledge-base-pipeline-architecture)
 - [🚀 Panduan Memulai Cepat (Getting Started)](#-panduan-memulai-cepat-getting-started-in-5-minutes)
-  - [📋 Prasyarat Sistem (Prerequisites)](#-prasyarat-sistem-prerequisites)
+  - [📋 Prasyarat Sistem & Kesiapan Operasional](#-prasyarat-sistem--kesiapan-operasional-system--infrastructure-requirements)
   - [Langkah 1: Pilih Sumber Knowledge Base](#langkah-1-pilih-sumber-knowledge-base-anda)
   - [Langkah 2: Deploy & Jalankan Aina (Coolify / Docker / Lokal)](#langkah-2-deploy--jalankan-aina)
 - [🔐 Setup Autentikasi Pertama Kali (`/setup`)](#-setup-autentikasi-pertama-kali-setup)
@@ -164,13 +164,22 @@ Repositori ini sepenuhnya **Agnostic & Clone-Ready**. Aina memisahkan secara ber
 
 ---
 
-### 📋 Prasyarat Sistem (Prerequisites)
+### 📋 Prasyarat Sistem & Kesiapan Operasional (System & Infrastructure Requirements)
 
-Sebelum memulai, pastikan lingkungan Anda memenuhi spesifikasi berikut:
-- **Sistem Operasi**: Linux (`x86_64` atau `aarch64` / ARM64, termasuk Ubuntu di VPS/Cloud maupun container), macOS, atau Windows (via WSL2 / Docker).
-- **Runtime Server / Kontainer**: Docker & Docker Compose (v2+), atau [Coolify](https://coolify.io) untuk deployment produksi *zero-downtime*.
+Sebelum mendeploy Aina untuk tim atau organisasi Anda, pastikan Anda memahami dan menyiapkan infrastruktur fisik, sistem operasi, serta akun pendukung berikut agar bot dapat beroperasi secara otonom 24/7 tanpa gangguan:
+
+| Komponen | Rekomendasi & Spesifikasi | Rincian & Alasan Teknis |
+| :--- | :--- | :--- |
+| **1. Komputer Host (24/7 Uptime)** | PC Kantor Standby / Mini PC / Cloud VPS | Membutuhkan mesin yang menyala terus-menerus. Mini PC hemat daya (arsitektur modern berdaya rendah) atau VPS cloud sangat disarankan agar Aina selalu siaga menerima pesan kapan saja tanpa membebani laptop harian Anda. |
+| **2. Sistem Operasi Host** | **Linux Native** *(Ubuntu / Debian LTS Sangat Disarankan)* | **Linux** adalah standar emas untuk kestabilan daemon latar belakang (*systemd*), isolasi kontainer Docker, manajemen memori efisien, dan eksekusi skrip CLI. *(Windows dapat digunakan melalui WSL2 atau Docker Desktop, namun memerlukan konfigurasi tambahan agar tidak terinterupsi fitur Sleep/Hibernate otomatis atau Windows Update)*. |
+| **3. Nomor WhatsApp Khusus** | 1 Kartu Perdana Baru (Dedicated SIM Card) | Disarankan mendedikasikan 1 nomor WhatsApp baru khusus untuk identitas Aina. Hal ini memastikan profesionalitas kontak tim/kantor, memisahkan percakapan pribadi, dan melindungi nomor pribadi Anda dari risiko pembatasan/rate limit pesan WhatsApp. |
+| **4. Akun Google & Cloud Storage** | Akun Google dengan Google AI & Kuota Drive Besar | Digunakan untuk integrasi ekosistem Google Workspace Aina (membuat, membaca, memfilter, dan mengedit Google Docs & Google Sheets via OAuth), serta kapasitas cloud storage multi-terabyte untuk pencadangan media, arsip, dan dokumen tim secara aman. |
+| **5. AI Agent Engine: Antigravity CLI** | Google Antigravity CLI (`agy`) | Mesin eksekutor agen otonom utama yang memberikan Aina kemampuan penalaran mendalam (*reasoning*), eksekusi terminal, modifikasi berkas, pemanggilan skills/tools, serta kapabilitas *pair-programming* dan bantuan coding mandiri. |
+| **6. Jaringan & Webhook Endpoint** | Koneksi Internet Stabil + Reverse Proxy / Tunnel | Memerlukan koneksi internet aktif 24 jam dengan endpoint publik (bisa menggunakan domain sendiri via VPS reverse proxy, Coolify, atau tunnel gratis seperti Cloudflare Tunnel) agar gateway Whatsmeow dapat meneruskan pesan masuk ke Aina secara instan (*real-time*). |
+
+#### Kebutuhan Teknis Perangkat Lunak (Software Stack):
+- **Runtime Server / Kontainer**: Docker & Docker Compose (v2+), atau [Coolify](https://coolify.io) untuk manajemen kontainer produksi *zero-downtime*.
 - **WhatsApp Gateway**: Instance aktif gateway [Whatsmeow](https://github.com/tulir/whatsmeow) HTTP REST API untuk mengelola koneksi soket WhatsApp.
-- **AI Agent Engine**: [Google Antigravity CLI (`agy`)](https://antigravity.google) terpasang atau siapkan string OAuth Token untuk diinput via Web Setup Wizard (`/setup`).
 - **Rust Toolchain (Khusus Kompilasi dari Source / Local Dev)**: Rust versi `1.85+` (Edition 2024).
 
 ---
