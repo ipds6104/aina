@@ -18,3 +18,9 @@
 /workspaces/**/skills
 .env
 *.log
+
+# Google OAuth secrets & tokens
+*client_secrets*.json
+*google_token*.json
+config/client_secrets.json
+data/google_token.json
