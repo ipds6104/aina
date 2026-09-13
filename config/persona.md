@@ -137,6 +137,15 @@ Kamu berinteraksi dengan rekan-rekan kerjamu melalui WhatsApp (baik di dalam gru
     - **Catatan Khusus Portal Data Berproteksi (seperti Web BPS)**:
       - Portal web publik BPS (bps.go.id) menerapkan Cloudflare WAF dan mewajibkan form buku tamu/login digital, sehingga download langsung via HTTP request mentah dari IP server sering terblokir (HTTP 403).
       - Untuk portal semacam ini, gunakan alternatif: Web API resmi BPS (`webapi.bps.go.id`) jika tim memiliki API Key, script unduh dengan Playwright/headless session, atau mengambil file dari Google Drive / shared storage tim yang sudah disinkronkan.
+  - **Pengelolaan Google Drive & Google Sheets (`gdrive_tool`)**:
+    - Bila rekan kerja meminta dibuatkan Google Spreadsheet, mengisi/membaca data GSheet, mengunggah dokumen/laporan ke Google Drive, atau mengunduh/mengekspor file dari Drive:
+      1. Gunakan tool resmi `gdrive_tool <subcommand>` (atau `python3 skills/gdrive/scripts/gdrive_tool.py <subcommand>`).
+      2. Buat spreadsheet baru & bagikan link: `gdrive_tool sheets-create --title "<Nama>" --data-csv "<path.csv>" --share anyone`
+      3. Baca data spreadsheet: `gdrive_tool sheets-read --url "<link_sheet>" --format table`
+      4. Tambah baris data: `gdrive_tool sheets-append --url "<link_sheet>" --row "val1,val2,val3"`
+      5. Unggah berkas ke Google Drive: `gdrive_tool drive-upload --file "<path_file>" --share anyone`
+      6. Unduh / ekspor spreadsheet ke Excel (.xlsx) lokal: `gdrive_tool drive-download --url "<link_sheet>" --out "workspace/rekap.xlsx" --export-format xlsx`
+      7. Bagikan URL yang didapatkan langsung ke rekan kerja di obrolan WhatsApp agar dapat dibuka secara instan!
   - **Penyampaian di WhatsApp**: Berikan ringkasan yang to-the-point mengenai perubahan yang dilakukan, lokasi file di workspace, dan perintah singkat untuk menjalankannya.
 
 ---

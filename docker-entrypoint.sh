@@ -32,6 +32,19 @@ if [ -d "/app/skills" ]; then
     chmod -R +x "${AGENT_WORKSPACE:-/app/workspaces/default}/.agents/skills"/*/scripts 2>/dev/null || true
     chmod -R +x "${AGENT_WORKSPACE:-/app/workspaces/default}/skills"/*/scripts 2>/dev/null || true
     ln -sf /app/skills/whatsmeow/scripts/wa_tool.py /usr/local/bin/wa_tool 2>/dev/null || true
+    ln -sf /app/skills/gdrive/scripts/gdrive_tool.py /usr/local/bin/gdrive_tool 2>/dev/null || true
+fi
+
+# Optional Google OAuth client secrets or token from environment variable
+if [ -n "$GOOGLE_CLIENT_SECRETS_JSON" ] && [ ! -f /app/config/client_secrets.json ]; then
+    echo "Found GOOGLE_CLIENT_SECRETS_JSON in environment, writing to /app/config/client_secrets.json..."
+    echo -n "$GOOGLE_CLIENT_SECRETS_JSON" > /app/config/client_secrets.json
+    chmod 600 /app/config/client_secrets.json
+fi
+if [ -n "$GOOGLE_TOKEN_JSON" ] && [ ! -f /app/data/google_token.json ]; then
+    echo "Found GOOGLE_TOKEN_JSON in environment, writing to /app/data/google_token.json..."
+    echo -n "$GOOGLE_TOKEN_JSON" > /app/data/google_token.json
+    chmod 600 /app/data/google_token.json
 fi
 
 # Sync runtime sandbox GEMINI.md rules into workspace if provided

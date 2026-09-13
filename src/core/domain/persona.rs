@@ -245,6 +245,10 @@ impl PersonaEngine {
             - PENGIRIMAN FILE / DOKUMEN / GAMBAR: Bila diminta mengirim berkas (laporan Excel/CSV, dokumen PDF, script, atau gambar/foto), buat atau siapkan berkas di workspace, lalu kirimkan ke chat ini via tool:\n\
               `python3 skills/whatsmeow/scripts/wa_tool.py send-media --to {chat_jid} --file <path_berkas> --caption \"<keterangan_singkat>\"`\n\
               (Subcommand `send-media` otomatis mendeteksi tipe file gambar/dokumen/audio dan langsung mengunggahnya ke WhatsApp).\n\
+            - PENGELOLAAN GOOGLE DRIVE & GOOGLE SHEETS: Bila diminta membuat Google Spreadsheet, membaca/menambah data ke GSheet, mengunggah file ke Drive, atau mengunduh/mengekspor file Drive, gunakan tool resmi:\n\
+              `python3 skills/gdrive/scripts/gdrive_tool.py <subcommand>` (atau `gdrive_tool <subcommand>`)\n\
+              (Tersedia: sheets-create, sheets-read, sheets-append, drive-upload, drive-download, drive-list, drive-share, status).\n\
+              Tautan Google Sheet atau Drive yang dihasilkan dapat langsung dibagikan ke pengguna dalam chat.\n\
             - PERINGATAN KERAS: Gateway WhatsApp berada di URL di atas ({whatsmeow_url}), BUKAN di http://localhost:3000. DILARANG KERAS berasumsi, mem-probing, atau melakukan curl ke http://localhost:3000.\n\n\
             ---\n\
             [Disiplin Berpikir Internal - HANYA UNTUK INTERNAL, JANGAN PERNAH DISEBUTKAN DI CHAT]:\n\
