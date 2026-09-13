@@ -159,41 +159,22 @@ impl ProcessIncomingMessageUseCase {
                 // Start async presence heartbeat + fast ack timer if execution takes long
                 let whatsapp = Arc::clone(&self.whatsapp);
                 let chat_jid = msg.chat_jid.clone();
-                let msg_id = msg.id.clone();
-                let msg_text = msg.text.clone();
                 let session_role = msg.session_role;
-                let can_ack = should_send_interim_ack(&msg.text);
 
                 let quote_id = match msg.chat_type {
                     ChatType::Group => Some(msg.id.as_str()),
                     ChatType::DirectMessage => None,
                 };
 
-                let ack_quote_id = match msg.chat_type {
-                    ChatType::Group => Some(msg_id.clone()),
-                    ChatType::DirectMessage => None,
-                };
-
+                // Background typing heartbeat: keep "sedang mengetik..." active until response completes
                 let heartbeat_handle = tokio::spawn(async move {
-                    let mut elapsed_secs = 0;
-                    let mut ack_sent = false;
                     loop {
                         tokio::time::sleep(tokio::time::Duration::from_secs(4)).await;
-                        elapsed_secs += 4;
 
                         // Keep typing presence alive on WhatsApp
                         let _ = whatsapp
                             .send_presence_with_session(&chat_jid, PresenceState::Composing, session_role)
                             .await;
-
-                        // Only send interim ack for real actionable tasks (never for greetings/pings) if taking >= 8s
-                        if can_ack && elapsed_secs >= 8 && !ack_sent {
-                            let ack_text = pick_interim_ack(&msg_id, &msg_text);
-                            let _ = whatsapp
-                                .send_text_with_session(&chat_jid, &ack_text, ack_quote_id.as_deref(), session_role)
-                                .await;
-                            ack_sent = true;
-                        }
                     }
                 });
 
@@ -268,6 +249,7 @@ impl ProcessIncomingMessageUseCase {
 
 /// Returns a fast, natural, pre-curated interim acknowledgment phrase in Indonesian
 /// texting style with natural variations, preventing robotic monotony.
+#[allow(dead_code)]
 pub fn pick_interim_ack(msg_id: &str, text: &str) -> String {
     let lower = text.to_lowercase();
     let is_search_or_check = lower.contains("cek")
@@ -310,6 +292,7 @@ pub fn pick_interim_ack(msg_id: &str, text: &str) -> String {
 /// Evaluates whether an incoming message is a substantive, actionable task
 /// that warrants an interim acknowledgment if it takes longer than 8 seconds.
 /// Greetings, short pings, acknowledgments, introductions, gratitude, and casual social chit-chat are strictly excluded.
+#[allow(dead_code)]
 pub fn should_send_interim_ack(text: &str) -> bool {
     let lower = text.trim().to_lowercase();
     if lower.is_empty() {
