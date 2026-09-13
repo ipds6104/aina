@@ -413,7 +413,7 @@ def cmd_status(args):
     print(json.dumps(res, indent=2))
 
 
-def set_drive_permissions(access_token, file_id, share_type="anyone", role="reader", email=None):
+def set_drive_permissions(access_token, file_id, share_type="anyone", role="reader", email=None, domain=None, notify=True):
     if share_type == "none":
         return None
     url = f"{DRIVE_API_BASE}/files/{file_id}/permissions"
@@ -423,12 +423,23 @@ def set_drive_permissions(access_token, file_id, share_type="anyone", role="read
     elif share_type == "user" and email:
         body["type"] = "user"
         body["emailAddress"] = email
+    elif share_type == "group" and email:
+        body["type"] = "group"
+        body["emailAddress"] = email
+    elif share_type == "domain" and domain:
+        body["type"] = "domain"
+        body["domain"] = domain
     else:
         body["type"] = "anyone"
+
+    params = {}
+    if share_type in ("user", "group"):
+        params["sendNotificationEmail"] = "true" if notify else "false"
 
     resp = requests.post(
         url,
         headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+        params=params,
         json=body,
         timeout=20
     )
@@ -763,31 +774,143 @@ def cmd_drive_list(args):
     print(json.dumps({"status": "success", "count": len(files), "files": files}, indent=2))
 
 
+def cmd_drive_create_folder(args):
+    access_token = get_valid_access_token(token_file=args.token_file)
+    folder_name = args.name
+    if not folder_name:
+        print("❌ Error: Harap masukkan --name untuk folder.")
+        sys.exit(1)
+
+    metadata = {
+        "name": folder_name,
+        "mimeType": "application/vnd.google-apps.folder"
+    }
+    parent = getattr(args, "parent", None) or getattr(args, "folder_id", None)
+    if parent:
+        metadata["parents"] = [extract_resource_id(parent)]
+
+    url = f"{DRIVE_API_BASE}/files?fields=id,name,mimeType,webViewLink"
+    resp = requests.post(
+        url,
+        headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+        json=metadata,
+        timeout=30
+    )
+    if resp.status_code not in (200, 201):
+        print(f"❌ Error creating folder (HTTP {resp.status_code}): {resp.text}")
+        sys.exit(1)
+
+    folder_data = resp.json()
+    folder_id = folder_data.get("id")
+
+    if args.share != "none":
+        set_drive_permissions(
+            access_token,
+            folder_id,
+            share_type=args.share or "anyone",
+            role=args.role or "reader",
+            email=getattr(args, "email", None) or getattr(args, "share_email", None),
+            domain=getattr(args, "domain", None),
+            notify=not getattr(args, "no_notify", False)
+        )
+
+    web_view_link = folder_data.get("webViewLink") or f"https://drive.google.com/drive/folders/{folder_id}?usp=sharing"
+    output = {
+        "status": "success",
+        "id": folder_id,
+        "name": folder_name,
+        "web_view_link": web_view_link,
+        "shared": args.share != "none"
+    }
+    print(json.dumps(output, indent=2))
+
+
 def cmd_drive_share(args):
     access_token = get_valid_access_token(token_file=args.token_file)
     file_id = extract_resource_id(args.id or args.url)
     if not file_id:
-        print("❌ Error: Harap masukkan --id atau --url file/sheet.")
+        print("❌ Error: Harap masukkan --id atau --url file/folder.")
         sys.exit(1)
+
+    meta_url = f"{DRIVE_API_BASE}/files/{file_id}?fields=id,name,mimeType,webViewLink"
+    meta_resp = requests.get(meta_url, headers={"Authorization": f"Bearer {access_token}"}, timeout=20)
+    mime = ""
+    default_link = f"https://drive.google.com/file/d/{file_id}/view?usp=sharing"
+    if meta_resp.status_code == 200:
+        meta = meta_resp.json()
+        mime = meta.get("mimeType", "")
+        if "folder" in mime:
+            default_link = f"https://drive.google.com/drive/folders/{file_id}?usp=sharing"
+        elif "spreadsheet" in mime:
+            default_link = f"https://docs.google.com/spreadsheets/d/{file_id}/edit?usp=sharing"
+        elif meta.get("webViewLink"):
+            default_link = meta.get("webViewLink")
 
     res = set_drive_permissions(
         access_token,
         file_id,
         share_type=args.share or "anyone",
         role=args.role or "reader",
-        email=args.email
+        email=args.email or getattr(args, "share_email", None),
+        domain=getattr(args, "domain", None),
+        notify=not getattr(args, "no_notify", False)
     )
 
-    share_url = f"https://drive.google.com/file/d/{file_id}/view?usp=sharing"
     output = {
         "status": "success",
         "id": file_id,
+        "mimeType": mime,
         "share_type": args.share or "anyone",
         "role": args.role or "reader",
-        "url": share_url,
+        "url": default_link,
         "details": res
     }
     print(json.dumps(output, indent=2))
+
+
+def cmd_drive_permissions_list(args):
+    access_token = get_valid_access_token(token_file=args.token_file)
+    file_id = extract_resource_id(args.id or args.url)
+    if not file_id:
+        print("❌ Error: Harap masukkan --id atau --url file/folder.")
+        sys.exit(1)
+
+    url = f"{DRIVE_API_BASE}/files/{file_id}/permissions?fields=permissions(id,type,role,emailAddress,displayName,domain)"
+    resp = requests.get(url, headers={"Authorization": f"Bearer {access_token}"}, timeout=20)
+    if resp.status_code != 200:
+        print(f"❌ Error fetching permissions (HTTP {resp.status_code}): {resp.text}")
+        sys.exit(1)
+
+    data = resp.json()
+    print(json.dumps({"status": "success", "id": file_id, "permissions": data.get("permissions", [])}, indent=2))
+
+
+def cmd_drive_unshare(args):
+    access_token = get_valid_access_token(token_file=args.token_file)
+    file_id = extract_resource_id(args.id or args.url)
+    if not file_id:
+        print("❌ Error: Harap masukkan --id atau --url file/folder.")
+        sys.exit(1)
+
+    perm_id = getattr(args, "permission_id", None)
+    if not perm_id and getattr(args, "email", None):
+        url = f"{DRIVE_API_BASE}/files/{file_id}/permissions?fields=permissions(id,emailAddress,type)"
+        p_resp = requests.get(url, headers={"Authorization": f"Bearer {access_token}"}, timeout=20)
+        if p_resp.status_code == 200:
+            for p in p_resp.json().get("permissions", []):
+                if p.get("emailAddress", "").lower() == args.email.lower():
+                    perm_id = p["id"]
+                    break
+    if not perm_id:
+        perm_id = "anyoneWithLink"
+
+    del_url = f"{DRIVE_API_BASE}/files/{file_id}/permissions/{perm_id}"
+    del_resp = requests.delete(del_url, headers={"Authorization": f"Bearer {access_token}"}, timeout=20)
+    if del_resp.status_code in (200, 204):
+        print(json.dumps({"status": "success", "message": f"Izin {perm_id} berhasil dicabut dari file/folder {file_id}"}, indent=2))
+    else:
+        print(f"❌ Error deleting permission (HTTP {del_resp.status_code}): {del_resp.text}")
+        sys.exit(1)
 
 
 def main():
@@ -866,14 +989,41 @@ def main():
     p_dlist.add_argument("--limit", type=int, default=20, help="Jumlah maksimal file (default: 20)")
     p_dlist.add_argument("--token-file", help="Path penyimpanan google_token.json")
 
+    # drive-create-folder
+    p_dfolder = subparsers.add_parser("drive-create-folder", help="Buat folder baru di Google Drive")
+    p_dfolder.add_argument("--name", required=True, help="Nama folder")
+    p_dfolder.add_argument("--folder-id", "--parent", dest="parent", help="ID folder induk (parent)")
+    p_dfolder.add_argument("--share", choices=["anyone", "user", "group", "domain", "none"], default="none", help="Mode sharing awal")
+    p_dfolder.add_argument("--role", choices=["reader", "commenter", "writer"], default="reader", help="Role akses")
+    p_dfolder.add_argument("--email", help="Email pengguna/grup penerima")
+    p_dfolder.add_argument("--domain", help="Domain target jika --share domain (misal: bps.go.id)")
+    p_dfolder.add_argument("--no-notify", action="store_true", help="Jangan kirim email notifikasi Google")
+    p_dfolder.add_argument("--token-file", help="Path penyimpanan google_token.json")
+
     # drive-share
-    p_dshare = subparsers.add_parser("drive-share", help="Ubah izin atau buat shareable link file/sheet")
-    p_dshare.add_argument("--id", help="Google Drive File ID")
-    p_dshare.add_argument("--url", help="Google Drive File URL")
-    p_dshare.add_argument("--share", choices=["anyone", "user"], default="anyone", help="Tipe sharing")
-    p_dshare.add_argument("--role", choices=["reader", "writer"], default="reader", help="Role akses")
-    p_dshare.add_argument("--email", help="Email penerima jika --share user")
+    p_dshare = subparsers.add_parser("drive-share", help="Ubah izin atau buat shareable link file/folder/sheet")
+    p_dshare.add_argument("--id", help="Google Drive File / Folder ID")
+    p_dshare.add_argument("--url", help="Google Drive / Sheet URL")
+    p_dshare.add_argument("--share", choices=["anyone", "user", "group", "domain"], default="anyone", help="Tipe sharing")
+    p_dshare.add_argument("--role", choices=["reader", "commenter", "writer"], default="reader", help="Role akses")
+    p_dshare.add_argument("--email", help="Email penerima jika --share user/group")
+    p_dshare.add_argument("--domain", help="Nama domain jika --share domain")
+    p_dshare.add_argument("--no-notify", action="store_true", help="Jangan kirim email notifikasi")
     p_dshare.add_argument("--token-file", help="Path penyimpanan google_token.json")
+
+    # drive-permissions-list
+    p_dpermlist = subparsers.add_parser("drive-permissions-list", help="Lihat daftar orang/pihak yang memiliki akses ke file/folder")
+    p_dpermlist.add_argument("--id", help="Google Drive File / Folder ID")
+    p_dpermlist.add_argument("--url", help="Google Drive / Sheet URL")
+    p_dpermlist.add_argument("--token-file", help="Path penyimpanan google_token.json")
+
+    # drive-unshare
+    p_dunshare = subparsers.add_parser("drive-unshare", help="Cabut izin sharing publik atau pengguna tertentu dari file/folder")
+    p_dunshare.add_argument("--id", help="Google Drive File / Folder ID")
+    p_dunshare.add_argument("--url", help="Google Drive / Sheet URL")
+    p_dunshare.add_argument("--email", help="Email pengguna yang ingin dicabut izinnya")
+    p_dunshare.add_argument("--permission-id", help="ID spesifik permission (opsional)")
+    p_dunshare.add_argument("--token-file", help="Path penyimpanan google_token.json")
 
     args = parser.parse_args()
     if not args.subcommand:
@@ -889,7 +1039,10 @@ def main():
         "drive-upload": cmd_drive_upload,
         "drive-download": cmd_drive_download,
         "drive-list": cmd_drive_list,
+        "drive-create-folder": cmd_drive_create_folder,
         "drive-share": cmd_drive_share,
+        "drive-permissions-list": cmd_drive_permissions_list,
+        "drive-unshare": cmd_drive_unshare,
     }
 
     cmd_fn = dispatch.get(args.subcommand)

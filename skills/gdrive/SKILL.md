@@ -177,6 +177,41 @@ wa_tool send-media --to "<JID>" --file "workspace/rekap_downloaded.xlsx" --capti
 
 ---
 
+### SOP 7: Membuat Folder & Mengatur Akses Sharing (File / Folder / Sheet)
+
+Aina dapat membuat folder di Google Drive dan mengatur izin akses untuk file maupun folder:
+```bash
+# 1. Buat folder baru di Google Drive:
+gdrive_tool drive-create-folder --name "Laporan Sensus 2026" --share anyone --role reader
+
+# 2. Bagikan file/folder ke email tertentu (reader, commenter, writer):
+gdrive_tool drive-share --url "<link_folder_atau_file>" --share user --email "rekan@gmail.com" --role writer
+
+# 3. Bagikan ke seluruh domain organisasi (misal: @bps.go.id):
+gdrive_tool drive-share --id "<id_file_atau_folder>" --share domain --domain "bps.go.id" --role reader
+
+# 4. Ubah file/folder agar dapat diedit oleh siapa saja yang memiliki link:
+gdrive_tool drive-share --id "<id>" --share anyone --role writer
+```
+
+---
+
+### SOP 8: Memeriksa & Mencabut Izin Akses (Permissions List & Unshare)
+
+Untuk melihat siapa saja yang memiliki akses ke suatu file/folder atau mencabut akses publik:
+```bash
+# Lihat daftar hak akses aktif:
+gdrive_tool drive-permissions-list --url "<link_folder_atau_file>"
+
+# Cabut link sharing publik (anyoneWithLink):
+gdrive_tool drive-unshare --id "<id>"
+
+# Cabut akses email tertentu:
+gdrive_tool drive-unshare --id "<id>" --email "rekan@gmail.com"
+```
+
+---
+
 ## 4. Automatic Token Refresh Mechanism
 
 Aina tidak perlu meminta pengguna login berulang kali. Kapanpun `gdrive_tool` dipanggil:
