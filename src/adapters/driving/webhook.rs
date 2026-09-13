@@ -11,6 +11,7 @@ use crate::core::usecases::ProcessIncomingMessageUseCase;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
@@ -59,6 +60,7 @@ pub struct WebhookServerState {
     pub locale: String,
     pub sim_jobs: Arc<RwLock<HashMap<String, SimulationJob>>>,
     pub chat_queues: Arc<tokio::sync::Mutex<HashMap<String, tokio::sync::mpsc::UnboundedSender<IncomingMessage>>>>,
+    pub workspace_dir: PathBuf,
 }
 
 pub fn create_router(state: Arc<WebhookServerState>) -> Router {
@@ -502,6 +504,9 @@ async fn simulate_handler(
         mentioned_jids,
         is_bot_mentioned: false,
         bot_lid: state.bot_lid.clone(),
+        has_media: false,
+        media_type: None,
+        media_path: None,
     };
 
     let decision = Gatekeeper::evaluate(&msg, &state.bot_jid, &state.bot_name, state.bot_lid.as_deref());
@@ -721,7 +726,7 @@ async fn webhook_handler(
 ) -> impl IntoResponse {
     debug!("Received webhook payload: {:?}, query: {:?}", payload, query_params);
 
-    let msg_opt = parse_whatsmeow_message(
+    let mut msg_opt = parse_whatsmeow_message(
         &payload,
         Some(&query_params),
         Some(&state.bot_jid),
@@ -729,8 +734,70 @@ async fn webhook_handler(
         state.companion_session_id.as_deref(),
     );
 
-    if let Some(msg) = msg_opt {
-        dispatch_message_to_queue(&state, msg).await;
+    if let Some(ref mut msg) = msg_opt {
+        let root = if let Some(data_obj) = payload.get("data").and_then(|d| d.as_object()) {
+            data_obj
+        } else if let Some(root_obj) = payload.as_object() {
+            root_obj
+        } else {
+            &serde_json::Map::new()
+        };
+
+        let media_base64 = root
+            .get("media_base64")
+            .or_else(|| payload.get("media_base64"))
+            .and_then(|v| v.as_str());
+
+        let mime_type = root
+            .get("mime_type")
+            .or_else(|| payload.get("mime_type"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        if let Some(b64) = media_base64 {
+            use base64::Engine;
+            if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(b64.trim()) {
+                let ext = match mime_type {
+                    "image/png" => "png",
+                    "image/webp" => "webp",
+                    "image/gif" => "gif",
+                    _ => "jpg",
+                };
+                let media_dir = state.workspace_dir.join("media");
+                if let Err(e) = tokio::fs::create_dir_all(&media_dir).await {
+                    error!("Failed to create media directory {:?}: {:?}", media_dir, e);
+                } else {
+                    let file_name = format!("{}.{}", msg.id, ext);
+                    let target_path = media_dir.join(&file_name);
+                    let sidecar_txt_path = media_dir.join(format!("{}.txt", msg.id));
+
+                    if let Err(e) = tokio::fs::write(&target_path, &bytes).await {
+                        error!("Failed to write media file to {:?}: {:?}", target_path, e);
+                    } else {
+                        info!("Saved incoming media to {:?} ({} bytes)", target_path, bytes.len());
+                        let abs_path_str = target_path.to_string_lossy().to_string();
+                        msg.media_path = Some(abs_path_str.clone());
+                        msg.has_media = true;
+
+                        // Create initial .txt companion file with metadata & caption for searchable indexing
+                        let initial_txt = format!(
+                            "ID: {}\nPengirim: {} ({})\nWaktu: {}\nCaption/Pesan: {}\nPath File: {}\nMIME Type: {}\nUkuran: {} bytes\n\n--- Catatan & Hasil Transkripsi / Analisis Aina ---\n",
+                            msg.id,
+                            msg.sender.name.as_deref().unwrap_or("Anonim"),
+                            msg.sender.jid,
+                            msg.timestamp,
+                            msg.text,
+                            abs_path_str,
+                            mime_type,
+                            bytes.len()
+                        );
+                        let _ = tokio::fs::write(&sidecar_txt_path, initial_txt).await;
+                    }
+                }
+            }
+        }
+
+        dispatch_message_to_queue(&state, msg.clone()).await;
     } else {
         debug!("Webhook received event that was not a parseable user message");
     }
@@ -933,6 +1000,18 @@ fn parse_whatsmeow_message(
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
+    let has_media = root
+        .get("has_media")
+        .or_else(|| val.get("has_media"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let media_type = root
+        .get("media_type")
+        .or_else(|| val.get("media_type"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
     let is_bot_unassigned = bot_jid
         .map(|b| {
             let clean = b.trim().to_lowercase();
@@ -1023,6 +1102,9 @@ fn parse_whatsmeow_message(
         mentioned_jids,
         is_bot_mentioned,
         bot_lid,
+        has_media,
+        media_type,
+        media_path: None,
     })
 }
 
@@ -2315,6 +2397,9 @@ mod tests {
             mentioned_jids: vec![],
             is_bot_mentioned: true,
             bot_lid: None,
+            has_media: false,
+            media_type: None,
+            media_path: None,
         };
 
         let p1 = Arc::clone(&processed);

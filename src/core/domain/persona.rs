@@ -191,6 +191,26 @@ impl PersonaEngine {
             None => String::new(),
         };
 
+        let media_context = if msg.has_media {
+            if let Some(path) = &msg.media_path {
+                let m_type = msg.media_type.as_deref().unwrap_or("image");
+                format!(
+                    "\n---\n[Lampiran Berkas Media / Gambar dari Pengguna]:\n\
+                     - Tipe Media: {m_type}\n\
+                     - Lokasi File Lokal: {path}\n\
+                     - INSTRUKSI ANALISIS GAMBAR: Pengguna mengirimkan berkas media di atas. Buka dan periksa gambar tersebut menggunakan tool `view_file` pada path di atas untuk melihat detail visual (seperti teks OCR, struk, angka tabel, grafik, atau isi foto). Tanggapi pesan pengguna berdasarkan hasil pengamatan gambar tersebut.\n\
+                     - RETENSI MEMORI PENCARIAN (.txt): Sertakan transkripsi atau ringkasan poin-poin teks penting dari gambar tersebut dalam jawaban Anda agar tersimpan permanen di riwayat arsip obrolan dan mudah dicari di kemudian hari.\n"
+                )
+            } else {
+                format!(
+                    "\n---\n[Lampiran Media]: Pengguna melampirkan media ({}), namun berkas sedang tidak tersedia secara lokal.\n",
+                    msg.media_type.as_deref().unwrap_or("media")
+                )
+            }
+        } else {
+            String::new()
+        };
+
         format!(
             "{persona}\n\n\
             ---\n\
@@ -213,7 +233,8 @@ impl PersonaEngine {
             {quoted_context}\
             \n\
             [Pesan dari Pengirim]:\n\
-            {text}\n\
+            {text}\
+            {media_context}\n\
             {knowledge_context}\n\
             ---\n\
             [Integrasi WhatsApp Gateway & Akses Sistem]:\n\
@@ -370,6 +391,9 @@ mod tests {
             is_bot_mentioned: false,
             bot_lid: None,
             is_from_me: false,
+            has_media: false,
+            media_type: None,
+            media_path: None,
         };
 
         let prompt = engine.build_prompt(&msg, None);
@@ -412,6 +436,9 @@ mod tests {
             is_bot_mentioned: false,
             bot_lid: None,
             is_from_me: false,
+            has_media: false,
+            media_type: None,
+            media_path: None,
         };
 
         let profile = UserProfile {
@@ -459,6 +486,9 @@ mod tests {
             is_bot_mentioned: false,
             bot_lid: None,
             is_from_me: false,
+            has_media: false,
+            media_type: None,
+            media_path: None,
         };
 
         let profile = UserProfile {

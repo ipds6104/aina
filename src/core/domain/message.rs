@@ -84,6 +84,12 @@ pub struct IncomingMessage {
     pub is_bot_mentioned: bool,
     #[serde(default)]
     pub bot_lid: Option<String>,
+    #[serde(default)]
+    pub has_media: bool,
+    #[serde(default)]
+    pub media_type: Option<String>,
+    #[serde(default)]
+    pub media_path: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

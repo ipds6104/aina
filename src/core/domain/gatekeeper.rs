@@ -11,9 +11,9 @@ impl Gatekeeper {
         bot_name: &str,
         bot_lid: Option<&str>,
     ) -> GatekeeperDecision {
-        // 1. Always ignore empty text
+        // 1. Ignore empty text unless media (photo/document) is attached
         let trimmed_text = msg.text.trim();
-        if trimmed_text.is_empty() {
+        if trimmed_text.is_empty() && !msg.has_media {
             return GatekeeperDecision::Ignore {
                 reason: "Empty message ignored".to_string(),
             };
@@ -235,6 +235,9 @@ mod tests {
             mentioned_jids: vec![],
             is_bot_mentioned: false,
             bot_lid: None,
+            has_media: false,
+            media_type: None,
+            media_path: None,
         }
     }
 
@@ -396,6 +399,24 @@ mod tests {
         );
         let dec = Gatekeeper::evaluate(&msg, "628999@s.whatsapp.net", "Aina", None);
         assert!(matches!(dec, GatekeeperDecision::RecordOnly { .. }));
+    }
+
+    #[test]
+    fn test_media_with_empty_text_responds_in_dm() {
+        let mut msg = make_msg(
+            ChatType::DirectMessage,
+            "",
+            false,
+            SessionRole::PrimaryBot,
+            "user-1@s.whatsapp.net",
+            "user-1@s.whatsapp.net",
+        );
+        msg.has_media = true;
+        msg.media_type = Some("image".to_string());
+        msg.media_path = Some("/data/workspaces/default/media/msg-1.jpg".to_string());
+
+        let dec = Gatekeeper::evaluate(&msg, "628999@s.whatsapp.net", "Aina", None);
+        assert!(matches!(dec, GatekeeperDecision::Respond { .. }));
     }
 }
 

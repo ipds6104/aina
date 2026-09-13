@@ -49,8 +49,17 @@ impl ProcessIncomingMessageUseCase {
                     "Recording ambient group message from {} in {}: {}",
                     msg.sender.jid, msg.chat_jid, reason
                 );
+                let record_text = if msg.has_media {
+                    if let Some(ref path) = msg.media_path {
+                        format!("{} [Media: {}]", msg.text, path)
+                    } else {
+                        format!("{} [Media]", msg.text)
+                    }
+                } else {
+                    msg.text.clone()
+                };
                 self.session_store
-                    .record_message(&msg.chat_jid, &msg.sender.jid, &msg.text, false)
+                    .record_message(&msg.chat_jid, &msg.sender.jid, &record_text, false)
                     .await?;
                 Ok(())
             }
@@ -61,8 +70,17 @@ impl ProcessIncomingMessageUseCase {
                 );
 
                 // 1. Record incoming message
+                let record_text = if msg.has_media {
+                    if let Some(ref path) = msg.media_path {
+                        format!("{} [Media: {}]", msg.text, path)
+                    } else {
+                        format!("{} [Media]", msg.text)
+                    }
+                } else {
+                    msg.text.clone()
+                };
                 self.session_store
-                    .record_message(&msg.chat_jid, &msg.sender.jid, &msg.text, false)
+                    .record_message(&msg.chat_jid, &msg.sender.jid, &record_text, false)
                     .await?;
 
                 // Check for built-in quick command: /reset, /clear, /new
@@ -229,6 +247,19 @@ impl ProcessIncomingMessageUseCase {
                     self.whatsapp
                         .send_text_with_session(&msg.chat_jid, &agent_res.response_text, quote_id, msg.session_role)
                         .await?;
+                }
+
+                // 8b. If message had media, append AI response analysis to the companion .txt transcript sidecar
+                if let Some(ref media_path) = msg.media_path {
+                    let sidecar_txt_path = std::path::Path::new(media_path).with_extension("txt");
+                    if sidecar_txt_path.exists() {
+                        use tokio::io::AsyncWriteExt;
+                        let append_content = format!("\n--- Analisis & Respon Aina ---\n{}\n", agent_res.response_text);
+                        if let Ok(mut file) = tokio::fs::OpenOptions::new().append(true).open(&sidecar_txt_path).await {
+                            let _ = file.write_all(append_content.as_bytes()).await;
+                            info!("Appended AI response transcript to sidecar {:?}", sidecar_txt_path);
+                        }
+                    }
                 }
 
                 // 9. Reset presence
