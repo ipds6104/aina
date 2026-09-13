@@ -284,8 +284,8 @@ pub fn pick_interim_ack(msg_id: &str, text: &str) -> String {
 }
 
 /// Evaluates whether an incoming message is a substantive, actionable task
-/// that warrants an interim "okee sebentarr..." acknowledgment if it takes longer than 8 seconds.
-/// Greetings, short pings, acknowledgments, and commands are strictly excluded.
+/// that warrants an interim acknowledgment if it takes longer than 8 seconds.
+/// Greetings, short pings, acknowledgments, introductions, gratitude, and casual social chit-chat are strictly excluded.
 pub fn should_send_interim_ack(text: &str) -> bool {
     let lower = text.trim().to_lowercase();
     if lower.is_empty() {
@@ -297,14 +297,17 @@ pub fn should_send_interim_ack(text: &str) -> bool {
         return false;
     }
 
-    // 2. Reject short greetings, pings, thanks, and trivial acknowledgments
-    let greetings_and_pings = [
+    // 2. Reject greetings, pings, thanks, introductions, and casual social chit-chat
+    let social_phrases = [
         "halo", "hai", "hei", "hey", "p", "ping", "aina",
         "pagi", "siang", "sore", "malam",
         "assalamualaikum", "assalamu'alaikum", "assalamu alaikum",
-        "tes", "test", "testing", "ok", "oke", "okee", "sip", "sipp", "siap", "siapp",
-        "makasih", "terimakasih", "terima kasih", "thanks", "thx",
+        "tes", "test", "testing", "ok", "oke", "okee", "okeis", "okeiss", "sip", "sipp", "siap", "siapp",
+        "makasih", "terimakasih", "terima kasih", "thanks", "thx", "tq",
+        "sama sama", "sama-sama",
         "apa kabar", "gimana kabar", "lagi apa",
+        "salam kenal", "kenalan",
+        "wkwk", "wkwkwk", "haha", "hahaha", "hehe", "hehehe", "plis", "please",
     ];
 
     let stripped = lower
@@ -313,7 +316,32 @@ pub fn should_send_interim_ack(text: &str) -> bool {
         .collect::<String>();
     let clean = stripped.trim();
 
-    for g in &greetings_and_pings {
+    // Check for obvious introductory / gratitude / laugh phrases without task verbs
+    let is_intro_or_thanks = clean.contains("salam kenal")
+        || clean.contains("makasih")
+        || clean.contains("terima kasih")
+        || clean.contains("thanks")
+        || clean.contains("sama sama")
+        || clean.contains("wkwk")
+        || clean.contains("haha")
+        || clean.contains("hehe")
+        || clean.contains("kaget")
+        || clean.starts_with("aku ")
+        || clean.starts_with("saya ");
+
+    let task_keywords = [
+        "cek", "cari", "buat", "bikin", "tolong", "bisa", "apa", "kenapa",
+        "gimana", "bagaimana", "run", "script", "log", "analisis", "hitung", "bantu",
+        "olah", "rekap", "data", "excel", "csv", "coding", "debug", "perbaiki", "ubah",
+    ];
+
+    let has_task_keyword = task_keywords.iter().any(|k| lower.contains(k));
+
+    if is_intro_or_thanks && !has_task_keyword {
+        return false;
+    }
+
+    for g in &social_phrases {
         if clean == *g
             || clean == format!("halo {}", g)
             || clean == format!("hai {}", g)
@@ -323,17 +351,10 @@ pub fn should_send_interim_ack(text: &str) -> bool {
         }
     }
 
-    // 3. If the message is very short (<= 2 words) and contains no action verbs or inquiry keywords, do not ack
+    // If message contains NO actionable task keywords and is casual/short (<= 7 words), do not ack
     let words: Vec<&str> = lower.split_whitespace().collect();
-    if words.len() <= 2 {
-        let task_keywords = [
-            "cek", "cari", "buat", "bikin", "tolong", "bisa", "apa", "kenapa",
-            "gimana", "bagaimana", "run", "script", "log", "analisis", "hitung", "bantu",
-        ];
-        let has_task_keyword = task_keywords.iter().any(|k| lower.contains(k));
-        if !has_task_keyword {
-            return false;
-        }
+    if words.len() <= 7 && !has_task_keyword {
+        return false;
     }
 
     true
@@ -357,6 +378,9 @@ mod tests {
         assert!(!should_send_interim_ack("makasih ya"));
         assert!(!should_send_interim_ack("oke sip"));
         assert!(!should_send_interim_ack("/model status"));
+        assert!(!should_send_interim_ack("Halo aina aku sukma hehe"));
+        assert!(!should_send_interim_ack("siap makasih mbak aina, salam kenal ya🤭"));
+        assert!(!should_send_interim_ack("Baru bangun kaget, tiba2 ada orang baru"));
     }
 
     #[test]

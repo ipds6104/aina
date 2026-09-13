@@ -218,7 +218,7 @@ impl PersonaEngine {
             [Integrasi WhatsApp Gateway & Akses Sistem]:\n\
             - URL Whatsmeow Gateway: {whatsmeow_url}\n\
             - JID / Akun Bot WhatsApp: {bot_jid}\n\
-            - Helper Tool Resmi: `python3 .agents/skills/whatsmeow/scripts/wa_tool.py <subcommand>` (tersedia: send-text, send-media, recent, search, stats, export-backup, groups, group-info, download-media)\n\
+            - Helper Tool Resmi: `python3 skills/whatsmeow/scripts/wa_tool.py <subcommand>` (tersedia: send-text, send-media, recent, search, stats, export-backup, groups, group-info, download-media)\n\
             - PERINGATAN KERAS: Gateway WhatsApp berada di URL di atas ({whatsmeow_url}), BUKAN di http://localhost:3000. DILARANG KERAS berasumsi, mem-probing, atau melakukan curl ke http://localhost:3000.\n\n\
             ---\n\
             [Disiplin Berpikir Internal - HANYA UNTUK INTERNAL, JANGAN PERNAH DISEBUTKAN DI CHAT]:\n\
