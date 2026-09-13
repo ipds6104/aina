@@ -43,6 +43,34 @@ EXPORT_MIMES = {
     "txt": "text/plain",
 }
 
+MIME_TYPE_PRESETS = {
+    "sheet": "application/vnd.google-apps.spreadsheet",
+    "sheets": "application/vnd.google-apps.spreadsheet",
+    "spreadsheet": "application/vnd.google-apps.spreadsheet",
+    "doc": "application/vnd.google-apps.document",
+    "docs": "application/vnd.google-apps.document",
+    "document": "application/vnd.google-apps.document",
+    "slide": "application/vnd.google-apps.presentation",
+    "slides": "application/vnd.google-apps.presentation",
+    "presentation": "application/vnd.google-apps.presentation",
+    "folder": "application/vnd.google-apps.folder",
+    "directory": "application/vnd.google-apps.folder",
+    "pdf": "application/pdf",
+    "image": "image/",
+    "photo": "image/",
+    "video": "video/",
+    "audio": "audio/",
+    "zip": "application/zip",
+    "archive": "application/zip",
+    "csv": "text/csv",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "excel": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "word": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "text": "text/plain",
+    "txt": "text/plain",
+}
+
 
 def resolve_path(provided_path, default_candidates):
     if provided_path:
@@ -755,23 +783,125 @@ def cmd_drive_download(args):
 
 def cmd_drive_list(args):
     access_token = get_valid_access_token(token_file=args.token_file)
-    query_parts = ["trashed = false"]
+    query_parts = []
+
+    # Trashed filter (default false, or true if --trashed flag is set)
+    if getattr(args, "trashed", False):
+        query_parts.append("trashed = true")
+    else:
+        query_parts.append("trashed = false")
+
     if args.folder_id:
         folder_id = extract_resource_id(args.folder_id)
         query_parts.append(f"'{folder_id}' in parents")
+
+    if getattr(args, "name", None):
+        name_clean = args.name.replace("'", "\\'")
+        query_parts.append(f"name contains '{name_clean}'")
+
+    if getattr(args, "type", None):
+        raw_type = args.type.lower().strip()
+        mime = MIME_TYPE_PRESETS.get(raw_type, raw_type)
+        if mime.endswith("/"):
+            query_parts.append(f"mimeType contains '{mime}'")
+        else:
+            query_parts.append(f"mimeType = '{mime}'")
+
+    if getattr(args, "search", None):
+        search_clean = args.search.replace("'", "\\'")
+        query_parts.append(f"fullText contains '{search_clean}'")
+
     if args.query:
         query_parts.append(f"({args.query})")
 
     q = " and ".join(query_parts)
     limit = args.limit or 20
-    url = f"{DRIVE_API_BASE}/files?q={urllib.parse.quote(q)}&pageSize={limit}&fields=files(id,name,mimeType,size,modifiedTime,webViewLink)"
+    order_by = getattr(args, "order_by", None) or "modifiedTime desc"
+
+    url = f"{DRIVE_API_BASE}/files?q={urllib.parse.quote(q)}&pageSize={limit}&orderBy={urllib.parse.quote(order_by)}&fields=files(id,name,mimeType,size,modifiedTime,createdTime,trashed,webViewLink,parents)"
     resp = requests.get(url, headers={"Authorization": f"Bearer {access_token}"}, timeout=30)
     if resp.status_code != 200:
         print(f"❌ Error listing files (HTTP {resp.status_code}): {resp.text}")
         sys.exit(1)
 
     files = resp.json().get("files", [])
-    print(json.dumps({"status": "success", "count": len(files), "files": files}, indent=2))
+    print(json.dumps({"status": "success", "count": len(files), "query": q, "order_by": order_by, "files": files}, indent=2))
+
+
+def cmd_drive_delete(args):
+    access_token = get_valid_access_token(token_file=args.token_file)
+    file_id = extract_resource_id(args.id or args.url)
+    if not file_id:
+        print("❌ Error: Harap masukkan --id atau --url file/folder yang ingin dihapus.")
+        sys.exit(1)
+
+    permanent = getattr(args, "permanent", False)
+    if permanent:
+        url = f"{DRIVE_API_BASE}/files/{file_id}"
+        resp = requests.delete(url, headers={"Authorization": f"Bearer {access_token}"}, timeout=30)
+        if resp.status_code not in (200, 204):
+            print(f"❌ Error deleting file permanently (HTTP {resp.status_code}): {resp.text}")
+            sys.exit(1)
+        output = {
+            "status": "success",
+            "action": "permanently_deleted",
+            "file_id": file_id,
+            "message": f"File/folder dengan ID {file_id} telah dihapus secara permanen dari Google Drive."
+        }
+    else:
+        # Move to trash (Soft Delete)
+        url = f"{DRIVE_API_BASE}/files/{file_id}?fields=id,name,trashed"
+        resp = requests.patch(
+            url,
+            headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+            json={"trashed": True},
+            timeout=30
+        )
+        if resp.status_code not in (200, 204):
+            print(f"❌ Error moving file to trash (HTTP {resp.status_code}): {resp.text}")
+            sys.exit(1)
+        res_data = resp.json() if resp.text else {}
+        output = {
+            "status": "success",
+            "action": "moved_to_trash",
+            "file_id": file_id,
+            "name": res_data.get("name"),
+            "trashed": True,
+            "message": f"File/folder '{res_data.get('name', file_id)}' berhasil dipindahkan ke Sampah (Trash). Gunakan 'drive-restore' untuk membatalkan."
+        }
+    print(json.dumps(output, indent=2))
+
+
+def cmd_drive_restore(args):
+    access_token = get_valid_access_token(token_file=args.token_file)
+    file_id = extract_resource_id(args.id or args.url)
+    if not file_id:
+        print("❌ Error: Harap masukkan --id atau --url file/folder yang ingin dipulihkan.")
+        sys.exit(1)
+
+    url = f"{DRIVE_API_BASE}/files/{file_id}?fields=id,name,trashed,webViewLink"
+    resp = requests.patch(
+        url,
+        headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+        json={"trashed": False},
+        timeout=30
+    )
+    if resp.status_code not in (200, 204):
+        print(f"❌ Error restoring file from trash (HTTP {resp.status_code}): {resp.text}")
+        sys.exit(1)
+
+    res_data = resp.json() if resp.text else {}
+    output = {
+        "status": "success",
+        "action": "restored_from_trash",
+        "file_id": file_id,
+        "name": res_data.get("name"),
+        "trashed": False,
+        "web_view_link": res_data.get("webViewLink"),
+        "message": f"File/folder '{res_data.get('name', file_id)}' berhasil dipulihkan dari Sampah ke lokasi semula."
+    }
+    print(json.dumps(output, indent=2))
+
 
 
 def cmd_drive_create_folder(args):
@@ -983,11 +1113,29 @@ def main():
     p_ddl.add_argument("--token-file", help="Path penyimpanan google_token.json")
 
     # drive-list
-    p_dlist = subparsers.add_parser("drive-list", help="Cari dan daftar file di Google Drive")
-    p_dlist.add_argument("--query", help="Query pencarian Drive API")
-    p_dlist.add_argument("--folder-id", help="Filter berdasarkan folder ID")
+    p_dlist = subparsers.add_parser("drive-list", help="Cari dan daftar file di Google Drive dengan filter lengkap")
+    p_dlist.add_argument("--name", help="Filter berdasarkan nama file (substring search)")
+    p_dlist.add_argument("--type", help="Filter tipe file (sheet, doc, slide, folder, pdf, image, video, zip, csv, xlsx, docx, atau MIME type)")
+    p_dlist.add_argument("--search", help="Pencarian kata kunci menyeluruh (fullText search isi & judul file)")
+    p_dlist.add_argument("--folder-id", help="Filter berdasarkan folder ID induk")
+    p_dlist.add_argument("--trashed", action="store_true", help="Tampilkan berkas yang berada di Sampah (Trash)")
+    p_dlist.add_argument("--order-by", default="modifiedTime desc", help="Urutan file (default: 'modifiedTime desc')")
+    p_dlist.add_argument("--query", help="Query kustom Drive API v3 langsung (misal: \"mimeType = 'image/png'\")")
     p_dlist.add_argument("--limit", type=int, default=20, help="Jumlah maksimal file (default: 20)")
     p_dlist.add_argument("--token-file", help="Path penyimpanan google_token.json")
+
+    # drive-delete
+    p_ddelete = subparsers.add_parser("drive-delete", help="Hapus file atau folder dari Google Drive (masuk ke Sampah / Trash secara aman)")
+    p_ddelete.add_argument("--id", help="Google Drive File / Folder ID")
+    p_ddelete.add_argument("--url", help="Google Drive / Sheet URL")
+    p_ddelete.add_argument("--permanent", action="store_true", help="Hapus permanen tanpa masuk ke Sampah (tidak dapat dipulihkan)")
+    p_ddelete.add_argument("--token-file", help="Path penyimpanan google_token.json")
+
+    # drive-restore
+    p_drestore = subparsers.add_parser("drive-restore", help="Pulihkan file atau folder yang ada di Sampah (Trash) Google Drive")
+    p_drestore.add_argument("--id", help="Google Drive File / Folder ID")
+    p_drestore.add_argument("--url", help="Google Drive / Sheet URL")
+    p_drestore.add_argument("--token-file", help="Path penyimpanan google_token.json")
 
     # drive-create-folder
     p_dfolder = subparsers.add_parser("drive-create-folder", help="Buat folder baru di Google Drive")
@@ -1039,6 +1187,8 @@ def main():
         "drive-upload": cmd_drive_upload,
         "drive-download": cmd_drive_download,
         "drive-list": cmd_drive_list,
+        "drive-delete": cmd_drive_delete,
+        "drive-restore": cmd_drive_restore,
         "drive-create-folder": cmd_drive_create_folder,
         "drive-share": cmd_drive_share,
         "drive-permissions-list": cmd_drive_permissions_list,

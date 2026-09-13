@@ -212,9 +212,50 @@ gdrive_tool drive-unshare --id "<id>" --email "rekan@gmail.com"
 
 ---
 
+### SOP 9: Mencari & Memfilter File di Google Drive (`drive-list`)
+
+Aina dapat mencari berkas di Google Drive berdasarkan nama, tipe file, kata kunci konten, maupun folder induk:
+```bash
+# 1. Cari berdasarkan nama file (substring match):
+gdrive_tool drive-list --name "Sensus Ekonomi"
+
+# 2. Filter berdasarkan tipe file tertentu (sheet, doc, slide, folder, pdf, image, video, zip, csv, xlsx):
+gdrive_tool drive-list --type sheet --limit 10
+gdrive_tool drive-list --type pdf --limit 5
+
+# 3. Pencarian kata kunci menyeluruh (isi dokumen & judul file):
+gdrive_tool drive-list --search "Kabupaten Mempawah"
+
+# 4. Filter berkas dalam folder tertentu:
+gdrive_tool drive-list --folder-id "<folder_id>" --type sheet
+
+# 5. Lihat berkas yang sedang berada di folder Sampah (Trash):
+gdrive_tool drive-list --trashed --limit 10
+```
+
+---
+
+### SOP 10: Menghapus & Memulihkan File dari Google Drive (`drive-delete` & `drive-restore`)
+
+Aina mendukung penghapusan aman (pindah ke Sampah / Trash) dan pemulihan berkas:
+```bash
+# 1. Hapus aman (Pindahkan ke Sampah / Trash Google Drive):
+gdrive_tool drive-delete --id "<id_file_atau_folder>"
+gdrive_tool drive-delete --url "<link_file_atau_folder>"
+
+# 2. Pulihkan berkas dari Sampah ke lokasi semula:
+gdrive_tool drive-restore --id "<id_file_atau_folder>"
+
+# 3. Hapus permanen (Hard Delete - tidak dapat dipulihkan):
+gdrive_tool drive-delete --id "<id_file_atau_folder>" --permanent
+```
+
+---
+
 ## 4. Automatic Token Refresh Mechanism
 
 Aina tidak perlu meminta pengguna login berulang kali. Kapanpun `gdrive_tool` dipanggil:
 1. Tool memeriksa apakah `expires_at` pada `google_token.json` masih valid (> 60 detik).
 2. Jika sudah mendekati kedaluwarsa atau habis, tool secara otomatis mengirim permintaan refresh ke Google OAuth token endpoint (`https://oauth2.googleapis.com/token`) menggunakan `refresh_token`.
 3. Token baru langsung diperbarui di `google_token.json` tanpa mengganggu proses perintah sama sekali.
+

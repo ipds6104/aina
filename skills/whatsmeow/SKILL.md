@@ -130,6 +130,60 @@ To inspect bot connection uptime or check how much daily message quota remains:
    ```
 2. Output menampilkan status koneksi device (`is_connected`, `uptime`) dan kuota anti-ban (`daily_count` vs `daily_cap`). Jika kuota mendekati batas harian (misal >280/300), hemat pengiriman pesan baru.
 
+### SOP 8: Inspecting & Updating Profile Picture
+To view or update the WhatsApp profile picture (avatar) for the bot itself or a group:
+1. **View Profile Picture**:
+   ```bash
+   # Bot profile picture (full resolution)
+   python3 skills/whatsmeow/scripts/wa_tool.py profile-picture-get
+
+   # Target user or group profile picture
+   python3 skills/whatsmeow/scripts/wa_tool.py profile-picture-get --jid "628xxx@s.whatsapp.net"
+   ```
+2. **Update Profile Picture**:
+   ```bash
+   # Update bot's own avatar
+   python3 skills/whatsmeow/scripts/wa_tool.py profile-picture-set --file "/path/to/avatar.jpg"
+
+   # Update group icon (bot must be admin)
+   python3 skills/whatsmeow/scripts/wa_tool.py profile-picture-set --file "/path/to/icon.jpg" --jid "120363xxx@g.us"
+   ```
+3. **Remove Profile Picture**:
+   ```bash
+   python3 skills/whatsmeow/scripts/wa_tool.py profile-picture-remove
+   ```
+
+### SOP 9: Updating WhatsApp About / Bio Status
+To update the bot's permanent "About" status text (e.g. "Available", "Aina AI Assistant", etc.):
+```bash
+python3 skills/whatsmeow/scripts/wa_tool.py about-set --status "Aina AI Assistant • Ready to help"
+```
+
+### SOP 10: Posting & Revoking 24-Hour Ephemeral Status Stories
+WhatsApp supports ephemeral 24-hour stories broadcasted to status contacts (`status@broadcast`):
+1. **Post Text Status Story**:
+   ```bash
+   python3 skills/whatsmeow/scripts/wa_tool.py status-send-text \
+     --text "Halo semuanya! Aina versi 2.0 kini aktif 🚀" \
+     --background "0xFF25D366" \
+     --font 2
+   ```
+2. **Post Media Status Story (Image / Video)**:
+   ```bash
+   python3 skills/whatsmeow/scripts/wa_tool.py status-send-media \
+     --file "/path/to/announcement.png" \
+     --caption "Pengumuman pemeliharaan sistem selesai."
+   ```
+3. **Revoke / Delete Status Story or Sent Message**:
+   > ⚠️ **Catatan Protokol WhatsApp**: Story yang sudah tayang tidak bisa diedit secara in-place. Cara resmi memperbarui status story adalah dengan me-revoke status lama lalu memposting status baru.
+   ```bash
+   # Hapus status story tertentu
+   python3 skills/whatsmeow/scripts/wa_tool.py status-revoke --id "3EB0XXXXX"
+
+   # Atau revoke pesan biasa untuk semua orang (delete for everyone)
+   python3 skills/whatsmeow/scripts/wa_tool.py revoke --id "3EB0XXXXX" --chat-jid "628xxx@s.whatsapp.net"
+   ```
+
 ---
 
 ## 4. OpSec & Authority Policy (Strict Enforcement)

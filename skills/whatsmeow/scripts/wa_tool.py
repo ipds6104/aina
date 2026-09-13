@@ -277,6 +277,115 @@ def cmd_send_media(args):
     except Exception as e:
         print(json.dumps({"error": True, "message": str(e)}))
 
+def cmd_profile_picture_get(args):
+    params = []
+    if args.jid:
+        params.append(f"jid={urllib.parse.quote(args.jid)}")
+    if args.preview:
+        params.append("preview=true")
+    qs = f"?{'&'.join(params)}" if params else ""
+    res = make_request("GET", f"/api/v1/user/profile-picture{qs}")
+    print(json.dumps(res, indent=2, ensure_ascii=False))
+
+def cmd_profile_picture_set(args):
+    base_url, api_key = get_config(args)
+    endpoint = f"{base_url}/api/v1/user/profile-picture"
+    file_path = os.path.abspath(args.file)
+    if not os.path.exists(file_path):
+        print(json.dumps({"error": True, "message": f"File not found: {file_path}"}))
+        sys.exit(1)
+
+    curl_cmd = [
+        "curl", "-s", "-X", "POST", endpoint,
+        "-H", f"X-API-Key: {api_key}",
+        "-H", f"Authorization: Bearer {api_key}",
+        "-F", f"file=@{file_path}"
+    ]
+    if args.jid:
+        curl_cmd.extend(["-F", f"jid={args.jid}"])
+
+    try:
+        proc = subprocess.run(curl_cmd, capture_output=True, text=True, timeout=60)
+        if proc.returncode == 0:
+            try:
+                out_json = json.loads(proc.stdout)
+                print(json.dumps(out_json, indent=2, ensure_ascii=False))
+            except json.JSONDecodeError:
+                print(json.dumps({"status": "ok", "raw_output": proc.stdout}))
+        else:
+            print(json.dumps({"error": True, "message": proc.stderr or proc.stdout}))
+    except Exception as e:
+        print(json.dumps({"error": True, "message": str(e)}))
+
+def cmd_profile_picture_remove(args):
+    endpoint = "/api/v1/user/profile-picture"
+    if args.jid:
+        endpoint += f"?jid={urllib.parse.quote(args.jid)}"
+    res = make_request("DELETE", endpoint)
+    print(json.dumps(res, indent=2, ensure_ascii=False))
+
+def cmd_about_set(args):
+    res = make_request("POST", "/api/v1/user/about", {"status": args.status})
+    print(json.dumps(res, indent=2, ensure_ascii=False))
+
+def cmd_status_send_text(args):
+    payload = {
+        "type": "text",
+        "text": args.text
+    }
+    if args.background:
+        payload["background_color"] = args.background
+    if args.font is not None:
+        payload["font"] = args.font
+    res = make_request("POST", "/api/v1/status/send-story", payload)
+    print(json.dumps(res, indent=2, ensure_ascii=False))
+
+def cmd_status_send_media(args):
+    base_url, api_key = get_config(args)
+    endpoint = f"{base_url}/api/v1/status/send-story"
+    file_path = os.path.abspath(args.file)
+    if not os.path.exists(file_path):
+        print(json.dumps({"error": True, "message": f"File not found: {file_path}"}))
+        sys.exit(1)
+
+    media_type = args.type
+    if not media_type or media_type == "auto":
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext in [".mp4", ".mov", ".mkv", ".avi"]:
+            media_type = "video"
+        else:
+            media_type = "image"
+
+    curl_cmd = [
+        "curl", "-s", "-X", "POST", endpoint,
+        "-H", f"X-API-Key: {api_key}",
+        "-H", f"Authorization: Bearer {api_key}",
+        "-F", f"type={media_type}",
+        "-F", f"file=@{file_path}"
+    ]
+    if args.caption:
+        curl_cmd.extend(["-F", f"caption={args.caption}"])
+
+    try:
+        proc = subprocess.run(curl_cmd, capture_output=True, text=True, timeout=60)
+        if proc.returncode == 0:
+            try:
+                out_json = json.loads(proc.stdout)
+                print(json.dumps(out_json, indent=2, ensure_ascii=False))
+            except json.JSONDecodeError:
+                print(json.dumps({"status": "ok", "raw_output": proc.stdout}))
+        else:
+            print(json.dumps({"error": True, "message": proc.stderr or proc.stdout}))
+    except Exception as e:
+        print(json.dumps({"error": True, "message": str(e)}))
+
+def cmd_revoke(args):
+    payload = {"message_id": args.id}
+    if args.chat_jid:
+        payload["chat_jid"] = args.chat_jid
+    res = make_request("POST", "/api/v1/messages/revoke", payload)
+    print(json.dumps(res, indent=2, ensure_ascii=False))
+
 def main():
     parser = argparse.ArgumentParser(description="Whatsmeow CLI helper tool for Aina agent")
     parser.add_argument("--base-url", help="Override Whatsmeow Gateway Base URL")
@@ -341,6 +450,52 @@ def main():
     p_dl.add_argument("--type", choices=["image", "video", "audio", "document"], help="Optional media type")
     p_dl.add_argument("--out", required=True, help="Destination filepath on disk")
     p_dl.set_defaults(func=cmd_download_media)
+
+    # profile-picture-get
+    p_pp_get = subparsers.add_parser("profile-picture-get", help="Get profile picture URL for a user, group, or self")
+    p_pp_get.add_argument("--jid", default="", help="Target JID (defaults to self if empty)")
+    p_pp_get.add_argument("--preview", action="store_true", help="Fetch low-res preview thumbnail instead of full image")
+    p_pp_get.set_defaults(func=cmd_profile_picture_get)
+
+    # profile-picture-set
+    p_pp_set = subparsers.add_parser("profile-picture-set", help="Update profile picture for self or group")
+    p_pp_set.add_argument("--file", required=True, help="Path to avatar image file (JPG/PNG)")
+    p_pp_set.add_argument("--jid", default="", help="Target JID (leave empty for self, or specify group JID)")
+    p_pp_set.set_defaults(func=cmd_profile_picture_set)
+
+    # profile-picture-remove
+    p_pp_del = subparsers.add_parser("profile-picture-remove", help="Remove profile picture for self or group")
+    p_pp_del.add_argument("--jid", default="", help="Target JID (defaults to self if empty)")
+    p_pp_del.set_defaults(func=cmd_profile_picture_remove)
+
+    # about-set
+    p_about = subparsers.add_parser("about-set", help="Update WhatsApp About / Bio status text")
+    p_about.add_argument("--status", required=True, help="New About status text")
+    p_about.set_defaults(func=cmd_about_set)
+
+    # status-send-text
+    p_st_text = subparsers.add_parser("status-send-text", help="Post an ephemeral 24-hour text status story")
+    p_st_text.add_argument("--text", required=True, help="Status story text")
+    p_st_text.add_argument("--background", help="Optional ARGB background color (hex, e.g. 0xFF5733 or #FF5733)")
+    p_st_text.add_argument("--font", type=int, choices=[1, 2, 3, 4, 5], help="Optional font style (1 to 5)")
+    p_st_text.set_defaults(func=cmd_status_send_text)
+
+    # status-send-media
+    p_st_media = subparsers.add_parser("status-send-media", help="Post an ephemeral 24-hour media status story")
+    p_st_media.add_argument("--file", required=True, help="Path to image or video file")
+    p_st_media.add_argument("--caption", help="Optional status caption")
+    p_st_media.add_argument("--type", choices=["auto", "image", "video"], default="auto", help="Media type (default: auto)")
+    p_st_media.set_defaults(func=cmd_status_send_media)
+
+    # revoke / status-revoke
+    p_revoke = subparsers.add_parser("revoke", help="Revoke/delete a sent message or status story for everyone")
+    p_revoke.add_argument("--id", required=True, help="Message ID or Status Story ID to revoke")
+    p_revoke.add_argument("--chat-jid", default="", help="Chat JID (leave empty or status@broadcast for stories)")
+    p_revoke.set_defaults(func=cmd_revoke)
+
+    p_st_revoke = subparsers.add_parser("status-revoke", help="Revoke/delete a posted status story")
+    p_st_revoke.add_argument("--id", required=True, help="Status Story ID to revoke")
+    p_st_revoke.set_defaults(func=lambda args: cmd_revoke(argparse.Namespace(id=args.id, chat_jid="status@broadcast")))
 
     args = parser.parse_args()
     args.func(args)
