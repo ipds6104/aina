@@ -58,6 +58,7 @@ pub struct WebhookServerState {
     pub timezone: String,
     pub locale: String,
     pub sim_jobs: Arc<RwLock<HashMap<String, SimulationJob>>>,
+    pub chat_queues: Arc<tokio::sync::Mutex<HashMap<String, tokio::sync::mpsc::UnboundedSender<IncomingMessage>>>>,
 }
 
 pub fn create_router(state: Arc<WebhookServerState>) -> Router {
@@ -729,17 +730,81 @@ async fn webhook_handler(
     );
 
     if let Some(msg) = msg_opt {
-        let usecase = Arc::clone(&state.usecase);
-        tokio::spawn(async move {
-            if let Err(e) = usecase.execute(msg).await {
-                error!("Error processing message: {:?}", e);
-            }
-        });
+        dispatch_message_to_queue(&state, msg).await;
     } else {
         debug!("Webhook received event that was not a parseable user message");
     }
 
     (StatusCode::OK, "OK")
+}
+
+async fn dispatch_message_to_queue(state: &Arc<WebhookServerState>, msg: IncomingMessage) {
+    let usecase = Arc::clone(&state.usecase);
+    dispatch_incoming_message_to_queue(&state.chat_queues, msg, 300, move |m| {
+        let uc = Arc::clone(&usecase);
+        async move { uc.execute(m).await }
+    })
+    .await;
+}
+
+pub async fn dispatch_incoming_message_to_queue<F, Fut>(
+    chat_queues: &Arc<tokio::sync::Mutex<HashMap<String, tokio::sync::mpsc::UnboundedSender<IncomingMessage>>>>,
+    msg: IncomingMessage,
+    idle_timeout_secs: u64,
+    handler: F,
+) where
+    F: Fn(IncomingMessage) -> Fut + Send + Sync + 'static,
+    Fut: std::future::Future<Output = anyhow::Result<()>> + Send + 'static,
+{
+    let chat_jid = msg.chat_jid.clone();
+    let mut queues = chat_queues.lock().await;
+
+    let mut needs_new_worker = false;
+    if let Some(tx) = queues.get(&chat_jid) {
+        if tx.is_closed() {
+            needs_new_worker = true;
+        }
+    } else {
+        needs_new_worker = true;
+    }
+
+    if needs_new_worker {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<IncomingMessage>();
+        let queues_ref = Arc::clone(chat_queues);
+        let worker_chat_jid = chat_jid.clone();
+        let handler = Arc::new(handler);
+
+        tokio::spawn(async move {
+            info!("Started sequential FIFO message queue worker for chat {}", worker_chat_jid);
+            loop {
+                match tokio::time::timeout(std::time::Duration::from_secs(idle_timeout_secs), rx.recv()).await {
+                    Ok(Some(queued_msg)) => {
+                        if let Err(e) = handler(queued_msg).await {
+                            error!("Error processing queued message for {}: {:?}", worker_chat_jid, e);
+                        }
+                    }
+                    Ok(None) => break,
+                    Err(_) => {
+                        // Idle timeout reached without incoming messages
+                        let mut lock = queues_ref.lock().await;
+                        if rx.is_empty() {
+                            lock.remove(&worker_chat_jid);
+                            info!("Sequential queue worker idle timeout for chat {}, cleaned up", worker_chat_jid);
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+
+        queues.insert(chat_jid.clone(), tx);
+    }
+
+    if let Some(tx) = queues.get(&chat_jid) {
+        if let Err(e) = tx.send(msg) {
+            error!("Failed to enqueue message into queue for {}: {:?}", chat_jid, e);
+        }
+    }
 }
 
 fn parse_whatsmeow_message(
@@ -2156,7 +2221,7 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::domain::SessionRole;
+    use crate::core::domain::{ChatType, Platform, Sender, SessionRole};
     use serde_json::json;
 
     #[test]
@@ -2226,5 +2291,80 @@ mod tests {
         .expect("Message should be parsed");
 
         assert_eq!(msg.session_role, SessionRole::UserCompanion);
+    }
+
+    #[tokio::test]
+    async fn test_dispatch_incoming_message_to_queue_fifo_ordering() {
+        let chat_queues = Arc::new(tokio::sync::Mutex::new(HashMap::new()));
+        let processed = Arc::new(tokio::sync::Mutex::new(Vec::new()));
+
+        let make_msg = |id: &str, text: &str| IncomingMessage {
+            id: id.to_string(),
+            platform: Platform::WhatsApp,
+            session_role: SessionRole::PrimaryBot,
+            chat_jid: "group123@g.us".to_string(),
+            chat_type: ChatType::Group,
+            sender: Sender {
+                jid: "user456@s.whatsapp.net".to_string(),
+                name: Some("Ihza".to_string()),
+            },
+            text: text.to_string(),
+            timestamp: 123456,
+            is_from_me: false,
+            quoted_message: None,
+            mentioned_jids: vec![],
+            is_bot_mentioned: true,
+            bot_lid: None,
+        };
+
+        let p1 = Arc::clone(&processed);
+        dispatch_incoming_message_to_queue(&chat_queues, make_msg("M1", "First"), 1, move |msg| {
+            let p_inner = Arc::clone(&p1);
+            async move {
+                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                p_inner.lock().await.push(msg.id);
+                Ok(())
+            }
+        })
+        .await;
+
+        let p2 = Arc::clone(&processed);
+        dispatch_incoming_message_to_queue(&chat_queues, make_msg("M2", "Second"), 1, move |msg| {
+            let p_inner = Arc::clone(&p2);
+            async move {
+                tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                p_inner.lock().await.push(msg.id);
+                Ok(())
+            }
+        })
+        .await;
+
+        let p3 = Arc::clone(&processed);
+        dispatch_incoming_message_to_queue(&chat_queues, make_msg("M3", "Third"), 1, move |msg| {
+            let p_inner = Arc::clone(&p3);
+            async move {
+                tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                p_inner.lock().await.push(msg.id);
+                Ok(())
+            }
+        })
+        .await;
+
+        let start = std::time::Instant::now();
+        loop {
+            let count = processed.lock().await.len();
+            if count == 3 || start.elapsed() > std::time::Duration::from_secs(3) {
+                break;
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
+        }
+
+        let results = processed.lock().await.clone();
+        assert_eq!(results, vec!["M1", "M2", "M3"]);
+
+        // Verify worker cleaned up from chat_queues after 1s idle timeout
+        tokio::time::sleep(tokio::time::Duration::from_millis(1200)).await;
+        let queues = chat_queues.lock().await;
+        assert!(!queues.contains_key("group123@g.us"));
     }
 }

@@ -1,5 +1,5 @@
 use crate::core::domain::{
-    Gatekeeper, GatekeeperDecision, IncomingMessage, PersonaEngine, PresenceState,
+    ChatType, Gatekeeper, GatekeeperDecision, IncomingMessage, PersonaEngine, PresenceState,
 };
 use crate::core::ports::{AgentEnginePort, SessionStorePort, WhatsAppPort};
 use std::sync::Arc;
@@ -164,6 +164,16 @@ impl ProcessIncomingMessageUseCase {
                 let session_role = msg.session_role;
                 let can_ack = should_send_interim_ack(&msg.text);
 
+                let quote_id = match msg.chat_type {
+                    ChatType::Group => Some(msg.id.as_str()),
+                    ChatType::DirectMessage => None,
+                };
+
+                let ack_quote_id = match msg.chat_type {
+                    ChatType::Group => Some(msg_id.clone()),
+                    ChatType::DirectMessage => None,
+                };
+
                 let heartbeat_handle = tokio::spawn(async move {
                     let mut elapsed_secs = 0;
                     let mut ack_sent = false;
@@ -180,7 +190,7 @@ impl ProcessIncomingMessageUseCase {
                         if can_ack && elapsed_secs >= 8 && !ack_sent {
                             let ack_text = pick_interim_ack(&msg_id, &msg_text);
                             let _ = whatsapp
-                                .send_text_with_session(&chat_jid, &ack_text, Some(&msg_id), session_role)
+                                .send_text_with_session(&chat_jid, &ack_text, ack_quote_id.as_deref(), session_role)
                                 .await;
                             ack_sent = true;
                         }
@@ -203,7 +213,7 @@ impl ProcessIncomingMessageUseCase {
                         let err_reply = "Maaf, terjadi kesalahan saat memproses permintaan Anda. Silakan coba sesaat lagi.";
                         let _ = self
                             .whatsapp
-                            .send_text_with_session(&msg.chat_jid, err_reply, Some(&msg.id), msg.session_role)
+                            .send_text_with_session(&msg.chat_jid, err_reply, quote_id, msg.session_role)
                             .await;
                         return Err(e);
                     }
@@ -236,7 +246,7 @@ impl ProcessIncomingMessageUseCase {
 
                     // 8. Send reply back to WhatsApp
                     self.whatsapp
-                        .send_text_with_session(&msg.chat_jid, &agent_res.response_text, Some(&msg.id), msg.session_role)
+                        .send_text_with_session(&msg.chat_jid, &agent_res.response_text, quote_id, msg.session_role)
                         .await?;
                 }
 

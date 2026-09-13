@@ -87,6 +87,7 @@ impl WhatsmeowHttpAdapter {
 
         if let Some(qid) = quoted_id {
             if let Some(obj) = body.as_object_mut() {
+                obj.insert("reply_to_id".to_string(), json!(qid));
                 obj.insert("quoted_id".to_string(), json!(qid));
                 obj.insert("quoted_message_id".to_string(), json!(qid));
             }

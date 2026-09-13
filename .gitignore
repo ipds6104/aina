@@ -15,5 +15,6 @@
 /workspaces/**/__pycache__/
 *.pyc
 
+/workspaces/**/skills
 .env
 *.log
