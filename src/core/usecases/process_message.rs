@@ -160,6 +160,7 @@ impl ProcessIncomingMessageUseCase {
                 let whatsapp = Arc::clone(&self.whatsapp);
                 let chat_jid = msg.chat_jid.clone();
                 let msg_id = msg.id.clone();
+                let msg_text = msg.text.clone();
                 let session_role = msg.session_role;
                 let can_ack = should_send_interim_ack(&msg.text);
 
@@ -177,7 +178,7 @@ impl ProcessIncomingMessageUseCase {
 
                         // Only send interim ack for real actionable tasks (never for greetings/pings) if taking >= 8s
                         if can_ack && elapsed_secs >= 8 && !ack_sent {
-                            let ack_text = "okee sebentarr...".to_string();
+                            let ack_text = pick_interim_ack(&msg_id, &msg_text);
                             let _ = whatsapp
                                 .send_text_with_session(&chat_jid, &ack_text, Some(&msg_id), session_role)
                                 .await;
@@ -238,6 +239,47 @@ impl ProcessIncomingMessageUseCase {
                 Ok(())
             }
         }
+    }
+}
+
+/// Returns a fast, natural, pre-curated interim acknowledgment phrase in Indonesian
+/// texting style with natural variations, preventing robotic monotony.
+pub fn pick_interim_ack(msg_id: &str, text: &str) -> String {
+    let lower = text.to_lowercase();
+    let is_search_or_check = lower.contains("cek")
+        || lower.contains("cari")
+        || lower.contains("liat")
+        || lower.contains("lihat")
+        || lower.contains("baca");
+
+    let seed: usize = msg_id.bytes().fold(0usize, |acc, b| acc.wrapping_add(b as usize))
+        + (std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| (d.subsec_micros() / 1000) as usize)
+            .unwrap_or(0));
+
+    if is_search_or_check {
+        let search_options = [
+            "sebentarr, lagi kucariin yaa...",
+            "siaapp, otw dicek dulu yaa...",
+            "otw dicek dulu yaa, sebentarr...",
+            "sebentarr yaa, lagi dibuka catatannya...",
+            "okeiss, lagi ditelusuri sebentarr...",
+            "okee sebentarr yaa, lagi dicek...",
+        ];
+        search_options[seed % search_options.len()].to_string()
+    } else {
+        let general_options = [
+            "okee sebentarr yaa...",
+            "siaapp, sebentarr yaa...",
+            "okeiss, tunggu sebentarr yaa...",
+            "otw diproses dulu yaa, sebentarr...",
+            "okee, sebentarr kusiapkan dulu...",
+            "siapp sebentarr yaa...",
+            "sebentarr yaa...",
+            "okeiss, otw yaa sebentarr...",
+        ];
+        general_options[seed % general_options.len()].to_string()
     }
 }
 
@@ -324,6 +366,15 @@ mod tests {
         assert!(should_send_interim_ack("Bisa buatkan script python untuk backup database?"));
         assert!(should_send_interim_ack("Kenapa server tadi sempat restart?"));
         assert!(should_send_interim_ack("Apa kamu tau chat yang aku reply ini tulisannya apa?"));
+    }
+
+    #[test]
+    fn test_pick_interim_ack_variations() {
+        let ack1 = pick_interim_ack("msg-1", "tolong cek data penjualan");
+        assert!(ack1.contains("sebentar") || ack1.contains("cek") || ack1.contains("cari") || ack1.contains("oke"));
+
+        let ack2 = pick_interim_ack("msg-2", "buatkan script python");
+        assert!(ack2.contains("sebentar") || ack2.contains("proses") || ack2.contains("siap") || ack2.contains("oke"));
     }
 }
 

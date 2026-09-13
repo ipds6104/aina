@@ -68,11 +68,11 @@ impl PersonaEngine {
 
     /// Prepares the complete prompt injected into the Antigravity agent CLI.
     pub fn build_prompt(&self, msg: &IncomingMessage, profile: Option<&UserProfile>) -> String {
-        let sender_name = msg
-            .sender
-            .name
-            .as_deref()
-            .or_else(|| profile.and_then(|p| p.name.as_deref()))
+        // Prioritize custom name/callsign stored in profile if available
+        let sender_name = profile
+            .and_then(|p| p.name.as_deref())
+            .filter(|n| !n.trim().is_empty())
+            .or_else(|| msg.sender.name.as_deref())
             .unwrap_or("Rekan Kerja");
         let sender_jid = &msg.sender.jid;
 
@@ -81,11 +81,25 @@ impl PersonaEngine {
             && (sender_jid == &self.admin_jid
                 || sender_jid.replace("@s.whatsapp.net", "") == self.admin_jid.replace("@s.whatsapp.net", ""));
 
+        let admin_callsign = profile
+            .and_then(|p| p.name.as_deref())
+            .filter(|n| !n.trim().is_empty())
+            .unwrap_or_else(|| {
+                if sender_name.to_lowercase().contains("ihza") {
+                    "Mas Ihza"
+                } else {
+                    sender_name
+                }
+            });
+
         let (authority_level, role_title, authority_guidance) = if is_admin_jid {
             (
                 "ADMIN",
                 "Penanggung Jawab Sistem / Administrator Utama",
-                "Pemilik sistem & partner kerja utama (Mas Ihza). Gunakan gaya bicara akrab, santai, cekatan, dan hangat sesama rekan kerja dekat tanpa rasa kaku formalitas birokratis.",
+                format!(
+                    "Pemilik sistem & partner kerja utama ({}). Gunakan gaya bicara akrab, santai, cekatan, dan hangat sesama rekan kerja dekat tanpa rasa kaku formalitas birokratis.",
+                    admin_callsign
+                ),
             )
         } else if let Some(p) = profile {
             let auth = p.authority_level.to_uppercase();
@@ -94,25 +108,33 @@ impl PersonaEngine {
                 "ADMIN" => (
                     "ADMIN",
                     role,
-                    "Administrator utama & partner kerja dekat. Gunakan gaya bicara akrab, santai, cekatan, dan hangat tanpa sekat kaku.",
+                    format!(
+                        "Administrator utama & partner kerja dekat ({}). Gunakan gaya bicara akrab, santai, cekatan, dan hangat tanpa sekat kaku.",
+                        admin_callsign
+                    ),
                 ),
                 "STAFF" | "MEMBER" => (
                     "STAFF",
                     role,
-                    "Rekan kerja internal. Berhak meminta bantuan coding, analisis data, script, dan reporting. Gunakan gaya ramah, kolaboratif, dan santai-profesional kantor.",
+                    "Rekan kerja internal. Berhak meminta bantuan coding, analisis data, script, dan reporting. Gunakan gaya ramah, kolaboratif, dan santai-profesional kantor.".to_string(),
                 ),
                 _ => (
                     "GUEST",
                     role,
-                    "Pihak luar / tamu belum terverifikasi. Bersikap santun, tertib, formal-terukur, dan adil. DILARANG membocorkan data internal kantor, token, kredensial, atau mengeksekusi perintah berisiko tinggi (Strict OpSec).",
+                    "Pihak luar / tamu belum terverifikasi. Bersikap santun, tertib, formal-terukur, dan adil. DILARANG membocorkan data internal kantor, token, kredensial, atau mengeksekusi perintah berisiko tinggi (Strict OpSec).".to_string(),
                 ),
             }
         } else {
             (
                 "STAFF",
                 "Rekan Kerja",
-                "Rekan kerja internal. Gunakan gaya komunikasi kantor yang ramah, bersahabat, dan solutif.",
+                "Rekan kerja internal. Gunakan gaya komunikasi kantor yang ramah, bersahabat, dan solutif.".to_string(),
             )
+        };
+
+        let profile_notes_str = match profile.and_then(|p| p.notes.as_deref()) {
+            Some(notes) if !notes.trim().is_empty() => format!("\n- Catatan Profil & Preferensi: {}", notes),
+            _ => String::new(),
         };
         
         let chat_context_str = match msg.chat_type {
@@ -184,7 +206,8 @@ impl PersonaEngine {
             - Platform: {platform_name} ({platform_ui_context})\n\
             - Ruang Obrolan: {chat_context}\n\
             - Pengirim: {sender_name} ({sender_jid})\n\
-            - Profil Pengirim: {role_title} (Tingkat Otoritas: {authority_level})\n\
+            - Profil Pengirim: {role_title} (Tingkat Otoritas: {authority_level})\
+            {profile_notes}\n\
             - Panduan Wewenang: {authority_guidance}\n\
             {quoted_context}\
             \n\
@@ -222,7 +245,7 @@ impl PersonaEngine {
             [Panduan Format Sesuai Platform ({platform_name})]:\n\
             {platform_format_guidelines}\n\n\
             [Instruksi Respons]:\n\
-            - Balaslah secara langsung sebagai Aina kepada {sender_name} dengan memperhatikan platform, waktu lokal, dan batasan wewenang pengirim di atas.\n\
+            - Balaslah secara langsung sebagai Aina kepada {sender_name} dengan memperhatikan platform, waktu lokal, preferensi profil, dan batasan wewenang pengirim di atas.\n\
             - Ingat: ramah, cekatan, solutif, basa-basi seperlunya. JANGAN gunakan frasa robotik 'ada yang bisa saya bantu'—gunakan sapaan rekan kerja alami seperti 'yaa, gimana gimanaa..'.\n\
             - Jika permintaan pengirim kurang jelas, kurang spesifikasi/parameter, ambigu, atau berpotensi destruktif/permanen, tanyakan klarifikasi dan konfirmasi secara sopan dan terarah.",
             persona = self.persona_text,
@@ -241,6 +264,7 @@ impl PersonaEngine {
             sender_jid = sender_jid,
             role_title = role_title,
             authority_level = authority_level,
+            profile_notes = profile_notes_str,
             authority_guidance = authority_guidance,
             quoted_context = quoted_context,
             text = msg.text,
@@ -399,5 +423,53 @@ mod tests {
         assert!(prompt.contains("Tingkat Otoritas: GUEST"));
         assert!(prompt.contains("Strict OpSec"));
         assert!(prompt.contains("Linguistic Mirroring"));
+    }
+
+    #[test]
+    fn test_build_prompt_admin_custom_profile_callsign() {
+        let engine = PersonaEngine::new(
+            "Persona test".to_string(),
+            "Org test".to_string(),
+            "6289625345646@s.whatsapp.net".to_string(),
+            "Asia/Jakarta".to_string(),
+            7,
+            "id-ID".to_string(),
+            "https://aina-wa.test".to_string(),
+            "628982157341@s.whatsapp.net".to_string(),
+            None,
+        );
+
+        let msg = IncomingMessage {
+            id: "msg3".to_string(),
+            platform: Platform::WhatsApp,
+            session_role: SessionRole::PrimaryBot,
+            chat_jid: "6289625345646-123456@g.us".to_string(),
+            sender: Sender {
+                jid: "6289625345646@s.whatsapp.net".to_string(),
+                name: Some("Ihza Karunia".to_string()),
+            },
+            chat_type: ChatType::Group,
+            text: "aman gak?".to_string(),
+            timestamp: 1726000000,
+            quoted_message: None,
+            mentioned_jids: vec![],
+            is_bot_mentioned: false,
+            bot_lid: None,
+            is_from_me: false,
+        };
+
+        let profile = UserProfile {
+            sender_jid: "6289625345646@s.whatsapp.net".to_string(),
+            name: Some("Bang Ihza".to_string()),
+            role: Some("Owner & Lead Architect".to_string()),
+            authority_level: "admin".to_string(),
+            notes: Some("Preferensi panggilan resmi: Bang Ihza".to_string()),
+        };
+
+        let prompt = engine.build_prompt(&msg, Some(&profile));
+        assert!(prompt.contains("Pengirim: Bang Ihza"));
+        assert!(prompt.contains("partner kerja utama (Bang Ihza)"));
+        assert!(prompt.contains("Catatan Profil & Preferensi: Preferensi panggilan resmi: Bang Ihza"));
+        assert!(!prompt.contains("partner kerja utama (Mas Ihza)"));
     }
 }

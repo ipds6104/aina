@@ -517,7 +517,8 @@ mod tests {
 
     fn create_test_archive() -> PathBuf {
         let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-        let temp_dir = std::env::temp_dir().join(format!("aina_test_archive_{}", id));
+        let temp_dir = std::env::temp_dir().join(format!("aina_test_archive_{}_{}", std::process::id(), id));
+        let _ = std::fs::remove_dir_all(&temp_dir);
         let archives_dir = temp_dir.join("knowledge").join("archives");
         std::fs::create_dir_all(&archives_dir).unwrap();
         let db_path = archives_dir.join("chat_test.db");
