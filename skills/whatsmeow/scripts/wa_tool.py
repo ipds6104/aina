@@ -379,6 +379,18 @@ def cmd_status_send_media(args):
     except Exception as e:
         print(json.dumps({"error": True, "message": str(e)}))
 
+def cmd_status_list(args):
+    params = []
+    if args.limit:
+        params.append(f"limit={args.limit}")
+    if args.active_only:
+        params.append("active_only=true")
+    if args.contacts:
+        params.append("self=false")
+    qs = f"?{'&'.join(params)}" if params else ""
+    res = make_request("GET", f"/api/v1/status/list{qs}")
+    print(json.dumps(res, indent=2, ensure_ascii=False))
+
 def cmd_revoke(args):
     payload = {"message_id": args.id}
     if args.chat_jid:
@@ -486,6 +498,13 @@ def main():
     p_st_media.add_argument("--caption", help="Optional status caption")
     p_st_media.add_argument("--type", choices=["auto", "image", "video"], default="auto", help="Media type (default: auto)")
     p_st_media.set_defaults(func=cmd_status_send_media)
+
+    # status-list
+    p_st_list = subparsers.add_parser("status-list", help="List status stories created by bot (or contacts)")
+    p_st_list.add_argument("--limit", type=int, default=20, help="Max status stories to list (default: 20)")
+    p_st_list.add_argument("--active-only", action="store_true", help="Only show active stories (< 24 hours)")
+    p_st_list.add_argument("--contacts", action="store_true", help="List status stories from contacts instead of own")
+    p_st_list.set_defaults(func=cmd_status_list)
 
     # revoke / status-revoke
     p_revoke = subparsers.add_parser("revoke", help="Revoke/delete a sent message or status story for everyone")

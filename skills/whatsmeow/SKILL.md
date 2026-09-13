@@ -174,7 +174,18 @@ WhatsApp supports ephemeral 24-hour stories broadcasted to status contacts (`sta
      --file "/path/to/announcement.png" \
      --caption "Pengumuman pemeliharaan sistem selesai."
    ```
-3. **Revoke / Delete Status Story or Sent Message**:
+3. **List Posted Status Stories**:
+   ```bash
+   # Tampilkan riwayat status story yang pernah diposting bot
+   python3 skills/whatsmeow/scripts/wa_tool.py status-list
+
+   # Hanya tampilkan status story yang masih aktif (< 24 jam)
+   python3 skills/whatsmeow/scripts/wa_tool.py status-list --active-only
+
+   # Tampilkan status story dari kontak lain
+   python3 skills/whatsmeow/scripts/wa_tool.py status-list --contacts
+   ```
+4. **Revoke / Delete Status Story or Sent Message**:
    > ⚠️ **Catatan Protokol WhatsApp**: Story yang sudah tayang tidak bisa diedit secara in-place. Cara resmi memperbarui status story adalah dengan me-revoke status lama lalu memposting status baru.
    ```bash
    # Hapus status story tertentu
