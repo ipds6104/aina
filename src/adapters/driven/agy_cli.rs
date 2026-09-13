@@ -98,6 +98,8 @@ pub struct AntigravityCliAdapter {
     model: Arc<RwLock<String>>,
     workspace_dir: PathBuf,
     timeout_duration: Duration,
+    whatsmeow_base_url: String,
+    whatsmeow_api_key: String,
 }
 
 impl AntigravityCliAdapter {
@@ -106,6 +108,8 @@ impl AntigravityCliAdapter {
         model: impl Into<String>,
         workspace_dir: impl Into<PathBuf>,
         timeout_seconds: u64,
+        whatsmeow_base_url: impl Into<String>,
+        whatsmeow_api_key: impl Into<String>,
     ) -> Self {
         let raw_model = model.into();
         let initial_model = resolve_model_name(&raw_model).unwrap_or(raw_model);
@@ -114,6 +118,8 @@ impl AntigravityCliAdapter {
             model: Arc::new(RwLock::new(initial_model)),
             workspace_dir: workspace_dir.into(),
             timeout_duration: Duration::from_secs(timeout_seconds),
+            whatsmeow_base_url: whatsmeow_base_url.into(),
+            whatsmeow_api_key: whatsmeow_api_key.into(),
         }
     }
 
@@ -200,6 +206,12 @@ impl AgentEnginePort for AntigravityCliAdapter {
         cmd.arg("--print-timeout").arg(format!("{}s", print_timeout_sec));
         cmd.arg("--dangerously-skip-permissions");
         cmd.arg("--model").arg(&active_model);
+
+        // Inject live WhatsApp gateway connection variables so CLI tools (wa_tool.py) work seamlessly
+        cmd.env("WHATSMEOW_BASE_URL", &self.whatsmeow_base_url);
+        cmd.env("WHATSMEOW_URL", &self.whatsmeow_base_url);
+        cmd.env("WHATSMEOW_API_KEY", &self.whatsmeow_api_key);
+        cmd.env("API_KEY", &self.whatsmeow_api_key);
 
         debug!(
             "Executing Antigravity CLI: {:?} (conv: {:?}, model: {})",

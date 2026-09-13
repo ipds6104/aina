@@ -26,8 +26,12 @@ mkdir -p /root/.gemini/config/skills
 if [ -d "/app/skills" ]; then
     cp -r /app/skills/* /root/.gemini/config/skills/ 2>/dev/null || true
     cp -r /app/skills/* "${AGENT_WORKSPACE:-/app/workspaces/default}/.agents/skills/" 2>/dev/null || true
+    mkdir -p "${AGENT_WORKSPACE:-/app/workspaces/default}/skills"
+    cp -r /app/skills/* "${AGENT_WORKSPACE:-/app/workspaces/default}/skills/" 2>/dev/null || true
     chmod -R +x /root/.gemini/config/skills/*/scripts 2>/dev/null || true
     chmod -R +x "${AGENT_WORKSPACE:-/app/workspaces/default}/.agents/skills"/*/scripts 2>/dev/null || true
+    chmod -R +x "${AGENT_WORKSPACE:-/app/workspaces/default}/skills"/*/scripts 2>/dev/null || true
+    ln -sf /app/skills/whatsmeow/scripts/wa_tool.py /usr/local/bin/wa_tool 2>/dev/null || true
 fi
 
 # Sync runtime sandbox GEMINI.md rules into workspace if provided

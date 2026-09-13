@@ -16,18 +16,49 @@ from typing import Optional, Dict, Any
 
 DEFAULT_BASE_URL = "http://localhost:3000"
 
-def get_config() -> tuple[str, str]:
+def get_config(args=None) -> tuple[str, str]:
+    cli_base = getattr(args, "base_url", None) if args else None
+    cli_key = getattr(args, "api_key", None) if args else None
+
     base_url = (
-        os.getenv("WHATSMEOW_BASE_URL")
+        cli_base
+        or os.getenv("WHATSMEOW_BASE_URL")
         or os.getenv("WHATSMEOW_URL")
-        or DEFAULT_BASE_URL
-    ).rstrip("/")
-    api_key = (
-        os.getenv("WHATSMEOW_API_KEY")
-        or os.getenv("API_KEY")
-        or ""
     )
-    return base_url, api_key
+    api_key = (
+        cli_key
+        or os.getenv("WHATSMEOW_API_KEY")
+        or os.getenv("API_KEY")
+    )
+
+    if not base_url or not api_key:
+        candidates = [
+            "/app/config/config.yaml",
+            "config/config.yaml",
+            "../config/config.yaml",
+            "../../config/config.yaml",
+        ]
+        for c in candidates:
+            if os.path.isfile(c):
+                try:
+                    with open(c, "r", encoding="utf-8") as f:
+                        lines = f.readlines()
+                    in_wa = False
+                    for line in lines:
+                        clean = line.strip()
+                        if clean.startswith("whatsmeow:"):
+                            in_wa = True
+                        elif in_wa and clean and not clean.startswith("#"):
+                            if not line.startswith(" ") and not line.startswith("\t"):
+                                in_wa = False
+                            elif "base_url:" in clean and not base_url:
+                                base_url = clean.split("base_url:", 1)[1].strip().strip('"').strip("'")
+                            elif "api_key:" in clean and not api_key:
+                                api_key = clean.split("api_key:", 1)[1].strip().strip('"').strip("'")
+                except Exception:
+                    pass
+
+    return (base_url or DEFAULT_BASE_URL).rstrip("/"), (api_key or "")
 
 def make_request(method: str, endpoint: str, data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     base_url, api_key = get_config()
@@ -198,7 +229,7 @@ def cmd_download_media(args):
     print(json.dumps(res, indent=2, ensure_ascii=False))
 
 def cmd_send_media(args):
-    base_url, api_key = get_config()
+    base_url, api_key = get_config(args)
     endpoint = f"{base_url}/api/v1/messages/send-media"
     file_path = os.path.abspath(args.file)
     
@@ -206,17 +237,32 @@ def cmd_send_media(args):
         print(json.dumps({"error": True, "message": f"File not found: {file_path}"}))
         sys.exit(1)
 
+    # Auto-detect media type if set to auto
+    media_type = args.type
+    if not media_type or media_type == "auto":
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
+            media_type = "image"
+        elif ext in [".mp4", ".mov", ".mkv", ".avi"]:
+            media_type = "video"
+        elif ext in [".mp3", ".ogg", ".opus", ".m4a", ".wav"]:
+            media_type = "audio"
+        else:
+            media_type = "document"
+
     # Use curl for robust multipart form-data handling without extra python dependencies
     curl_cmd = [
         "curl", "-s", "-X", "POST", endpoint,
         "-H", f"X-API-Key: {api_key}",
         "-H", f"Authorization: Bearer {api_key}",
         "-F", f"recipient={args.to}",
-        "-F", f"type={args.type}",
+        "-F", f"type={media_type}",
         "-F", f"file=@{file_path}"
     ]
     if args.caption:
         curl_cmd.extend(["-F", f"caption={args.caption}"])
+    if getattr(args, "reply_to", None):
+        curl_cmd.extend(["-F", f"reply_to_id={args.reply_to}"])
 
     try:
         proc = subprocess.run(curl_cmd, capture_output=True, text=True, timeout=60)
@@ -233,6 +279,8 @@ def cmd_send_media(args):
 
 def main():
     parser = argparse.ArgumentParser(description="Whatsmeow CLI helper tool for Aina agent")
+    parser.add_argument("--base-url", help="Override Whatsmeow Gateway Base URL")
+    parser.add_argument("--api-key", help="Override Whatsmeow API Key")
     subparsers = parser.add_subparsers(dest="subcommand", required=True)
 
     # recent
@@ -268,8 +316,9 @@ def main():
     p_media = subparsers.add_parser("send-media", help="Send media or document file")
     p_media.add_argument("--to", required=True, help="Recipient JID")
     p_media.add_argument("--file", required=True, help="Path to file on disk")
-    p_media.add_argument("--type", default="document", choices=["image", "video", "audio", "document"], help="Media type")
+    p_media.add_argument("--type", default="auto", choices=["auto", "image", "video", "audio", "document"], help="Media type (default: auto)")
     p_media.add_argument("--caption", help="Optional caption text")
+    p_media.add_argument("--reply-to", help="Optional message ID being quoted / replied to")
     p_media.set_defaults(func=cmd_send_media)
 
     # search

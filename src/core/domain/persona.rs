@@ -242,7 +242,9 @@ impl PersonaEngine {
             - JID / Akun Bot WhatsApp: {bot_jid}\n\
             - Helper Tool Resmi: `python3 skills/whatsmeow/scripts/wa_tool.py <subcommand>` (tersedia: send-text, send-media, recent, search, stats, export-backup, groups, group-info, download-media)\n\
             - ATURAN ANTI-DOUBLE SEND: DILARANG KERAS memanggil `wa_tool.py send-text` untuk membalas chat aktif saat ini! Cukup tuliskan teks jawabanmu langsung di pesan respons akhir. Sistem backend Aina secara otomatis akan mengirimkan teks responmu ke WhatsApp. Memanggil send-text untuk chat saat ini akan mengakibatkan pesan terkirim ganda!\n\
-            - Tool `wa_tool.py send-media` TETAP digunakan seperti biasa bila kamu diminta mengirimkan dokumen, file, atau gambar.\n\
+            - PENGIRIMAN FILE / DOKUMEN / GAMBAR: Bila diminta mengirim berkas (laporan Excel/CSV, dokumen PDF, script, atau gambar/foto), buat atau siapkan berkas di workspace, lalu kirimkan ke chat ini via tool:\n\
+              `python3 skills/whatsmeow/scripts/wa_tool.py send-media --to {chat_jid} --file <path_berkas> --caption \"<keterangan_singkat>\"`\n\
+              (Subcommand `send-media` otomatis mendeteksi tipe file gambar/dokumen/audio dan langsung mengunggahnya ke WhatsApp).\n\
             - PERINGATAN KERAS: Gateway WhatsApp berada di URL di atas ({whatsmeow_url}), BUKAN di http://localhost:3000. DILARANG KERAS berasumsi, mem-probing, atau melakukan curl ke http://localhost:3000.\n\n\
             ---\n\
             [Disiplin Berpikir Internal - HANYA UNTUK INTERNAL, JANGAN PERNAH DISEBUTKAN DI CHAT]:\n\
@@ -284,6 +286,7 @@ impl PersonaEngine {
             platform_name = platform_name,
             platform_ui_context = platform_ui_context,
             chat_context = chat_context_str,
+            chat_jid = msg.chat_jid,
             sender_name = sender_name,
             sender_jid = sender_jid,
             role_title = role_title,

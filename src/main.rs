@@ -50,6 +50,8 @@ async fn main() -> anyhow::Result<()> {
         &config.agent.model,
         &config.agent.workspace_dir,
         config.agent.timeout_seconds,
+        &config.whatsmeow.base_url,
+        &config.whatsmeow.api_key,
     ));
     let whatsapp = Arc::new(WhatsmeowHttpAdapter::with_sessions(
         &config.whatsmeow.base_url,
