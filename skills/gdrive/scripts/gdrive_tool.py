@@ -227,7 +227,7 @@ def cmd_auth(args):
     client_id, client_secret = load_client_secrets(secrets_file)
 
     port = args.port or 8085
-    redirect_uri = f"http://localhost:{port}"
+    redirect_uri = getattr(args, "redirect_uri", None) or f"http://localhost:{port}"
 
     auth_params = {
         "client_id": client_id,
@@ -238,6 +238,10 @@ def cmd_auth(args):
         "prompt": "consent",
     }
     auth_url = f"{AUTH_ENDPOINT}?{urllib.parse.urlencode(auth_params)}"
+
+    if getattr(args, "url_only", False):
+        print(auth_url)
+        return
 
     print("=" * 70)
     print("🔐 INITIATING GOOGLE OAUTH 2.0 FOR AINA")
@@ -250,6 +254,15 @@ def cmd_auth(args):
     print("=" * 70)
 
     auth_code = args.code
+    if auth_code and "code=" in auth_code:
+        parsed = urllib.parse.urlparse(auth_code)
+        params = urllib.parse.parse_qs(parsed.query)
+        if "code" in params:
+            auth_code = params["code"][0]
+        else:
+            m = re.search(r"code=([^&]+)", auth_code)
+            if m:
+                auth_code = urllib.parse.unquote(m.group(1))
 
     if not auth_code and not args.no_browser:
         print(f"Mendengarkan callback di {redirect_uri}...")
@@ -789,6 +802,8 @@ def main():
     p_auth.add_argument("--client-secrets", help="Path ke file client_secrets.json dari Google Cloud")
     p_auth.add_argument("--token-file", help="Path penyimpanan google_token.json")
     p_auth.add_argument("--port", type=int, default=8085, help="Port untuk local callback server (default: 8085)")
+    p_auth.add_argument("--redirect-uri", help="Custom redirect URI (default: http://localhost:<port>)")
+    p_auth.add_argument("--url-only", action="store_true", help="Hanya cetak auth URL dan langsung keluar")
     p_auth.add_argument("--code", help="Otorisasi manual via authorization code langsung")
     p_auth.add_argument("--no-browser", action="store_true", help="Nonaktifkan callback server (headless manual code input)")
 
