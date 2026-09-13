@@ -50,7 +50,7 @@
 
 ## 4. Integrasi WhatsApp Gateway & Anti-Hallucination
 1. **Lokasi Gateway**:
-   - Gateway Whatsmeow aktif berada di URL yang tersimpan di environment variable `$WHATSMEOW_BASE_URL` (atau `$WHATSMEOW_URL`, contoh: `https://wa.dvlpid.my.id`), **BUKAN di `http://localhost:3000`**.
+   - Gateway Whatsmeow aktif berada di URL yang tersimpan di environment variable `$WHATSMEOW_BASE_URL` (atau `$WHATSMEOW_URL`, contoh: `https://wa.domainkamu.com`), **BUKAN di `http://localhost:3000`**.
    - **DILARANG KERAS** menjalankan probing, ping, atau `curl http://localhost:3000`. Gateway berjalan di server/URL publik tersebut.
 2. **Penggunaan Tool Resmi**:
    - Selalu gunakan helper script resmi:

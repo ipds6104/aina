@@ -1209,7 +1209,7 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
                     <div>
                         <label class="form-label">Nama Pengirim</label>
-                        <input id="sim-sender-name" class="form-input" value="Ihza" />
+                        <input id="sim-sender-name" class="form-input" value="Owner" />
                     </div>
                     <div style="display: flex; align-items: center; padding-top: 20px;">
                         <label style="font-size: 0.85rem; color: #94a3b8; display: flex; align-items: center; gap: 8px; cursor: pointer;">
@@ -1911,7 +1911,7 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
             const text = textInput.value.trim();
             const sessionRole = document.getElementById('sim-session-role') ? document.getElementById('sim-session-role').value : 'primary_bot';
             const chatType = document.getElementById('sim-chat-type').value;
-            const senderName = document.getElementById('sim-sender-name').value.trim() || 'Ihza';
+            const senderName = document.getElementById('sim-sender-name').value.trim() || 'Owner';
             const isMention = document.getElementById('sim-is-mention') ? document.getElementById('sim-is-mention').checked : false;
             const isFromMe = document.getElementById('sim-is-from-me') ? document.getElementById('sim-is-from-me').checked : false;
             const modelSelectEl = document.getElementById('sim-model-select');
@@ -2320,7 +2320,7 @@ mod tests {
             &payload,
             None,
             Some("unassigned@s.whatsapp.net"),
-            Some("6289625345646@s.whatsapp.net"),
+            Some("628999888777@s.whatsapp.net"),
             Some("default"),
         )
         .expect("Message should be parsed");
@@ -2345,7 +2345,7 @@ mod tests {
             &payload,
             Some(&query_params),
             Some("628123456789@s.whatsapp.net"),
-            Some("6289625345646@s.whatsapp.net"),
+            Some("628999888777@s.whatsapp.net"),
             Some("default"),
         )
         .expect("Message should be parsed");
@@ -2357,7 +2357,7 @@ mod tests {
     fn test_parse_whatsmeow_session_id_matching() {
         let payload = json!({
             "session_id": "companion_office",
-            "from": "6289625345646@s.whatsapp.net",
+            "from": "628999888777@s.whatsapp.net",
             "body": "Catatan tugas",
             "id": "MSG_TEST_003",
             "is_from_me": true
@@ -2367,7 +2367,7 @@ mod tests {
             &payload,
             None,
             Some("628123456789@s.whatsapp.net"),
-            Some("6289625345646@s.whatsapp.net"),
+            Some("628999888777@s.whatsapp.net"),
             Some("companion_office"),
         )
         .expect("Message should be parsed");
@@ -2388,7 +2388,7 @@ mod tests {
             chat_type: ChatType::Group,
             sender: Sender {
                 jid: "user456@s.whatsapp.net".to_string(),
-                name: Some("Ihza".to_string()),
+                name: Some("Owner".to_string()),
             },
             text: text.to_string(),
             timestamp: 123456,

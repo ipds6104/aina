@@ -91,7 +91,7 @@ Aina memisahkan **Gateway WhatsApp (Whatsmeow)** dan **Otak Agentik (Aina)**. Wh
    ```ini
    WHATSMEOW_BASE_URL=https://wa.domainkamu.com
    WHATSMEOW_API_KEY=secret_key_kamu
-   WHATSMEOW_BOT_JID=6289625345646@s.whatsapp.net
+   WHATSMEOW_BOT_JID=6281234567890@s.whatsapp.net
    WHATSMEOW_BOT_NAME=Aina
    WHATSMEOW_BOT_SESSION_ID=default
    ```
@@ -104,7 +104,7 @@ Aina memisahkan **Gateway WhatsApp (Whatsmeow)** dan **Otak Agentik (Aina)**. Wh
 3. **Tambahkan Konfigurasi Companion di Aina**:
    ```ini
    WHATSMEOW_COMPANION_JID=628111222333@s.whatsapp.net
-   WHATSMEOW_COMPANION_NAME=Ihza (Personal)
+   WHATSMEOW_COMPANION_NAME=Owner (Personal)
    WHATSMEOW_COMPANION_SESSION_ID=companion
    ```
 
@@ -192,10 +192,10 @@ Sebelum menjalankan Aina, tentukan bagaimana basis pengetahuan Anda akan disimpa
 Aina secara otomatis menyiapkan starter template default (`GEMINI.md`, `facts.md`, `procedures.md`) di dalam folder workspace yang ditunjuk. Anda tidak perlu setup manual.
 
 #### Skenario B: Menghubungkan Repositori GitHub Knowledge Base yang Sudah Ada
-Jika tim/organisasi Anda sudah memiliki repositori GitHub berisi dokumentasi/SOP (contoh: `https://github.com/ipds6104/knowledge-base.git`):
+Jika tim/organisasi Anda sudah memiliki repositori GitHub berisi dokumentasi/SOP (contoh: `https://github.com/organisasi-anda/knowledge-base.git`):
 ```bash
 # Clone repositori knowledge base ke folder penyimpanan server
-aina clone https://github.com/ipds6104/knowledge-base.git /var/lib/aina/workspaces/ipds
+aina clone https://github.com/organisasi-anda/knowledge-base.git /var/lib/aina/workspaces/kantor
 # Aina otomatis memvalidasi struktur dokumen dan mengompilasi katalog `knowledge/index.md`!
 ```
 
@@ -206,7 +206,7 @@ Jika Anda sudah memiliki workspace lokal dan ingin langsung membuat repositori G
 aina workspace gh-status
 
 # Buat repo GitHub baru dari workspace aktif dan otomatis push
-aina workspace gh-create knowledge-base-ipds
+aina workspace gh-create knowledge-base-tim
 ```
 
 ---
@@ -227,13 +227,13 @@ aina workspace gh-create knowledge-base-ipds
    # Sesi 1: Bot Utama Resmi (Dedicated Bot)
    WHATSMEOW_BASE_URL=https://wa.domainkamu.com
    WHATSMEOW_API_KEY=secret_key_kamu
-   WHATSMEOW_BOT_JID=62896xxxxxxxx@s.whatsapp.net
+   WHATSMEOW_BOT_JID=62812xxxxxxxx@s.whatsapp.net
    WHATSMEOW_BOT_NAME=Aina
    WHATSMEOW_BOT_SESSION_ID=default
 
    # Sesi 2: User Companion (Nomor WhatsApp Pribadi / Shadow Sensor) [Opsional]
    # WHATSMEOW_COMPANION_JID=628111222333@s.whatsapp.net
-   # WHATSMEOW_COMPANION_NAME=Ihza (Personal)
+   # WHATSMEOW_COMPANION_NAME=Owner (Personal)
    # WHATSMEOW_COMPANION_SESSION_ID=companion
 
    AGENT_MODEL=gemini-3.8-flash-medium
@@ -256,7 +256,7 @@ aina workspace gh-create knowledge-base-ipds
 
 1. **Klon Repositori Engine**:
    ```bash
-   git clone https://github.com/ipds6104/aina.git
+   git clone https://github.com/organisasi-anda/aina.git
    cd aina
    ```
 2. **Salin Template Konfigurasi**:
@@ -337,15 +337,15 @@ Aina membedakan 3 tingkatan otoritas (*Authority Matrix*):
 
 ```bash
 # 1. Daftarkan / Perbarui profil dan wewenang rekan kerja
-aina user set 6289625345646@s.whatsapp.net \
-  --name "Mas Companion" \
+aina user set 6281234567890@s.whatsapp.net \
+  --name "Mas Admin" \
   --role "Owner & Lead Architect" \
   --authority admin \
   --notes "Penanggung jawab sistem utama, akses penuh"
 
 # 2. Cek profil pengguna spesifik
-aina user get 6289625345646@s.whatsapp.net
-aina user get 6289625345646@s.whatsapp.net --json
+aina user get 6281234567890@s.whatsapp.net
+aina user get 6281234567890@s.whatsapp.net --json
 
 # 3. Cari rekan kerja berdasarkan kata kunci
 aina user search "Architect"
@@ -444,8 +444,8 @@ aina archive import /path/ke/chat.zip --slug "tim-proyek"
 aina archive stats --workspace default
 
 # 5. Profiling Memory & Manajemen Wewenang Rekan Kerja (SQLite user_profiles)
-aina user set 6289625345646@s.whatsapp.net --name "Mas Doni" --role "Data Analyst" --authority staff
-aina user get 6289625345646@s.whatsapp.net
+aina user set 6281234567890@s.whatsapp.net --name "Mas Doni" --role "Data Analyst" --authority staff
+aina user get 6281234567890@s.whatsapp.net
 aina user list
 aina user search "Analyst"
 
@@ -480,19 +480,19 @@ aina sync
 # atau: aina workspace sync --workspace default --message "docs: update SOP cuti"
 
 # 14. Hubungkan Workspace ke Git Remote (GitHub/GitLab)
-aina link https://github.com/ipds6104/knowledge-base.git
-# atau: aina workspace link https://github.com/ipds6104/knowledge-base.git --workspace default
+aina link https://github.com/organisasi-anda/knowledge-base.git
+# atau: aina workspace link https://github.com/organisasi-anda/knowledge-base.git --workspace default
 
 # 15. Manajemen GitHub CLI (`gh`) & Autentikasi Non-Interaktif / OAuth Device Flow
 aina workspace gh-status
 aina gh-device                             # Request kode Device Flow (misal: ABCD-1234)
 aina gh-poll                               # Cek status verifikasi browser secara otomatis
 aina gh-login ghp_xxxxxxxxxxxxxxxxxxxx     # Atau login langsung via Personal Access Token
-aina workspace gh-create knowledge-base-ipds
+aina workspace gh-create knowledge-base-tim
 aina workspace gh-create knowledge-base-public --public
 
 # 16. Clone Knowledge Base Repositori Luar & Auto-Groom
-aina clone https://github.com/ipds6104/knowledge-base.git /var/lib/aina/workspaces/ipds
+aina clone https://github.com/organisasi-anda/knowledge-base.git /var/lib/aina/workspaces/kantor
 ```
 
 > [!TIP]
@@ -602,7 +602,7 @@ Aina menyediakan engine impor berkinerja tinggi (*streaming regex* & SQLite FTS5
 
 ```bash
 # 1. Impor berkas ekspor chat WhatsApp (.zip / .txt) ke workspace via Native CLI
-aina archive import /path/ke/chat.zip --slug "ipds-6104"
+aina archive import /path/ke/chat.zip --slug "grup-kantor"
 # Atau lewati ekstraksi media:
 aina archive import /path/ke/chat.txt --slug "tim-proyek" --no-media
 
@@ -620,9 +620,9 @@ aina archive search "anggaran" --json
 aina archive stats --workspace default
 
 # 4. Alternatif skrip Python (Legacy Fallback):
-python3 scripts/chat_importer.py import /path/ke/chat.zip --workspace default --name "ipds-6104"
-python3 scripts/chat_importer.py search "ipds-6104" --query "reimbursement"
-python3 scripts/chat_importer.py links "ipds-6104" --domain "sheets"
+python3 scripts/chat_importer.py import /path/ke/chat.zip --workspace default --name "grup-kantor"
+python3 scripts/chat_importer.py search "grup-kantor" --query "reimbursement"
+python3 scripts/chat_importer.py links "grup-kantor" --domain "sheets"
 ```
 
 ---

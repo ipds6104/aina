@@ -85,8 +85,8 @@ impl PersonaEngine {
             .and_then(|p| p.name.as_deref())
             .filter(|n| !n.trim().is_empty())
             .unwrap_or_else(|| {
-                if sender_name.to_lowercase().contains("ihza") {
-                    "Mas Ihza"
+                if sender_name.trim().is_empty() {
+                    "Admin"
                 } else {
                     sender_name
                 }
@@ -151,7 +151,7 @@ impl PersonaEngine {
                  - GAYA TEXTING INDONESIA NATURAL: Gunakan kebiasaan texting WhatsApp Indonesia yang ramah dengan pemanjangan huruf halus di akhir kata umum sebagai pelunak nada bicara / tone softener (contoh: 'okee sebentarr...', 'iyaa...', 'siaapp...', 'gimana gimanaa..', 'otw dicek yaa...'). Jangan kaku/jutek, namun tetap proporsional (cukup 1-2 huruf tambahan).\n\
                  - PANJANG PESAN: SINGKAT & RINGKAS (2-4 paragraf pendek atau bullet points). Sangat dilarang membuat 'wall of text' yang melelahkan di layar smartphone.\n\
                  - FORMAT WA NATIVE: Gunakan *tebal* (bintang tunggal, BUKAN **ganda**), _miring_ (garis bawah tunggal), ~coret~, `inline monospace`, dan ```blok kode```.\n\
-                 - CARA MEN-TAG / MENTION KONTAK DI WA: Jika ingin men-tag atau me-mention seseorang (terutama di obrolan grup), selalu gunakan tanda @ diikuti nomor telepon atau ID mereka (contoh: @6289625345646 atau @87097809592405). Gateway otomatis mengonversinya menjadi tag native WhatsApp interaktif (berwarna biru dan mengirim notifikasi prioritas ke pengguna tersebut). Jangan gunakan nama polos seperti '@Ihza' karena WhatsApp tidak mengenalinya sebagai tag nomor.\n\
+                 - CARA MEN-TAG / MENTION KONTAK DI WA: Jika ingin men-tag atau me-mention seseorang (terutama di obrolan grup), selalu gunakan tanda @ diikuti nomor telepon atau ID mereka (contoh: @6281234567890 atau @87097809592405). Gateway otomatis mengonversinya menjadi tag native WhatsApp interaktif (berwarna biru dan mengirim notifikasi prioritas ke pengguna tersebut). Jangan gunakan nama polos seperti '@Budi' karena WhatsApp tidak mengenalinya sebagai tag nomor.\n\
                  - ATURAN TERLARANG WA:\n\
                    * DILARANG menggunakan heading Markdown `#`, `##`, `###` (WhatsApp tidak merender heading, hanya menampilkan tanda pagar jelek). Gunakan teks *TEBAL KAPITAL* sebagai gantinya.\n\
                    * DILARANG menggunakan tabel Markdown `| a | b |` (tabel hancur dan terpotong di layar HP). Ganti tabel dengan daftar butir `• Item: Keterangan`.\n\
@@ -372,12 +372,12 @@ mod tests {
         let engine = PersonaEngine::new(
             "Persona test".to_string(),
             "Org test".to_string(),
-            "6289625345646@s.whatsapp.net".to_string(),
+            "6281234567890@s.whatsapp.net".to_string(),
             "Asia/Jakarta".to_string(),
             7,
             "id-ID".to_string(),
             "https://aina-wa.test".to_string(),
-            "628982157341@s.whatsapp.net".to_string(),
+            "628999888777@s.whatsapp.net".to_string(),
             None,
         );
 
@@ -385,10 +385,10 @@ mod tests {
             id: "msg1".to_string(),
             platform: Platform::WhatsApp,
             session_role: SessionRole::PrimaryBot,
-            chat_jid: "6289625345646@s.whatsapp.net".to_string(),
+            chat_jid: "6281234567890@s.whatsapp.net".to_string(),
             sender: Sender {
-                jid: "6289625345646@s.whatsapp.net".to_string(),
-                name: Some("Ihza Karunia".to_string()),
+                jid: "6281234567890@s.whatsapp.net".to_string(),
+                name: Some("Mas Doni".to_string()),
             },
             chat_type: ChatType::DirectMessage,
             text: "udh bsa blm?".to_string(),
@@ -405,7 +405,7 @@ mod tests {
 
         let prompt = engine.build_prompt(&msg, None);
         assert!(prompt.contains("Linguistic Mirroring"));
-        assert!(prompt.contains("Mas Ihza"));
+        assert!(prompt.contains("Mas Doni"));
         assert!(prompt.contains("Tingkat Otoritas: ADMIN"));
         assert!(prompt.contains("CERMINKAN REGISTER & FORMALITAS PENGIRIM"));
         assert!(prompt.contains("BREVITY MATCHING"));
@@ -417,12 +417,12 @@ mod tests {
         let engine = PersonaEngine::new(
             "Persona test".to_string(),
             "Org test".to_string(),
-            "6289625345646@s.whatsapp.net".to_string(),
+            "6281234567890@s.whatsapp.net".to_string(),
             "Asia/Jakarta".to_string(),
             7,
             "id-ID".to_string(),
             "https://aina-wa.test".to_string(),
-            "628982157341@s.whatsapp.net".to_string(),
+            "628999888777@s.whatsapp.net".to_string(),
             None,
         );
 
@@ -467,12 +467,12 @@ mod tests {
         let engine = PersonaEngine::new(
             "Persona test".to_string(),
             "Org test".to_string(),
-            "6289625345646@s.whatsapp.net".to_string(),
+            "6281234567890@s.whatsapp.net".to_string(),
             "Asia/Jakarta".to_string(),
             7,
             "id-ID".to_string(),
             "https://aina-wa.test".to_string(),
-            "628982157341@s.whatsapp.net".to_string(),
+            "628999888777@s.whatsapp.net".to_string(),
             None,
         );
 
@@ -480,10 +480,10 @@ mod tests {
             id: "msg3".to_string(),
             platform: Platform::WhatsApp,
             session_role: SessionRole::PrimaryBot,
-            chat_jid: "6289625345646-123456@g.us".to_string(),
+            chat_jid: "6281234567890-123456@g.us".to_string(),
             sender: Sender {
-                jid: "6289625345646@s.whatsapp.net".to_string(),
-                name: Some("Ihza Karunia".to_string()),
+                jid: "6281234567890@s.whatsapp.net".to_string(),
+                name: Some("Doni Karunia".to_string()),
             },
             chat_type: ChatType::Group,
             text: "aman gak?".to_string(),
@@ -499,17 +499,17 @@ mod tests {
         };
 
         let profile = UserProfile {
-            sender_jid: "6289625345646@s.whatsapp.net".to_string(),
-            name: Some("Bang Ihza".to_string()),
+            sender_jid: "6281234567890@s.whatsapp.net".to_string(),
+            name: Some("Bang Doni".to_string()),
             role: Some("Owner & Lead Architect".to_string()),
             authority_level: "admin".to_string(),
-            notes: Some("Preferensi panggilan resmi: Bang Ihza".to_string()),
+            notes: Some("Preferensi panggilan resmi: Bang Doni".to_string()),
         };
 
         let prompt = engine.build_prompt(&msg, Some(&profile));
-        assert!(prompt.contains("Pengirim: Bang Ihza"));
-        assert!(prompt.contains("partner kerja utama (Bang Ihza)"));
-        assert!(prompt.contains("Catatan Profil & Preferensi: Preferensi panggilan resmi: Bang Ihza"));
-        assert!(!prompt.contains("partner kerja utama (Mas Ihza)"));
+        assert!(prompt.contains("Pengirim: Bang Doni"));
+        assert!(prompt.contains("partner kerja utama (Bang Doni)"));
+        assert!(prompt.contains("Catatan Profil & Preferensi: Preferensi panggilan resmi: Bang Doni"));
+        assert!(!prompt.contains("partner kerja utama (Doni Karunia)"));
     }
 }

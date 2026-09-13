@@ -529,7 +529,7 @@ def main():
     p_imp = subparsers.add_parser("import", help="Impor berkas ekspor chat (.zip atau .txt)")
     p_imp.add_argument("archive", help="Path berkas zip atau txt chat")
     p_imp.add_argument("--workspace", default=None, help="Nama atau path workspace target (default: aktif)")
-    p_imp.add_argument("--name", help="Slug penamaan chat (contoh: ipds-6104)")
+    p_imp.add_argument("--name", help="Slug penamaan chat (contoh: grup-kantor)")
     p_imp.add_argument("--no-media", action="store_true", help="Jangan ekstrak berkas media/dokumen")
 
     # search
