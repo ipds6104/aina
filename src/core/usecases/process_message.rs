@@ -216,15 +216,29 @@ impl ProcessIncomingMessageUseCase {
                         .await?;
                 }
 
-                // 7. Record bot reply locally
-                self.session_store
-                    .record_message(&msg.chat_jid, &self.bot_jid, &agent_res.response_text, true)
-                    .await?;
+                // Check if agent mistakenly executed wa_tool.py send-text AND outputted an internal report
+                let trimmed_res = agent_res.response_text.trim();
+                let is_redundant_report = trimmed_res.starts_with("Pesan balasan sudah terkirim")
+                    || trimmed_res.starts_with("Pesan tanggapan telah berhasil dikirim")
+                    || trimmed_res.starts_with("Pesan telah berhasil dikirim")
+                    || trimmed_res.starts_with("Pesan berhasil dikirim");
 
-                // 8. Send reply back to WhatsApp
-                self.whatsapp
-                    .send_text_with_session(&msg.chat_jid, &agent_res.response_text, Some(&msg.id), msg.session_role)
-                    .await?;
+                if is_redundant_report {
+                    info!(
+                        "Suppressed redundant agent tool confirmation report to prevent double-posting: {}",
+                        trimmed_res
+                    );
+                } else {
+                    // 7. Record bot reply locally
+                    self.session_store
+                        .record_message(&msg.chat_jid, &self.bot_jid, &agent_res.response_text, true)
+                        .await?;
+
+                    // 8. Send reply back to WhatsApp
+                    self.whatsapp
+                        .send_text_with_session(&msg.chat_jid, &agent_res.response_text, Some(&msg.id), msg.session_role)
+                        .await?;
+                }
 
                 // 9. Reset presence
                 let _ = self

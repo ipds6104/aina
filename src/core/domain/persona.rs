@@ -219,6 +219,8 @@ impl PersonaEngine {
             - URL Whatsmeow Gateway: {whatsmeow_url}\n\
             - JID / Akun Bot WhatsApp: {bot_jid}\n\
             - Helper Tool Resmi: `python3 skills/whatsmeow/scripts/wa_tool.py <subcommand>` (tersedia: send-text, send-media, recent, search, stats, export-backup, groups, group-info, download-media)\n\
+            - ATURAN ANTI-DOUBLE SEND: DILARANG KERAS memanggil `wa_tool.py send-text` untuk membalas chat aktif saat ini! Cukup tuliskan teks jawabanmu langsung di pesan respons akhir. Sistem backend Aina secara otomatis akan mengirimkan teks responmu ke WhatsApp. Memanggil send-text untuk chat saat ini akan mengakibatkan pesan terkirim ganda!\n\
+            - Tool `wa_tool.py send-media` TETAP digunakan seperti biasa bila kamu diminta mengirimkan dokumen, file, atau gambar.\n\
             - PERINGATAN KERAS: Gateway WhatsApp berada di URL di atas ({whatsmeow_url}), BUKAN di http://localhost:3000. DILARANG KERAS berasumsi, mem-probing, atau melakukan curl ke http://localhost:3000.\n\n\
             ---\n\
             [Disiplin Berpikir Internal - HANYA UNTUK INTERNAL, JANGAN PERNAH DISEBUTKAN DI CHAT]:\n\

@@ -38,16 +38,16 @@ python3 /app/workspace/.agents/skills/whatsmeow/scripts/wa_tool.py <subcommand> 
 
 ## 3. Standard Operating Procedures (SOP)
 
-### SOP 1: Sending Direct WhatsApp Text Messages & Self-Test
-When an authorized user asks to send a WhatsApp message, or test sending a message to themselves or another contact/group:
+### SOP 1: Sending Direct WhatsApp Text Messages (Proactive / Other Recipients Only)
+> ⚠️ **ATURAN MUTLAK ANTI-DOUBLE SEND**:
+> - **DILARANG** menggunakan `send-text` untuk membalas percakapan aktif yang sedang berlangsung saat ini! Cukup tuliskan teks jawabanmu secara langsung di output akhir. Backend Aina akan otomatis mengirimkannya ke WhatsApp.
+> - `send-text` **HANYA** digunakan jika user secara eksplisit memintamu mengirimkan pesan proaktif ke kontak/nomor LAIN atau grup LAIN di luar ruang obrolan saat ini.
+
+When an authorized user asks to send a proactive WhatsApp message to another contact/group:
 1. Identify the target recipient JID (e.g. `$WHATSMEOW_BOT_JID` or specific phone number JID `628xxx@s.whatsapp.net` or group `120363xxx@g.us`).
-2. Send the message immediately via `send-text`:
+2. Send the message via `send-text`:
    ```bash
-   python3 .agents/skills/whatsmeow/scripts/wa_tool.py send-text --to "<RECIPIENT_JID>" --text "<PESAN>"
-   ```
-   *Contoh tes kirim ke diri sendiri:*
-   ```bash
-   python3 .agents/skills/whatsmeow/scripts/wa_tool.py send-text --to "${WHATSMEOW_BOT_JID:-6289625345646@s.whatsapp.net}" --text "Halo! Ini pesan tes verifikasi dari Aina di WhatsApp."
+   python3 skills/whatsmeow/scripts/wa_tool.py send-text --to "<RECIPIENT_JID>" --text "<PESAN>"
    ```
 3. Konfirmasikan bahwa output JSON mengembalikan `"status": "sent"` dan sertakan ID pesan ke user.
 
