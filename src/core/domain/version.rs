@@ -199,10 +199,6 @@ impl VersionEngine {
                             .get("status")
                             .and_then(|v| v.as_str())
                             .unwrap_or("unknown");
-                        let behind_by = json
-                            .get("behind_by")
-                            .and_then(|v| v.as_u64())
-                            .unwrap_or(0) as usize;
 
                         let mut unpulled_commits = Vec::new();
                         if let Some(commits_arr) = json.get("commits").and_then(|v| v.as_array()) {
@@ -239,7 +235,14 @@ impl VersionEngine {
                             }
                         }
 
-                        let is_up_to_date = status_str == "identical" || behind_by == 0;
+                        let ahead_by = json
+                            .get("ahead_by")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0) as usize;
+
+                        // From the perspective of local container, we are behind if remote main is ahead of us
+                        let is_up_to_date = (status_str == "identical" || ahead_by == 0) && unpulled_commits.is_empty();
+                        let behind_by_count = if ahead_by > 0 { ahead_by } else { unpulled_commits.len() };
                         let latest_commit = unpulled_commits
                             .last()
                             .map(|c| c.sha.clone())
@@ -253,7 +256,7 @@ impl VersionEngine {
                         } else {
                             format!(
                                 "Container Aina tertinggal {} commit dari repo GitHub (terbaru: {}). Lakukan redeploy di Coolify untuk memperbarui.",
-                                behind_by, latest_commit
+                                behind_by_count, latest_commit
                             )
                         };
 
@@ -262,7 +265,7 @@ impl VersionEngine {
                             upstream_branch: "main".to_string(),
                             upstream_latest_commit: Some(latest_commit),
                             is_up_to_date,
-                            behind_by: Some(behind_by),
+                            behind_by: if is_up_to_date { None } else { Some(behind_by_count) },
                             unpulled_commits,
                             capabilities,
                             check_status: "SUCCESS".to_string(),
