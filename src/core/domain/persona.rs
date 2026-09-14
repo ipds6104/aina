@@ -38,6 +38,10 @@ impl PersonaEngine {
         }
     }
 
+    pub fn admin_jid(&self) -> &str {
+        &self.admin_jid
+    }
+
     /// Reads the concise knowledge base catalog index (index.md) if available.
     pub fn load_knowledge_index(&self) -> Option<String> {
         let ws_dir = self.workspace_dir.as_deref().unwrap_or("./workspaces/default");

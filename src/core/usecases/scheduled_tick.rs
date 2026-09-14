@@ -77,73 +77,7 @@ impl ScheduledTickUseCase {
                 task.id, task.title, task.task_type, task.target_jid
             );
 
-            match task.task_type {
-                ScheduledTaskType::DirectNotification => {
-                    if let Err(e) = self
-                        .whatsapp
-                        .send_text_with_session(&task.target_jid, &task.payload, None, SessionRole::PrimaryBot)
-                        .await
-                    {
-                        error!("Failed to deliver direct notification for task #{}: {}", task.id, e);
-                    } else {
-                        info!("Delivered scheduled notification for task #{} to {}", task.id, task.target_jid);
-                        let _ = self.session_store.record_message(&task.target_jid, "bot", &task.payload, true).await;
-                    }
-                }
-                ScheduledTaskType::AgentAction => {
-                    if let Some(ref agent) = self.agent_engine {
-                        let current_time_str = self
-                            .persona_engine
-                            .as_ref()
-                            .map(|p| p.current_local_time_string())
-                            .unwrap_or_else(|| format!("Epoch: {}", now_epoch));
-
-                        let prompt = format!(
-                            "🔔 [TUGAS TERJADWAL OTOMATIS - WAKE UP CALL]\n\
-                            Judul Tugas: {}\n\
-                            Waktu Eksekusi: {}\n\
-                            Target Pengiriman: WhatsApp ({})\n\
-                            Instruksi Utama:\n{}\n\n\
-                            PETUNJUK FORMAT RESPON UNTUK AINA:\n\
-                            1. Langsung jalankan instruksi di atas sekarang juga (gunakan search_web, read_url_content, atau alat bantu lain bila diperlukan riset internet).\n\
-                            2. Susun hasil akhir secara rapi, padat, dan ramah ponsel (format WhatsApp: *tebal*, bullet points •, sertakan link sumber asli bila riset berita).\n\
-                            3. DILARANG KERAS menyertakan laporan status teknis internal seperti 'Status: Terkirim', 'Pesan berhasil dikirim', dsb.\n\
-                            4. Berikan langsung teks hasil riset atau informasi akhir yang siap dibaca oleh penerima.",
-                            task.title,
-                            current_time_str,
-                            task.target_jid,
-                            task.payload
-                        );
-
-                        match agent.execute(None, &prompt).await {
-                            Ok(res) => {
-                                let clean_res = res.response_text.trim();
-                                if !clean_res.is_empty() {
-                                    if let Err(e) = self
-                                        .whatsapp
-                                        .send_text_with_session(&task.target_jid, clean_res, None, SessionRole::PrimaryBot)
-                                        .await
-                                    {
-                                        error!("Failed to send agent task result to WhatsApp: {}", e);
-                                    } else {
-                                        info!("Successfully executed and delivered AgentAction task #{} to {}", task.id, task.target_jid);
-                                        let _ = self.session_store.record_message(&task.target_jid, "bot", clean_res, true).await;
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                error!("Agent failed to execute scheduled task #{}: {}", task.id, e);
-                                let err_msg = format!("⚠️ _Gagal menjalankan tugas terjadwal '{}': {}_", task.title, e);
-                                let _ = self.whatsapp.send_text_with_session(&task.target_jid, &err_msg, None, SessionRole::PrimaryBot).await;
-                            }
-                        }
-                    } else {
-                        warn!("Cannot execute AgentAction task #{}: AgentEngine is not configured", task.id);
-                    }
-                }
-            }
-
-            // 3. Compute and update next run time or mark as completed
+            // 1. Lock/update the task state immediately to prevent duplicate burst execution
             let (next_run, is_active) = match task.schedule_type.as_str() {
                 "once" => (None, false),
                 "daily" => {
@@ -170,7 +104,103 @@ impl ScheduledTickUseCase {
             };
 
             if let Err(e) = self.session_store.update_scheduled_task_run(task.id, now_epoch, next_run, is_active).await {
-                error!("Failed to update scheduled task #{} run state: {}", task.id, e);
+                error!("Failed to lock/update scheduled task #{} run state: {}", task.id, e);
+                continue;
+            }
+
+            // 2. Execute task payload
+            match task.task_type {
+                ScheduledTaskType::DirectNotification => {
+                    if let Err(e) = self
+                        .whatsapp
+                        .send_text_with_session(&task.target_jid, &task.payload, None, SessionRole::PrimaryBot)
+                        .await
+                    {
+                        error!("Failed to deliver direct notification for task #{}: {}", task.id, e);
+                    } else {
+                        info!("Delivered scheduled notification for task #{} to {}", task.id, task.target_jid);
+                        let _ = self.session_store.record_message(&task.target_jid, "bot", &task.payload, true).await;
+                    }
+                }
+                ScheduledTaskType::AgentAction => {
+                    if let Some(ref agent) = self.agent_engine {
+                        let current_time_str = self
+                            .persona_engine
+                            .as_ref()
+                            .map(|p| p.current_local_time_string())
+                            .unwrap_or_else(|| format!("Epoch: {}", now_epoch));
+
+                        let is_story = task.target_jid == "status@broadcast" || task.target_jid == "status";
+
+                        let prompt = format!(
+                            "🔔 [TUGAS TERJADWAL OTOMATIS - WAKE UP CALL]\n\
+                            Judul Tugas: {}\n\
+                            Waktu Eksekusi: {}\n\
+                            Target Pengiriman: WhatsApp ({})\n\
+                            Instruksi Utama:\n{}\n\n\
+                            PETUNJUK FORMAT RESPON & EFISIENSI KUOTA UNTUK AINA:\n\
+                            1. EFISIENSI KUOTA: Lakukan maksimal 1 hingga 2 kali pencarian web (search_web) yang paling esensial. DILARANG KERAS melakukan pencarian berulang-ulang tanpa henti!\n\
+                            2. Susun hasil akhir secara rapi, padat, dan ramah ponsel (format WhatsApp: *tebal*, bullet points •).\n\
+                            3. {}
+                            4. DILARANG KERAS menyertakan laporan status teknis internal seperti 'Status: Terkirim', 'Pesan berhasil dikirim', dsb.\n\
+                            5. Berikan langsung teks hasil riset atau informasi akhir yang siap dibaca oleh penerima.",
+                            task.title,
+                            current_time_str,
+                            task.target_jid,
+                            task.payload,
+                            if is_story {
+                                "Target adalah Status/Story WhatsApp (24 jam). Buat teks ringkas, memikat, dan nyaman dibaca dalam sekali lihat di story (maksimal 3-5 baris padat).\n"
+                            } else {
+                                "Format ramah obrolan chat.\n"
+                            }
+                        );
+
+                        match agent.execute(None, &prompt).await {
+                            Ok(res) => {
+                                let clean_res = res.response_text.trim();
+                                if !clean_res.is_empty() {
+                                    // If destination is status story and response contains error, do not post publicly
+                                    let is_error_output = clean_res.starts_with("⚠️") || clean_res.contains("503") || clean_res.contains("quota");
+                                    let actual_target = if is_story && is_error_output {
+                                        // Fallback to admin JID if available to avoid embarrassing public error stories
+                                        self.persona_engine.as_ref()
+                                            .map(|p| p.admin_jid())
+                                            .filter(|j| !j.trim().is_empty())
+                                            .unwrap_or(&task.target_jid)
+                                    } else {
+                                        &task.target_jid
+                                    };
+
+                                    if let Err(e) = self
+                                        .whatsapp
+                                        .send_text_with_session(actual_target, clean_res, None, SessionRole::PrimaryBot)
+                                        .await
+                                    {
+                                        error!("Failed to send agent task result to WhatsApp: {}", e);
+                                    } else {
+                                        info!("Successfully executed and delivered AgentAction task #{} to {}", task.id, actual_target);
+                                        let _ = self.session_store.record_message(actual_target, "bot", clean_res, true).await;
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                error!("Agent failed to execute scheduled task #{}: {}", task.id, e);
+                                let err_msg = format!("⚠️ _Gagal menjalankan tugas terjadwal '{}': {}_", task.title, e);
+                                let fallback_target = if is_story {
+                                    self.persona_engine.as_ref()
+                                        .map(|p| p.admin_jid())
+                                        .filter(|j| !j.trim().is_empty())
+                                        .unwrap_or(&task.target_jid)
+                                } else {
+                                    &task.target_jid
+                                };
+                                let _ = self.whatsapp.send_text_with_session(fallback_target, &err_msg, None, SessionRole::PrimaryBot).await;
+                            }
+                        }
+                    } else {
+                        warn!("Cannot execute AgentAction task #{}: AgentEngine is not configured", task.id);
+                    }
+                }
             }
         }
 
