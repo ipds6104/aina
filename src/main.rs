@@ -127,6 +127,7 @@ async fn main() -> anyhow::Result<()> {
         companion_session_id: config.whatsmeow.companion_session_id.clone(),
         model: config.agent.model.clone(),
         whatsmeow_url: config.whatsmeow.base_url.clone(),
+        whatsmeow_api_key: config.whatsmeow.api_key.clone(),
         setup_code,
         timezone: config.app.timezone.clone(),
         locale: config.app.locale.clone(),

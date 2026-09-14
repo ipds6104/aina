@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
@@ -55,6 +55,7 @@ pub struct WebhookServerState {
     #[allow(dead_code)]
     pub model: String,
     pub whatsmeow_url: String,
+    pub whatsmeow_api_key: String,
     pub setup_code: String,
     pub timezone: String,
     pub locale: String,
@@ -755,45 +756,173 @@ async fn webhook_handler(
             .and_then(|v| v.as_str())
             .unwrap_or("");
 
+        let filename_opt = root
+            .get("filename")
+            .or_else(|| payload.get("filename"))
+            .or_else(|| root.get("media_info").and_then(|m| m.get("filename")))
+            .or_else(|| payload.get("media_info").and_then(|m| m.get("filename")))
+            .and_then(|v| v.as_str());
+
+        let media_type_opt = root
+            .get("media_type")
+            .or_else(|| payload.get("media_type"))
+            .and_then(|v| v.as_str())
+            .or_else(|| msg.media_type.as_deref());
+
+        let download_url_opt = root
+            .get("download_url")
+            .or_else(|| root.get("media_url"))
+            .or_else(|| payload.get("download_url"))
+            .or_else(|| payload.get("media_url"))
+            .and_then(|v| v.as_str());
+
+        let mut media_bytes: Option<Vec<u8>> = None;
+        let mut effective_mime = mime_type.to_string();
+
         if let Some(b64) = media_base64 {
-            use base64::Engine;
-            if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(b64.trim()) {
-                let ext = match mime_type {
-                    "image/png" => "png",
-                    "image/webp" => "webp",
-                    "image/gif" => "gif",
-                    _ => "jpg",
-                };
-                let media_dir = state.workspace_dir.join("media");
-                if let Err(e) = tokio::fs::create_dir_all(&media_dir).await {
-                    error!("Failed to create media directory {:?}: {:?}", media_dir, e);
+            let clean = b64.trim();
+            if !clean.is_empty() {
+                use base64::Engine;
+                if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(clean) {
+                    media_bytes = Some(bytes);
+                }
+            }
+        }
+
+        if media_bytes.is_none() {
+            // CLAIM-CHECK PATTERN:
+            // If media_base64 is absent or omitted, retrieve media stream on-demand
+            // using the download_url claim check ticket or fallback to media id.
+            let full_url = if let Some(url_str) = download_url_opt {
+                if url_str.starts_with("http://") || url_str.starts_with("https://") {
+                    url_str.to_string()
                 } else {
-                    let file_name = format!("{}.{}", msg.id, ext);
-                    let target_path = media_dir.join(&file_name);
-                    let sidecar_txt_path = media_dir.join(format!("{}.txt", msg.id));
+                    format!(
+                        "{}{}",
+                        state.whatsmeow_url.trim_end_matches('/'),
+                        if url_str.starts_with('/') {
+                            url_str.to_string()
+                        } else {
+                            format!("/{}", url_str)
+                        }
+                    )
+                }
+            } else if msg.has_media
+                && !msg.id.is_empty()
+                && msg.id != "unknown_id"
+                && !state.whatsmeow_url.is_empty()
+            {
+                format!(
+                    "{}/api/v1/media/{}/download",
+                    state.whatsmeow_url.trim_end_matches('/'),
+                    msg.id
+                )
+            } else {
+                String::new()
+            };
 
-                    if let Err(e) = tokio::fs::write(&target_path, &bytes).await {
-                        error!("Failed to write media file to {:?}: {:?}", target_path, e);
-                    } else {
-                        info!("Saved incoming media to {:?} ({} bytes)", target_path, bytes.len());
-                        let abs_path_str = target_path.to_string_lossy().to_string();
-                        msg.media_path = Some(abs_path_str.clone());
-                        msg.has_media = true;
+            if !full_url.is_empty() {
+                info!("Claim-Check: Fetching media for msg {} from {}", msg.id, full_url);
+                let client = reqwest::Client::builder()
+                    .timeout(std::time::Duration::from_secs(60))
+                    .build()
+                    .unwrap_or_else(|_| reqwest::Client::new());
 
-                        // Create initial .txt companion file with metadata & caption for searchable indexing
-                        let initial_txt = format!(
-                            "ID: {}\nPengirim: {} ({})\nWaktu: {}\nCaption/Pesan: {}\nPath File: {}\nMIME Type: {}\nUkuran: {} bytes\n\n--- Catatan & Hasil Transkripsi / Analisis Aina ---\n",
-                            msg.id,
-                            msg.sender.name.as_deref().unwrap_or("Anonim"),
-                            msg.sender.jid,
-                            msg.timestamp,
-                            msg.text,
-                            abs_path_str,
-                            mime_type,
-                            bytes.len()
-                        );
-                        let _ = tokio::fs::write(&sidecar_txt_path, initial_txt).await;
+                let mut req = client.get(&full_url);
+                if !state.whatsmeow_api_key.is_empty() {
+                    req = req
+                        .header("Authorization", format!("Bearer {}", state.whatsmeow_api_key))
+                        .header("X-API-Key", &state.whatsmeow_api_key);
+                }
+
+                match req.send().await {
+                    Ok(resp) => {
+                        if resp.status().is_success() {
+                            if effective_mime.is_empty() {
+                                if let Some(ct) = resp
+                                    .headers()
+                                    .get(reqwest::header::CONTENT_TYPE)
+                                    .and_then(|v| v.to_str().ok())
+                                {
+                                    effective_mime = ct.to_string();
+                                }
+                            }
+                            match resp.bytes().await {
+                                Ok(b) => {
+                                    info!(
+                                        "Successfully streamed {} bytes of media for msg {}",
+                                        b.len(),
+                                        msg.id
+                                    );
+                                    media_bytes = Some(b.to_vec());
+                                }
+                                Err(e) => {
+                                    error!(
+                                        "Failed to read media response body from {}: {:?}",
+                                        full_url, e
+                                    );
+                                }
+                            }
+                        } else {
+                            warn!(
+                                "Failed to stream media from {}: HTTP status {}",
+                                full_url,
+                                resp.status()
+                            );
+                        }
                     }
+                    Err(e) => {
+                        error!("Network error fetching media from {}: {:?}", full_url, e);
+                    }
+                }
+            }
+        }
+
+        if let Some(bytes) = media_bytes {
+            let ext = resolve_media_extension(&effective_mime, filename_opt, media_type_opt);
+            let media_dir = state.workspace_dir.join("media");
+            if let Err(e) = tokio::fs::create_dir_all(&media_dir).await {
+                error!("Failed to create media directory {:?}: {:?}", media_dir, e);
+            } else {
+                let file_name = format!("{}.{}", msg.id, ext);
+                let target_path = media_dir.join(&file_name);
+                let sidecar_txt_path = media_dir.join(format!("{}.txt", msg.id));
+
+                if let Err(e) = tokio::fs::write(&target_path, &bytes).await {
+                    error!("Failed to write media file to {:?}: {:?}", target_path, e);
+                } else {
+                    info!("Saved incoming media to {:?} ({} bytes)", target_path, bytes.len());
+                    let abs_path_str = target_path.to_string_lossy().to_string();
+                    msg.media_path = Some(abs_path_str.clone());
+                    msg.has_media = true;
+
+                    if msg.text.trim().is_empty() {
+                        if let Some(fname) = filename_opt {
+                            msg.text = format!("[Dokumen terlampir: {}]", fname);
+                        } else if let Some(m_type) = media_type_opt {
+                            msg.text = format!("[{} terlampir]", match m_type {
+                                "document" => "Dokumen",
+                                "video" => "Video",
+                                "audio" => "Audio",
+                                _ => "Foto / Media",
+                            });
+                        }
+                    }
+
+                    // Create initial .txt companion file with metadata & caption for searchable indexing
+                    let initial_txt = format!(
+                        "ID: {}\nPengirim: {} ({})\nWaktu: {}\nCaption/Pesan: {}\nPath File: {}\nNama File Asli: {}\nMIME Type: {}\nUkuran: {} bytes\n\n--- Catatan & Hasil Transkripsi / Analisis Aina ---\n",
+                        msg.id,
+                        msg.sender.name.as_deref().unwrap_or("Anonim"),
+                        msg.sender.jid,
+                        msg.timestamp,
+                        msg.text,
+                        abs_path_str,
+                        filename_opt.unwrap_or("-"),
+                        effective_mime,
+                        bytes.len()
+                    );
+                    let _ = tokio::fs::write(&sidecar_txt_path, initial_txt).await;
                 }
             }
         }
@@ -872,6 +1001,56 @@ pub async fn dispatch_incoming_message_to_queue<F, Fut>(
         if let Err(e) = tx.send(msg) {
             error!("Failed to enqueue message into queue for {}: {:?}", chat_jid, e);
         }
+    }
+}
+
+pub fn resolve_media_extension(
+    mime_type: &str,
+    filename: Option<&str>,
+    media_type: Option<&str>,
+) -> String {
+    if let Some(fname) = filename {
+        if let Some(ext) = std::path::Path::new(fname).extension().and_then(|e| e.to_str()) {
+            let clean_ext = ext.trim().to_lowercase();
+            if !clean_ext.is_empty() && clean_ext.len() <= 6 && clean_ext.chars().all(|c| c.is_alphanumeric()) {
+                return clean_ext;
+            }
+        }
+    }
+
+    let mime_clean = mime_type.split(';').next().unwrap_or(mime_type).trim().to_lowercase();
+    match mime_clean.as_str() {
+        "image/jpeg" | "image/jpg" => "jpg".to_string(),
+        "image/png" => "png".to_string(),
+        "image/webp" => "webp".to_string(),
+        "image/gif" => "gif".to_string(),
+        "video/mp4" => "mp4".to_string(),
+        "video/quicktime" => "mov".to_string(),
+        "video/x-matroska" => "mkv".to_string(),
+        "audio/ogg" => "ogg".to_string(),
+        "audio/mp4" | "audio/m4a" => "m4a".to_string(),
+        "audio/mpeg" | "audio/mp3" => "mp3".to_string(),
+        "audio/wav" | "audio/x-wav" => "wav".to_string(),
+        "application/pdf" => "pdf".to_string(),
+        "application/zip" => "zip".to_string(),
+        "application/x-tar" => "tar".to_string(),
+        "application/gzip" => "gz".to_string(),
+        "text/plain" => "txt".to_string(),
+        "text/csv" => "csv".to_string(),
+        "application/json" => "json".to_string(),
+        "application/msword" => "doc".to_string(),
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => "docx".to_string(),
+        "application/vnd.ms-excel" => "xls".to_string(),
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => "xlsx".to_string(),
+        "application/vnd.ms-powerpoint" => "ppt".to_string(),
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation" => "pptx".to_string(),
+        _ => match media_type.unwrap_or("") {
+            "image" => "jpg".to_string(),
+            "video" => "mp4".to_string(),
+            "audio" => "ogg".to_string(),
+            "document" => "pdf".to_string(),
+            _ => "bin".to_string(),
+        },
     }
 }
 
@@ -1005,6 +1184,19 @@ fn parse_whatsmeow_message(
         .get("has_media")
         .or_else(|| val.get("has_media"))
         .and_then(|v| v.as_bool())
+        .or_else(|| {
+            if root.get("download_url").is_some()
+                || root.get("media_url").is_some()
+                || val.get("download_url").is_some()
+                || val.get("media_url").is_some()
+                || root.get("media_base64").is_some()
+                || val.get("media_base64").is_some()
+            {
+                Some(true)
+            } else {
+                None
+            }
+        })
         .unwrap_or(false);
 
     let media_type = root
@@ -2486,5 +2678,209 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::OK);
         let text = resp.text().await.unwrap();
         assert_eq!(text, format!("len: {}", payload_size));
+    }
+
+    #[test]
+    fn test_resolve_media_extension_variants() {
+        assert_eq!(resolve_media_extension("application/pdf", Some("doc.pdf"), Some("document")), "pdf");
+        assert_eq!(resolve_media_extension("application/pdf", None, Some("document")), "pdf");
+        assert_eq!(resolve_media_extension("image/png", Some("snapshot.png"), Some("image")), "png");
+        assert_eq!(resolve_media_extension("image/jpeg; charset=utf-8", None, Some("image")), "jpg");
+        assert_eq!(resolve_media_extension("video/mp4", None, Some("video")), "mp4");
+        assert_eq!(resolve_media_extension("audio/ogg", None, Some("audio")), "ogg");
+        assert_eq!(resolve_media_extension("audio/mp4", None, Some("audio")), "m4a");
+        assert_eq!(resolve_media_extension("application/vnd.openxmlformats-officedocument.wordprocessingml.document", Some("report.docx"), Some("document")), "docx");
+    }
+
+    #[test]
+    fn test_parse_whatsmeow_claim_check_payload() {
+        let payload = json!({
+            "id": "MSG_CLAIM_CHECK_999",
+            "from": "6282234120921@s.whatsapp.net",
+            "body": "ini pdfnya",
+            "has_media": true,
+            "media_type": "document",
+            "download_url": "/api/v1/media/MSG_CLAIM_CHECK_999/download",
+            "filename": "laporan_keuangan_q3.pdf",
+            "mime_type": "application/pdf",
+            "file_length": 15518976
+        });
+
+        let msg = parse_whatsmeow_message(
+            &payload,
+            None,
+            Some("628123456789@s.whatsapp.net"),
+            None,
+            None,
+        )
+        .expect("Message should parse");
+
+        assert_eq!(msg.id, "MSG_CLAIM_CHECK_999");
+        assert_eq!(msg.has_media, true);
+        assert_eq!(msg.media_type, Some("document".to_string()));
+        assert_eq!(msg.text, "ini pdfnya");
+    }
+
+    struct DummySessionStore;
+    #[async_trait::async_trait]
+    impl crate::core::ports::SessionStorePort for DummySessionStore {
+        async fn get_conversation_id(&self, _chat_jid: &str) -> anyhow::Result<Option<String>> { Ok(None) }
+        async fn save_conversation_id(&self, _chat_jid: &str, _conv_uuid: &str) -> anyhow::Result<()> { Ok(()) }
+        async fn delete_conversation_id(&self, _chat_jid: &str) -> anyhow::Result<()> { Ok(()) }
+        async fn record_message(&self, _chat_jid: &str, _sender_jid: &str, _text: &str, _is_from_me: bool) -> anyhow::Result<()> { Ok(()) }
+        async fn get_user_profile(&self, _sender_jid: &str) -> anyhow::Result<Option<crate::core::ports::UserProfile>> { Ok(None) }
+        async fn save_user_profile(&self, _profile: &crate::core::ports::UserProfile) -> anyhow::Result<()> { Ok(()) }
+    }
+
+    struct DummyAgentEngine;
+    #[async_trait::async_trait]
+    impl crate::core::ports::AgentEnginePort for DummyAgentEngine {
+        async fn execute_with_model(&self, _conv_id: Option<&str>, _prompt: &str, _model: Option<&str>) -> anyhow::Result<crate::core::ports::AgentResponse> {
+            Ok(crate::core::ports::AgentResponse {
+                conversation_id: "dummy".into(),
+                response_text: "OK".into(),
+                duration_seconds: 0.1,
+            })
+        }
+        async fn get_model(&self) -> String { "dummy".into() }
+        async fn set_model(&self, _model: &str) -> anyhow::Result<()> { Ok(()) }
+        async fn is_authenticated(&self) -> bool { true }
+        async fn save_auth_token(&self, _token_content: &str) -> anyhow::Result<()> { Ok(()) }
+    }
+
+    struct DummyWhatsApp;
+    #[async_trait::async_trait]
+    impl crate::core::ports::WhatsAppPort for DummyWhatsApp {
+        async fn send_text(&self, _to: &str, _text: &str, _qid: Option<&str>) -> anyhow::Result<()> { Ok(()) }
+        async fn send_presence(&self, _to: &str, _state: crate::core::domain::PresenceState) -> anyhow::Result<()> { Ok(()) }
+    }
+
+    #[tokio::test]
+    async fn test_webhook_claim_check_stream_download() {
+        const DUMMY_PDF_CONTENT: &[u8] = b"%PDF-1.4 Mock Claim Check Large Document Content";
+        let mock_app = Router::new().route(
+            "/api/v1/media/{id}/download",
+            get(|Path(id): Path<String>, headers: HeaderMap| async move {
+                let api_key = headers.get("X-API-Key").and_then(|v| v.to_str().ok()).unwrap_or("");
+                if api_key != "secret-whatsmeow-key" {
+                    return (StatusCode::UNAUTHORIZED, axum::http::HeaderMap::new(), vec![]);
+                }
+                let mut resp_headers = HeaderMap::new();
+                resp_headers.insert("Content-Type", "application/pdf".parse().unwrap());
+                resp_headers.insert("Content-Disposition", format!("attachment; filename=\"{}.pdf\"", id).parse().unwrap());
+                (StatusCode::OK, resp_headers, DUMMY_PDF_CONTENT.to_vec())
+            }),
+        );
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, mock_app).await;
+        });
+
+        let test_id = format!("aina_cc_test_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
+        let temp_dir = std::env::temp_dir().join(test_id);
+        let _ = tokio::fs::create_dir_all(&temp_dir).await;
+
+        let session_store = Arc::new(DummySessionStore);
+        let agent_engine = Arc::new(DummyAgentEngine);
+        let whatsapp = Arc::new(DummyWhatsApp);
+        let persona_engine = Arc::new(PersonaEngine::new(
+            "Aina".to_string(),
+            "Org".to_string(),
+            "admin@s.whatsapp.net".to_string(),
+            "Asia/Jakarta".to_string(),
+            7,
+            "id".to_string(),
+            format!("http://{}", addr),
+            "bot@s.whatsapp.net".to_string(),
+            Some(temp_dir.to_string_lossy().to_string()),
+        ));
+
+        let usecase = Arc::new(ProcessIncomingMessageUseCase::new(
+            session_store.clone(),
+            agent_engine.clone(),
+            whatsapp.clone(),
+            persona_engine.clone(),
+            "bot@s.whatsapp.net".to_string(),
+            "Aina".to_string(),
+            None,
+        ));
+
+        let state = Arc::new(WebhookServerState {
+            usecase,
+            agent_engine,
+            session_store,
+            persona_engine,
+            bot_name: "Aina".to_string(),
+            bot_jid: "bot@s.whatsapp.net".to_string(),
+            bot_lid: None,
+            companion_jid: None,
+            companion_name: None,
+            companion_session_id: None,
+            model: "dummy".to_string(),
+            whatsmeow_url: format!("http://{}", addr),
+            whatsmeow_api_key: "secret-whatsmeow-key".to_string(),
+            setup_code: "SECRET123".to_string(),
+            timezone: "Asia/Jakarta".to_string(),
+            locale: "id".to_string(),
+            sim_jobs: Arc::new(RwLock::new(HashMap::new())),
+            chat_queues: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+            workspace_dir: temp_dir.clone(),
+        });
+
+        let app = create_router(state);
+        let aina_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let aina_addr = aina_listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = axum::serve(aina_listener, app).await;
+        });
+
+        let client = reqwest::Client::new();
+        let payload = json!({
+            "id": "MSG_CC_TEST_001",
+            "chat_jid": "user123@s.whatsapp.net",
+            "sender_jid": "user123@s.whatsapp.net",
+            "download_url": "/api/v1/media/MSG_CC_TEST_001/download",
+            "media_url": "/api/v1/media/MSG_CC_TEST_001/download",
+            "has_media": true,
+            "media_type": "document",
+            "filename": "laporan_keuangan.pdf",
+            "mime_type": "application/pdf",
+            "file_length": DUMMY_PDF_CONTENT.len(),
+            "text": "tolong cek pdf ini"
+        });
+
+        let resp = client
+            .post(format!("http://{}/webhook", aina_addr))
+            .json(&payload)
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let target_pdf = temp_dir.join("media").join("MSG_CC_TEST_001.pdf");
+        let target_txt = temp_dir.join("media").join("MSG_CC_TEST_001.txt");
+
+        let mut downloaded = false;
+        for _ in 0..50 {
+            if target_pdf.exists() && target_txt.exists() {
+                downloaded = true;
+                break;
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        }
+
+        assert!(downloaded, "Media file or sidecar .txt was not created by claim-check handler");
+        let read_bytes = tokio::fs::read(&target_pdf).await.unwrap();
+        assert_eq!(read_bytes, DUMMY_PDF_CONTENT);
+
+        let sidecar_content = tokio::fs::read_to_string(&target_txt).await.unwrap();
+        assert!(sidecar_content.contains("ID: MSG_CC_TEST_001"));
+        assert!(sidecar_content.contains("laporan_keuangan.pdf"));
+        assert!(sidecar_content.contains("application/pdf"));
+
+        let _ = tokio::fs::remove_dir_all(&temp_dir).await;
     }
 }
