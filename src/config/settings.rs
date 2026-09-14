@@ -72,6 +72,10 @@ pub struct WhatsmeowConfig {
     pub companion_name: Option<String>,
     #[serde(default)]
     pub companion_session_id: Option<String>,
+    #[serde(default)]
+    pub companion_base_url: Option<String>,
+    #[serde(default)]
+    pub companion_api_key: Option<String>,
 }
 
 fn default_send_endpoint() -> String {
@@ -174,6 +178,8 @@ impl Default for AppConfig {
                 companion_jid: None,
                 companion_name: None,
                 companion_session_id: None,
+                companion_base_url: None,
+                companion_api_key: None,
             },
             agent: AgentConfig {
                 binary_path: default_binary_path(),
@@ -261,6 +267,16 @@ impl AppConfig {
         if let Ok(val) = env::var("WHATSMEOW_COMPANION_SESSION_ID") {
             if !val.trim().is_empty() {
                 self.whatsmeow.companion_session_id = Some(val);
+            }
+        }
+        if let Ok(val) = env::var("WHATSMEOW_COMPANION_BASE_URL").or_else(|_| env::var("WHATSMEOW_COMPANION_URL")) {
+            if !val.trim().is_empty() {
+                self.whatsmeow.companion_base_url = Some(val);
+            }
+        }
+        if let Ok(val) = env::var("WHATSMEOW_COMPANION_API_KEY") {
+            if !val.trim().is_empty() {
+                self.whatsmeow.companion_api_key = Some(val);
             }
         }
 

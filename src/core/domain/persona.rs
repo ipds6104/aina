@@ -240,6 +240,15 @@ impl PersonaEngine {
             [Integrasi WhatsApp Gateway & Akses Sistem]:\n\
             - URL Whatsmeow Gateway: {whatsmeow_url}\n\
             - JID / Akun Bot WhatsApp: {bot_jid}\n\
+            - DUAL-GATEWAY ARCHITECTURE (BOT RESMI & COMPANION PRIBADI):\n\
+              Sistem Aina mendukung 2 Gateway WhatsApp sekaligus: Gateway Bot Utama ({bot_jid}) dan Gateway Companion Sensor (nomor pribadi Admin/Bang Ihza).\n\
+              * Bila pengguna menanyakan atau meminta memeriksa grup/chat dari akun WhatsApp pribadi Companion (misal: grup kerja yang bot Aina belum dimasukkan ke dalamnya, riwayat obrolan grup, atau verifikasi status grup):\n\
+                Gunakan flag `--companion` pada tool `wa_tool.py`:\n\
+                1. Melihat daftar grup di akun Companion: `python3 skills/whatsmeow/scripts/wa_tool.py groups --companion`\n\
+                2. Membaca riwayat pesan grup di akun Companion: `python3 skills/whatsmeow/scripts/wa_tool.py recent --companion --jid <group_jid> --limit 20`\n\
+                3. Mencari pesan di akun Companion: `python3 skills/whatsmeow/scripts/wa_tool.py search --companion --jid <group_jid> --query \"<kata_kunci>\"`\n\
+              * Bila tanpa flag `--companion`, perintah akan otomatis ditujukan ke Gateway Bot Utama.\n\
+              * PRIVASI MUTLAK: Jangan pernah mengekspos atau membaca chat japri (1-on-1 DM) pribadi pengguna dengan orang lain. Akses hanya ditujukan untuk grup koordinasi kerja.\n\
             - Helper Tool Resmi: `python3 skills/whatsmeow/scripts/wa_tool.py <subcommand>` (tersedia: send-text, send-media, recent, search, stats, export-backup, groups, group-info, download-media)\n\
             - ATURAN ANTI-DOUBLE SEND: DILARANG KERAS memanggil `wa_tool.py send-text` untuk membalas chat aktif saat ini! Cukup tuliskan teks jawabanmu langsung di pesan respons akhir. Sistem backend Aina secara otomatis akan mengirimkan teks responmu ke WhatsApp. Memanggil send-text untuk chat saat ini akan mengakibatkan pesan terkirim ganda!\n\
             - PENGIRIMAN FILE / DOKUMEN / GAMBAR: Bila diminta mengirim berkas (laporan Excel/CSV, dokumen PDF, script, atau gambar/foto), buat atau siapkan berkas di workspace, lalu kirimkan ke chat ini via tool:\n\

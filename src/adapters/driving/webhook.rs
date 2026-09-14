@@ -56,6 +56,8 @@ pub struct WebhookServerState {
     pub model: String,
     pub whatsmeow_url: String,
     pub whatsmeow_api_key: String,
+    pub companion_base_url: Option<String>,
+    pub companion_api_key: Option<String>,
     pub setup_code: String,
     pub timezone: String,
     pub locale: String,
@@ -96,6 +98,7 @@ struct ApiStatusResponse {
     pub companion_active: bool,
     pub model: String,
     pub whatsmeow_url: String,
+    pub companion_url: Option<String>,
     pub timezone: String,
     pub locale: String,
 }
@@ -115,6 +118,7 @@ async fn api_status_handler(
         companion_active,
         model: live_model,
         whatsmeow_url: state.whatsmeow_url.clone(),
+        companion_url: state.companion_base_url.clone(),
         timezone: state.timezone.clone(),
         locale: state.locale.clone(),
     })
@@ -793,13 +797,24 @@ async fn webhook_handler(
             // CLAIM-CHECK PATTERN:
             // If media_base64 is absent or omitted, retrieve media stream on-demand
             // using the download_url claim check ticket or fallback to media id.
+            let (target_url, target_key) = if msg.session_role == crate::core::domain::SessionRole::UserCompanion
+                && state.companion_base_url.is_some()
+            {
+                (
+                    state.companion_base_url.as_deref().unwrap(),
+                    state.companion_api_key.as_deref().unwrap_or(&state.whatsmeow_api_key),
+                )
+            } else {
+                (state.whatsmeow_url.as_str(), state.whatsmeow_api_key.as_str())
+            };
+
             let full_url = if let Some(url_str) = download_url_opt {
                 if url_str.starts_with("http://") || url_str.starts_with("https://") {
                     url_str.to_string()
                 } else {
                     format!(
                         "{}{}",
-                        state.whatsmeow_url.trim_end_matches('/'),
+                        target_url.trim_end_matches('/'),
                         if url_str.starts_with('/') {
                             url_str.to_string()
                         } else {
@@ -810,11 +825,11 @@ async fn webhook_handler(
             } else if msg.has_media
                 && !msg.id.is_empty()
                 && msg.id != "unknown_id"
-                && !state.whatsmeow_url.is_empty()
+                && !target_url.is_empty()
             {
                 format!(
                     "{}/api/v1/media/{}/download",
-                    state.whatsmeow_url.trim_end_matches('/'),
+                    target_url.trim_end_matches('/'),
                     msg.id
                 )
             } else {
@@ -829,10 +844,10 @@ async fn webhook_handler(
                     .unwrap_or_else(|_| reqwest::Client::new());
 
                 let mut req = client.get(&full_url);
-                if !state.whatsmeow_api_key.is_empty() {
+                if !target_key.is_empty() {
                     req = req
-                        .header("Authorization", format!("Bearer {}", state.whatsmeow_api_key))
-                        .header("X-API-Key", &state.whatsmeow_api_key);
+                        .header("Authorization", format!("Bearer {}", target_key))
+                        .header("X-API-Key", target_key);
                 }
 
                 match req.send().await {
@@ -2821,6 +2836,8 @@ mod tests {
             model: "dummy".to_string(),
             whatsmeow_url: format!("http://{}", addr),
             whatsmeow_api_key: "secret-whatsmeow-key".to_string(),
+            companion_base_url: None,
+            companion_api_key: None,
             setup_code: "SECRET123".to_string(),
             timezone: "Asia/Jakarta".to_string(),
             locale: "id".to_string(),

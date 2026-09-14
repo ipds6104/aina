@@ -100,9 +100,12 @@ pub struct AntigravityCliAdapter {
     timeout_duration: Duration,
     whatsmeow_base_url: String,
     whatsmeow_api_key: String,
+    companion_base_url: Option<String>,
+    companion_api_key: Option<String>,
 }
 
 impl AntigravityCliAdapter {
+    #[allow(dead_code)]
     pub fn new(
         binary_path: impl Into<PathBuf>,
         model: impl Into<String>,
@@ -110,6 +113,28 @@ impl AntigravityCliAdapter {
         timeout_seconds: u64,
         whatsmeow_base_url: impl Into<String>,
         whatsmeow_api_key: impl Into<String>,
+    ) -> Self {
+        Self::with_companion(
+            binary_path,
+            model,
+            workspace_dir,
+            timeout_seconds,
+            whatsmeow_base_url,
+            whatsmeow_api_key,
+            None,
+            None,
+        )
+    }
+
+    pub fn with_companion(
+        binary_path: impl Into<PathBuf>,
+        model: impl Into<String>,
+        workspace_dir: impl Into<PathBuf>,
+        timeout_seconds: u64,
+        whatsmeow_base_url: impl Into<String>,
+        whatsmeow_api_key: impl Into<String>,
+        companion_base_url: Option<String>,
+        companion_api_key: Option<String>,
     ) -> Self {
         let raw_model = model.into();
         let initial_model = resolve_model_name(&raw_model).unwrap_or(raw_model);
@@ -120,6 +145,8 @@ impl AntigravityCliAdapter {
             timeout_duration: Duration::from_secs(timeout_seconds),
             whatsmeow_base_url: whatsmeow_base_url.into(),
             whatsmeow_api_key: whatsmeow_api_key.into(),
+            companion_base_url,
+            companion_api_key,
         }
     }
 
@@ -212,6 +239,14 @@ impl AgentEnginePort for AntigravityCliAdapter {
         cmd.env("WHATSMEOW_URL", &self.whatsmeow_base_url);
         cmd.env("WHATSMEOW_API_KEY", &self.whatsmeow_api_key);
         cmd.env("API_KEY", &self.whatsmeow_api_key);
+
+        if let Some(ref comp_url) = self.companion_base_url {
+            cmd.env("WHATSMEOW_COMPANION_BASE_URL", comp_url);
+            cmd.env("WHATSMEOW_COMPANION_URL", comp_url);
+        }
+        if let Some(ref comp_key) = self.companion_api_key {
+            cmd.env("WHATSMEOW_COMPANION_API_KEY", comp_key);
+        }
 
         debug!(
             "Executing Antigravity CLI: {:?} (conv: {:?}, model: {})",

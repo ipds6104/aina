@@ -15,21 +15,38 @@ import urllib.parse
 from typing import Optional, Dict, Any
 
 DEFAULT_BASE_URL = "http://localhost:3000"
+CURRENT_ARGS = None
 
 def get_config(args=None) -> tuple[str, str]:
+    if args is None:
+        args = CURRENT_ARGS
+
+    is_companion = getattr(args, "companion", False) if args else False
     cli_base = getattr(args, "base_url", None) if args else None
     cli_key = getattr(args, "api_key", None) if args else None
 
-    base_url = (
-        cli_base
-        or os.getenv("WHATSMEOW_BASE_URL")
-        or os.getenv("WHATSMEOW_URL")
-    )
-    api_key = (
-        cli_key
-        or os.getenv("WHATSMEOW_API_KEY")
-        or os.getenv("API_KEY")
-    )
+    if is_companion:
+        base_url = (
+            cli_base
+            or os.getenv("WHATSMEOW_COMPANION_BASE_URL")
+            or os.getenv("WHATSMEOW_COMPANION_URL")
+        )
+        api_key = (
+            cli_key
+            or os.getenv("WHATSMEOW_COMPANION_API_KEY")
+            or os.getenv("COMPANION_API_KEY")
+        )
+    else:
+        base_url = (
+            cli_base
+            or os.getenv("WHATSMEOW_BASE_URL")
+            or os.getenv("WHATSMEOW_URL")
+        )
+        api_key = (
+            cli_key
+            or os.getenv("WHATSMEOW_API_KEY")
+            or os.getenv("API_KEY")
+        )
 
     if not base_url or not api_key:
         candidates = [
@@ -51,17 +68,33 @@ def get_config(args=None) -> tuple[str, str]:
                         elif in_wa and clean and not clean.startswith("#"):
                             if not line.startswith(" ") and not line.startswith("\t"):
                                 in_wa = False
-                            elif "base_url:" in clean and not base_url:
-                                base_url = clean.split("base_url:", 1)[1].strip().strip('"').strip("'")
-                            elif "api_key:" in clean and not api_key:
-                                api_key = clean.split("api_key:", 1)[1].strip().strip('"').strip("'")
+                            elif is_companion:
+                                if "companion_base_url:" in clean and not base_url:
+                                    base_url = clean.split("companion_base_url:", 1)[1].strip().strip('"').strip("'")
+                                elif "companion_api_key:" in clean and not api_key:
+                                    api_key = clean.split("companion_api_key:", 1)[1].strip().strip('"').strip("'")
+                            else:
+                                if "base_url:" in clean and not base_url:
+                                    base_url = clean.split("base_url:", 1)[1].strip().strip('"').strip("'")
+                                elif "api_key:" in clean and not api_key:
+                                    api_key = clean.split("api_key:", 1)[1].strip().strip('"').strip("'")
                 except Exception:
                     pass
 
-    return (base_url or DEFAULT_BASE_URL).rstrip("/"), (api_key or "")
+    return (base_url or ("" if is_companion else DEFAULT_BASE_URL)).rstrip("/"), (api_key or "")
 
-def make_request(method: str, endpoint: str, data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    base_url, api_key = get_config()
+def make_request(method: str, endpoint: str, data: Optional[Dict[str, Any]] = None, args: Any = None) -> Dict[str, Any]:
+    if args is None:
+        args = CURRENT_ARGS
+    base_url, api_key = get_config(args)
+    if not base_url:
+        is_comp = getattr(args, "companion", False) if args else False
+        gateway_type = "Companion" if is_comp else "Primary"
+        env_var = "WHATSMEOW_COMPANION_BASE_URL" if is_comp else "WHATSMEOW_BASE_URL"
+        return {
+            "error": True,
+            "message": f"{gateway_type} WhatsApp Gateway URL is not configured. Please set {env_var} in environment or config."
+        }
     url = f"{base_url}{endpoint}"
     
     headers = {
@@ -399,28 +432,33 @@ def cmd_revoke(args):
     print(json.dumps(res, indent=2, ensure_ascii=False))
 
 def main():
-    parser = argparse.ArgumentParser(description="Whatsmeow CLI helper tool for Aina agent")
-    parser.add_argument("--base-url", help="Override Whatsmeow Gateway Base URL")
-    parser.add_argument("--api-key", help="Override Whatsmeow API Key")
+    global CURRENT_ARGS
+
+    common_parser = argparse.ArgumentParser(add_help=False)
+    common_parser.add_argument("--base-url", help="Override Whatsmeow Gateway Base URL")
+    common_parser.add_argument("--api-key", help="Override Whatsmeow API Key")
+    common_parser.add_argument("--companion", action="store_true", help="Route request to the Companion WhatsApp gateway (e.g. personal account)")
+
+    parser = argparse.ArgumentParser(description="Whatsmeow CLI helper tool for Aina agent", parents=[common_parser])
     subparsers = parser.add_subparsers(dest="subcommand", required=True)
 
     # recent
-    p_recent = subparsers.add_parser("recent", help="Fetch recent messages from a chat")
+    p_recent = subparsers.add_parser("recent", help="Fetch recent messages from a chat", parents=[common_parser])
     p_recent.add_argument("--jid", required=True, help="Chat or Group JID")
     p_recent.add_argument("--limit", type=int, default=20, help="Number of messages to retrieve (default: 20)")
     p_recent.set_defaults(func=cmd_recent)
 
     # groups
-    p_groups = subparsers.add_parser("groups", help="List all joined groups")
+    p_groups = subparsers.add_parser("groups", help="List all joined groups", parents=[common_parser])
     p_groups.set_defaults(func=cmd_groups)
 
     # group-info
-    p_ginfo = subparsers.add_parser("group-info", help="Get metadata and participants of a group")
+    p_ginfo = subparsers.add_parser("group-info", help="Get metadata and participants of a group", parents=[common_parser])
     p_ginfo.add_argument("--jid", required=True, help="Group JID (ends with @g.us)")
     p_ginfo.set_defaults(func=cmd_group_info)
 
     # export-backup
-    p_backup = subparsers.add_parser("export-backup", help="Export chat backup of a group")
+    p_backup = subparsers.add_parser("export-backup", help="Export chat backup of a group", parents=[common_parser])
     p_backup.add_argument("--jid", required=True, help="Group JID")
     p_backup.add_argument("--limit", type=int, default=1000, help="Max messages to backup")
     p_backup.add_argument("--include-media", action="store_true", help="Include media metadata")
@@ -428,13 +466,13 @@ def main():
     p_backup.set_defaults(func=cmd_export_backup)
 
     # send-text
-    p_send_text = subparsers.add_parser("send-text", help="Send a WhatsApp text message")
+    p_send_text = subparsers.add_parser("send-text", help="Send a WhatsApp text message", parents=[common_parser])
     p_send_text.add_argument("--to", required=True, help="Recipient JID (e.g. 628xxx@s.whatsapp.net or 120363xxx@g.us)")
     p_send_text.add_argument("--text", required=True, help="Message text content")
     p_send_text.set_defaults(func=cmd_send_text)
 
     # send-media
-    p_media = subparsers.add_parser("send-media", help="Send media or document file")
+    p_media = subparsers.add_parser("send-media", help="Send media or document file", parents=[common_parser])
     p_media.add_argument("--to", required=True, help="Recipient JID")
     p_media.add_argument("--file", required=True, help="Path to file on disk")
     p_media.add_argument("--type", default="auto", choices=["auto", "image", "video", "audio", "document"], help="Media type (default: auto)")
@@ -443,7 +481,7 @@ def main():
     p_media.set_defaults(func=cmd_send_media)
 
     # search
-    p_search = subparsers.add_parser("search", help="Search & filter messages in a chat")
+    p_search = subparsers.add_parser("search", help="Search & filter messages in a chat", parents=[common_parser])
     p_search.add_argument("--jid", required=True, help="Chat or Group JID")
     p_search.add_argument("--query", default="", help="Keyword text to search for (case-insensitive)")
     p_search.add_argument("--sender", default="", help="Filter by sender phone or JID")
@@ -452,11 +490,11 @@ def main():
     p_search.set_defaults(func=cmd_search)
 
     # stats
-    p_stats = subparsers.add_parser("stats", help="Get gateway connection and antiban rate-limit stats")
+    p_stats = subparsers.add_parser("stats", help="Get gateway connection and antiban rate-limit stats", parents=[common_parser])
     p_stats.set_defaults(func=cmd_stats)
 
     # download-media
-    p_dl = subparsers.add_parser("download-media", help="Download media from WhatsApp CDN")
+    p_dl = subparsers.add_parser("download-media", help="Download media from WhatsApp CDN", parents=[common_parser])
     p_dl.add_argument("--direct-path", required=True, help="Media direct_path starting with slash")
     p_dl.add_argument("--media-key", help="Optional media decryption key")
     p_dl.add_argument("--type", choices=["image", "video", "audio", "document"], help="Optional media type")
@@ -464,59 +502,60 @@ def main():
     p_dl.set_defaults(func=cmd_download_media)
 
     # profile-picture-get
-    p_pp_get = subparsers.add_parser("profile-picture-get", help="Get profile picture URL for a user, group, or self")
+    p_pp_get = subparsers.add_parser("profile-picture-get", help="Get profile picture URL for a user, group, or self", parents=[common_parser])
     p_pp_get.add_argument("--jid", default="", help="Target JID (defaults to self if empty)")
     p_pp_get.add_argument("--preview", action="store_true", help="Fetch low-res preview thumbnail instead of full image")
     p_pp_get.set_defaults(func=cmd_profile_picture_get)
 
     # profile-picture-set
-    p_pp_set = subparsers.add_parser("profile-picture-set", help="Update profile picture for self or group")
+    p_pp_set = subparsers.add_parser("profile-picture-set", help="Update profile picture for self or group", parents=[common_parser])
     p_pp_set.add_argument("--file", required=True, help="Path to avatar image file (JPG/PNG)")
     p_pp_set.add_argument("--jid", default="", help="Target JID (leave empty for self, or specify group JID)")
     p_pp_set.set_defaults(func=cmd_profile_picture_set)
 
     # profile-picture-remove
-    p_pp_del = subparsers.add_parser("profile-picture-remove", help="Remove profile picture for self or group")
+    p_pp_del = subparsers.add_parser("profile-picture-remove", help="Remove profile picture for self or group", parents=[common_parser])
     p_pp_del.add_argument("--jid", default="", help="Target JID (defaults to self if empty)")
     p_pp_del.set_defaults(func=cmd_profile_picture_remove)
 
     # about-set
-    p_about = subparsers.add_parser("about-set", help="Update WhatsApp About / Bio status text")
+    p_about = subparsers.add_parser("about-set", help="Update WhatsApp About / Bio status text", parents=[common_parser])
     p_about.add_argument("--status", required=True, help="New About status text")
     p_about.set_defaults(func=cmd_about_set)
 
     # status-send-text
-    p_st_text = subparsers.add_parser("status-send-text", help="Post an ephemeral 24-hour text status story")
+    p_st_text = subparsers.add_parser("status-send-text", help="Post an ephemeral 24-hour text status story", parents=[common_parser])
     p_st_text.add_argument("--text", required=True, help="Status story text")
     p_st_text.add_argument("--background", help="Optional ARGB background color (hex, e.g. 0xFF5733 or #FF5733)")
     p_st_text.add_argument("--font", type=int, choices=[1, 2, 3, 4, 5], help="Optional font style (1 to 5)")
     p_st_text.set_defaults(func=cmd_status_send_text)
 
     # status-send-media
-    p_st_media = subparsers.add_parser("status-send-media", help="Post an ephemeral 24-hour media status story")
+    p_st_media = subparsers.add_parser("status-send-media", help="Post an ephemeral 24-hour media status story", parents=[common_parser])
     p_st_media.add_argument("--file", required=True, help="Path to image or video file")
     p_st_media.add_argument("--caption", help="Optional status caption")
     p_st_media.add_argument("--type", choices=["auto", "image", "video"], default="auto", help="Media type (default: auto)")
     p_st_media.set_defaults(func=cmd_status_send_media)
 
     # status-list
-    p_st_list = subparsers.add_parser("status-list", help="List status stories created by bot (or contacts)")
+    p_st_list = subparsers.add_parser("status-list", help="List status stories created by bot (or contacts)", parents=[common_parser])
     p_st_list.add_argument("--limit", type=int, default=20, help="Max status stories to list (default: 20)")
     p_st_list.add_argument("--active-only", action="store_true", help="Only show active stories (< 24 hours)")
     p_st_list.add_argument("--contacts", action="store_true", help="List status stories from contacts instead of own")
     p_st_list.set_defaults(func=cmd_status_list)
 
     # revoke / status-revoke
-    p_revoke = subparsers.add_parser("revoke", help="Revoke/delete a sent message or status story for everyone")
+    p_revoke = subparsers.add_parser("revoke", help="Revoke/delete a sent message or status story for everyone", parents=[common_parser])
     p_revoke.add_argument("--id", required=True, help="Message ID or Status Story ID to revoke")
     p_revoke.add_argument("--chat-jid", default="", help="Chat JID (leave empty or status@broadcast for stories)")
     p_revoke.set_defaults(func=cmd_revoke)
 
-    p_st_revoke = subparsers.add_parser("status-revoke", help="Revoke/delete a posted status story")
+    p_st_revoke = subparsers.add_parser("status-revoke", help="Revoke/delete a posted status story", parents=[common_parser])
     p_st_revoke.add_argument("--id", required=True, help="Status Story ID to revoke")
     p_st_revoke.set_defaults(func=lambda args: cmd_revoke(argparse.Namespace(id=args.id, chat_jid="status@broadcast")))
 
     args = parser.parse_args()
+    CURRENT_ARGS = args
     args.func(args)
 
 if __name__ == "__main__":

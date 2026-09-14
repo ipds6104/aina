@@ -45,21 +45,25 @@ async fn main() -> anyhow::Result<()> {
 
     // 2. Instantiate Driven Adapters (Secondary Adapters)
     let session_store = Arc::new(SqliteSessionStore::new(&config.database.path)?);
-    let agent_engine = Arc::new(AntigravityCliAdapter::new(
+    let agent_engine = Arc::new(AntigravityCliAdapter::with_companion(
         &config.agent.binary_path,
         &config.agent.model,
         &config.agent.workspace_dir,
         config.agent.timeout_seconds,
         &config.whatsmeow.base_url,
         &config.whatsmeow.api_key,
+        config.whatsmeow.companion_base_url.clone(),
+        config.whatsmeow.companion_api_key.clone(),
     ));
-    let whatsapp = Arc::new(WhatsmeowHttpAdapter::with_sessions(
+    let whatsapp = Arc::new(WhatsmeowHttpAdapter::with_companion_gateway(
         &config.whatsmeow.base_url,
         &config.whatsmeow.api_key,
         &config.whatsmeow.send_endpoint,
         &config.whatsmeow.presence_endpoint,
         config.whatsmeow.bot_session_id.clone(),
         config.whatsmeow.companion_session_id.clone(),
+        config.whatsmeow.companion_base_url.clone(),
+        config.whatsmeow.companion_api_key.clone(),
     ));
 
     let persona_engine = Arc::new(PersonaEngine::new(
@@ -128,6 +132,8 @@ async fn main() -> anyhow::Result<()> {
         model: config.agent.model.clone(),
         whatsmeow_url: config.whatsmeow.base_url.clone(),
         whatsmeow_api_key: config.whatsmeow.api_key.clone(),
+        companion_base_url: config.whatsmeow.companion_base_url.clone(),
+        companion_api_key: config.whatsmeow.companion_api_key.clone(),
         setup_code,
         timezone: config.app.timezone.clone(),
         locale: config.app.locale.clone(),

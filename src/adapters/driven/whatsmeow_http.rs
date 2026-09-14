@@ -13,6 +13,8 @@ pub struct WhatsmeowHttpAdapter {
     presence_endpoint: String,
     bot_session_id: Option<String>,
     companion_session_id: Option<String>,
+    companion_base_url: Option<String>,
+    companion_api_key: Option<String>,
 }
 
 impl WhatsmeowHttpAdapter {
@@ -41,6 +43,28 @@ impl WhatsmeowHttpAdapter {
         bot_session_id: Option<String>,
         companion_session_id: Option<String>,
     ) -> Self {
+        Self::with_companion_gateway(
+            base_url,
+            api_key,
+            send_endpoint,
+            presence_endpoint,
+            bot_session_id,
+            companion_session_id,
+            None,
+            None,
+        )
+    }
+
+    pub fn with_companion_gateway(
+        base_url: impl Into<String>,
+        api_key: impl Into<String>,
+        send_endpoint: impl Into<String>,
+        presence_endpoint: impl Into<String>,
+        bot_session_id: Option<String>,
+        companion_session_id: Option<String>,
+        companion_base_url: Option<String>,
+        companion_api_key: Option<String>,
+    ) -> Self {
         Self {
             client: Client::new(),
             base_url: base_url.into(),
@@ -49,6 +73,8 @@ impl WhatsmeowHttpAdapter {
             presence_endpoint: presence_endpoint.into(),
             bot_session_id,
             companion_session_id,
+            companion_base_url,
+            companion_api_key,
         }
     }
 
@@ -65,8 +91,18 @@ impl WhatsmeowHttpAdapter {
         text: &str,
         quoted_id: Option<&str>,
         session_id: Option<&str>,
+        session_role: SessionRole,
     ) -> anyhow::Result<()> {
-        let url = format!("{}{}", self.base_url.trim_end_matches('/'), self.send_endpoint);
+        let (base_url, api_key) = if session_role == SessionRole::UserCompanion && self.companion_base_url.is_some() {
+            (
+                self.companion_base_url.as_deref().unwrap(),
+                self.companion_api_key.as_deref().unwrap_or(&self.api_key),
+            )
+        } else {
+            (self.base_url.as_str(), self.api_key.as_str())
+        };
+
+        let url = format!("{}{}", base_url.trim_end_matches('/'), self.send_endpoint);
         
         let mut body = json!({
             "recipient": to_jid,
@@ -93,13 +129,13 @@ impl WhatsmeowHttpAdapter {
             }
         }
 
-        info!("Sending WhatsApp message to {} (session: {:?})", to_jid, session_id);
+        info!("Sending WhatsApp message to {} (role: {:?}, session: {:?})", to_jid, session_role, session_id);
         
         let mut req = self
             .client
             .post(&url)
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .header("X-API-Key", &self.api_key);
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("X-API-Key", api_key);
 
         if let Some(sid) = session_id {
             req = req.header("X-Session-ID", sid).header("Session-Id", sid);
@@ -120,33 +156,32 @@ impl WhatsmeowHttpAdapter {
                     } else {
                         "/api/v1/messages/send-text"
                     };
-                    let fallback_url = format!("{}{}", self.base_url.trim_end_matches('/'), fallback_endpoint);
-                    info!("Endpoint {} returned 404, falling back to {}", url, fallback_url);
-                    let mut fb_req = self
+                    let fallback_url = format!("{}{}", base_url.trim_end_matches('/'), fallback_endpoint);
+                    debug!("Retrying with fallback endpoint: {}", fallback_url);
+                    
+                    let mut req_fallback = self
                         .client
                         .post(&fallback_url)
-                        .header("Authorization", format!("Bearer {}", self.api_key))
-                        .header("X-API-Key", &self.api_key);
+                        .header("Authorization", format!("Bearer {}", api_key))
+                        .header("X-API-Key", api_key);
 
                     if let Some(sid) = session_id {
-                        fb_req = fb_req.header("X-Session-ID", sid).header("Session-Id", sid);
+                        req_fallback = req_fallback.header("X-Session-ID", sid).header("Session-Id", sid);
                     }
 
-                    let fb_res = fb_req.json(&body).send().await;
-                    match fb_res {
-                        Ok(fb_resp) => {
-                            let fb_status = fb_resp.status();
-                            let fb_body = fb_resp.text().await.unwrap_or_default();
-                            if fb_status.is_success() {
-                                debug!("WhatsApp message sent successfully via fallback: {}", fb_body);
+                    let res_fallback = req_fallback.json(&body).send().await;
+                    match res_fallback {
+                        Ok(resp2) => {
+                            if resp2.status().is_success() {
                                 Ok(())
                             } else {
-                                error!("Fallback endpoint also failed. Status: {}, Body: {}", fb_status, fb_body);
-                                anyhow::bail!("Whatsmeow HTTP error {}: {}", fb_status, fb_body);
+                                let body2 = resp2.text().await.unwrap_or_default();
+                                error!("Fallback endpoint failed: {}", body2);
+                                anyhow::bail!("Whatsmeow HTTP error: {}", body2);
                             }
                         }
                         Err(e) => {
-                            error!("Fallback connection error: {}", e);
+                            error!("Fallback connection failed: {}", e);
                             anyhow::bail!("Whatsmeow connection failed: {}", e);
                         }
                     }
@@ -170,8 +205,18 @@ impl WhatsmeowHttpAdapter {
         to_jid: &str,
         state: PresenceState,
         session_id: Option<&str>,
+        session_role: SessionRole,
     ) -> anyhow::Result<()> {
-        let url = format!("{}{}", self.base_url.trim_end_matches('/'), self.presence_endpoint);
+        let (base_url, api_key) = if session_role == SessionRole::UserCompanion && self.companion_base_url.is_some() {
+            (
+                self.companion_base_url.as_deref().unwrap(),
+                self.companion_api_key.as_deref().unwrap_or(&self.api_key),
+            )
+        } else {
+            (self.base_url.as_str(), self.api_key.as_str())
+        };
+
+        let url = format!("{}{}", base_url.trim_end_matches('/'), self.presence_endpoint);
         let state_str = match state {
             PresenceState::Composing => "composing",
             PresenceState::Paused => "paused",
@@ -192,13 +237,13 @@ impl WhatsmeowHttpAdapter {
             }
         }
 
-        debug!("Sending presence '{}' to {} (session: {:?})", state_str, to_jid, session_id);
+        debug!("Sending presence '{}' to {} (role: {:?}, session: {:?})", state_str, to_jid, session_role, session_id);
 
         let mut req = self
             .client
             .post(&url)
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .header("X-API-Key", &self.api_key);
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("X-API-Key", api_key);
 
         if let Some(sid) = session_id {
             req = req.header("X-Session-ID", sid).header("Session-Id", sid);
@@ -222,7 +267,7 @@ impl WhatsAppPort for WhatsmeowHttpAdapter {
         text: &str,
         quoted_id: Option<&str>,
     ) -> anyhow::Result<()> {
-        self.send_text_internal(to_jid, text, quoted_id, self.bot_session_id.as_deref()).await
+        self.send_text_internal(to_jid, text, quoted_id, self.bot_session_id.as_deref(), SessionRole::PrimaryBot).await
     }
 
     async fn send_text_with_session(
@@ -233,11 +278,11 @@ impl WhatsAppPort for WhatsmeowHttpAdapter {
         session_role: SessionRole,
     ) -> anyhow::Result<()> {
         let session_id = self.resolve_session_id(session_role);
-        self.send_text_internal(to_jid, text, quoted_id, session_id).await
+        self.send_text_internal(to_jid, text, quoted_id, session_id, session_role).await
     }
 
     async fn send_presence(&self, to_jid: &str, state: PresenceState) -> anyhow::Result<()> {
-        self.send_presence_internal(to_jid, state, self.bot_session_id.as_deref()).await
+        self.send_presence_internal(to_jid, state, self.bot_session_id.as_deref(), SessionRole::PrimaryBot).await
     }
 
     async fn send_presence_with_session(
@@ -247,6 +292,6 @@ impl WhatsAppPort for WhatsmeowHttpAdapter {
         session_role: SessionRole,
     ) -> anyhow::Result<()> {
         let session_id = self.resolve_session_id(session_role);
-        self.send_presence_internal(to_jid, state, session_id).await
+        self.send_presence_internal(to_jid, state, session_id, session_role).await
     }
 }

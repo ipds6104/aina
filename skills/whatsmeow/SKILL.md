@@ -102,7 +102,25 @@ When an authorized user requests a chat backup or comprehensive audit log:
 2. Verify that the file was created in `workspace/`.
 3. Inform the user that the backup has been compiled, provide summary metrics (total messages, date range), and offer to deliver or analyze the file.
 
-### SOP 5: Inspecting Group Participants & Authority
+### SOP 5: Dual-Gateway Operations & Companion Account Queries
+Sistem Aina mendukung arsitektur Dual-Gateway (Gateway Bot Utama & Gateway Akun Pribadi Companion Admin / Bang Ihza).
+Gunakan flag `--companion` ketika diminta mengakses informasi atau obrolan grup dari akun pribadi Bang Ihza (misal untuk grup kerja yang akun bot Aina belum dimasukkan ke dalamnya):
+1. **Melihat daftar grup yang diikuti akun Companion**:
+   ```bash
+   python3 skills/whatsmeow/scripts/wa_tool.py groups --companion
+   ```
+2. **Membaca riwayat obrolan grup pada akun Companion**:
+   ```bash
+   python3 skills/whatsmeow/scripts/wa_tool.py recent --companion --jid "<GROUP_JID>" --limit 30
+   ```
+3. **Mencari pesan atau kata kunci tertentu di grup Companion**:
+   ```bash
+   python3 skills/whatsmeow/scripts/wa_tool.py search --companion --jid "<GROUP_JID>" --query "kata kunci" --limit 50
+   ```
+> ⚠️ **Catatan Privasi Mutlak**:
+> Dilarang membaca, mengekspor, atau menyebarluaskan riwayat obrolan pribadi (1-on-1 DM) antara pemilik akun Companion dengan kontak lain. Akses hanya untuk grup koordinasi pekerjaan.
+
+### SOP 6: Inspecting Group Participants & Authority
 To verify if someone claiming to be an admin really has admin privileges in a WhatsApp group:
 1. Run:
    ```bash
