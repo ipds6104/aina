@@ -2,9 +2,18 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 pub const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const CURRENT_COMMIT: &str = env!("AINA_GIT_COMMIT");
-pub const CURRENT_BRANCH: &str = env!("AINA_GIT_BRANCH");
-pub const BUILD_TIMESTAMP: &str = env!("AINA_BUILD_TIME");
+pub const CURRENT_COMMIT: &str = match option_env!("AINA_GIT_COMMIT") {
+    Some(val) => val,
+    None => "unknown",
+};
+pub const CURRENT_BRANCH: &str = match option_env!("AINA_GIT_BRANCH") {
+    Some(val) => val,
+    None => "main",
+};
+pub const BUILD_TIMESTAMP: &str = match option_env!("AINA_BUILD_TIME") {
+    Some(val) => val,
+    None => "1970-01-01T00:00:00Z",
+};
 pub const GITHUB_REPO: &str = "ipds6104/aina";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

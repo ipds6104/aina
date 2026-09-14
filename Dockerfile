@@ -13,7 +13,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     mkdir src && echo "fn main() {}" > src/main.rs && \
     echo "fn main() {}" > build.rs && \
     cargo build --release && \
-    rm -rf src build.rs target/release/deps/aina* target/release/aina*
+    rm -rf src build.rs target/release/deps/aina* target/release/aina* target/release/build/aina*
 
 # Copy actual source code, build script, and compile
 COPY . .
