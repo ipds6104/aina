@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{DefaultBodyLimit, Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{Html, IntoResponse},
     routing::{get, post},
@@ -77,6 +77,7 @@ pub fn create_router(state: Arc<WebhookServerState>) -> Router {
         .route("/api/simulate/reset", post(simulate_reset_handler))
         .route("/api/simulate/job/{id}", get(simulate_job_status_handler))
         .route("/webhook", post(webhook_handler))
+        .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
         .with_state(state)
 }
 
@@ -2451,5 +2452,39 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(1200)).await;
         let queues = chat_queues.lock().await;
         assert!(!queues.contains_key("group123@g.us"));
+    }
+
+    #[tokio::test]
+    async fn test_webhook_large_payload_limit() {
+        let app = Router::new()
+            .route(
+                "/test_limit",
+                post(|body: String| async move {
+                    (StatusCode::OK, format!("len: {}", body.len()))
+                }),
+            )
+            .layer(DefaultBodyLimit::max(100 * 1024 * 1024));
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+
+        let client = reqwest::Client::new();
+        // Generate a 5MB payload (exceeds standard 2MB Axum default limit)
+        let payload_size = 5 * 1024 * 1024;
+        let large_data = "x".repeat(payload_size);
+        let resp = client
+            .post(format!("http://{}/test_limit", addr))
+            .body(large_data)
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let text = resp.text().await.unwrap();
+        assert_eq!(text, format!("len: {}", payload_size));
     }
 }
