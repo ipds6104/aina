@@ -308,7 +308,7 @@ impl AgentEnginePort for AntigravityCliAdapter {
                     parsed.conversation_id, parsed.status, active_model
                 );
                 let response_text = if !parsed.response.trim().is_empty() {
-                    parsed.response.trim().to_string()
+                    sanitize_agent_response(parsed.response.trim())
                 } else if let Some(ref err) = parsed.error {
                     format!("⚠️ Mohon maaf, terjadi kendala saat memproses permintaan: {}", err)
                 } else {
@@ -325,7 +325,7 @@ impl AgentEnginePort for AntigravityCliAdapter {
                 warn!("Could not find JSON in stdout, returning raw text: {}", stdout_raw);
                 Ok(AgentResponse {
                     conversation_id: conversation_id.unwrap_or_default().to_string(),
-                    response_text: stdout_raw.trim().to_string(),
+                    response_text: sanitize_agent_response(stdout_raw.trim()),
                     duration_seconds: 0.0,
                 })
             }
@@ -384,5 +384,100 @@ impl AgentEnginePort for AntigravityCliAdapter {
                 Err(anyhow::anyhow!("Token saved, but verification failed: {}", e))
             }
         }
+    }
+}
+
+/// Sanitizes Antigravity CLI agent output by stripping out intermediate tool-waiting
+/// logs and background task status lines that leak into multi-step JSON responses.
+pub fn sanitize_agent_response(raw: &str) -> String {
+    let mut cleaned_lines = Vec::new();
+    let mut skipping_header = true;
+
+    for line in raw.lines() {
+        let trimmed = line.trim();
+
+        let is_intermediate = is_intermediate_agent_status(trimmed);
+
+        if skipping_header && is_intermediate {
+            // Drop intermediate tool progress status at the beginning of the response
+            continue;
+        }
+
+        if !trimmed.is_empty() && !is_intermediate {
+            skipping_header = false;
+        }
+
+        if !is_intermediate {
+            cleaned_lines.push(line);
+        }
+    }
+
+    let result = cleaned_lines.join("\n").trim().to_string();
+    if result.is_empty() {
+        raw.trim().to_string()
+    } else {
+        result
+    }
+}
+
+fn is_intermediate_agent_status(line: &str) -> bool {
+    let lower = line.to_lowercase();
+
+    // 1. Task waiting patterns
+    if (lower.starts_with("i am waiting for ") || lower.starts_with("waiting for "))
+        && (lower.contains("task") || lower.contains("finish") || lower.contains("complete"))
+    {
+        return true;
+    }
+
+    // 2. Indonesian task waiting patterns
+    if lower.starts_with("sedang menunggu ")
+        && (lower.contains("task") || lower.contains("selesai") || lower.contains("proses kompilasi"))
+    {
+        return true;
+    }
+
+    // 3. Task transition patterns
+    if lower.starts_with("the task has almost completed")
+        || lower.starts_with("let me inspect the final output")
+        || lower.starts_with("tool is running as a background task")
+        || lower.starts_with("task logs are available at:")
+        || lower.starts_with("you must take one of the following two actions:")
+    {
+        return true;
+    }
+
+    // 4. Background task completion logs
+    if lower.starts_with("task id \"") && lower.contains("\" finished with result") {
+        return true;
+    }
+
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sanitize_agent_response_strips_intermediate_tasks() {
+        let raw = r#"The task has almost completed, let me inspect the final output.
+I am waiting for the metadata task to finish.
+I am waiting for task-907 to complete.
+I am waiting for task-914 to complete.
+Bisa bangeett, Bang Ihzaa! Ini solusi yang pas banget supaya data hasil konfirmasi petugas di lapangan lewat AppSheet bisa langsung mengalir otomatis ke 9 spreadsheet sumber utama KCDA."#;
+
+        let cleaned = sanitize_agent_response(raw);
+        assert!(!cleaned.contains("task-907"));
+        assert!(!cleaned.contains("The task has almost completed"));
+        assert!(!cleaned.contains("metadata task to finish"));
+        assert!(cleaned.starts_with("Bisa bangeett, Bang Ihzaa!"));
+    }
+
+    #[test]
+    fn test_sanitize_agent_response_preserves_legitimate_waiting_text() {
+        let raw = "Kami sedang menunggu konfirmasi resmi dari BPS terkait jadwal rilis KCDA.";
+        let cleaned = sanitize_agent_response(raw);
+        assert_eq!(cleaned, raw);
     }
 }

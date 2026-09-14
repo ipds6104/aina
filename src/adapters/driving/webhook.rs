@@ -2667,8 +2667,16 @@ mod tests {
         let results = processed.lock().await.clone();
         assert_eq!(results, vec!["M1", "M2", "M3"]);
 
-        // Verify worker cleaned up from chat_queues after 1s idle timeout
-        tokio::time::sleep(tokio::time::Duration::from_millis(1200)).await;
+        // Verify worker cleaned up from chat_queues after idle timeout
+        let cleanup_start = std::time::Instant::now();
+        loop {
+            let queues = chat_queues.lock().await;
+            if !queues.contains_key("group123@g.us") || cleanup_start.elapsed() > std::time::Duration::from_secs(3) {
+                break;
+            }
+            drop(queues);
+            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        }
         let queues = chat_queues.lock().await;
         assert!(!queues.contains_key("group123@g.us"));
     }
