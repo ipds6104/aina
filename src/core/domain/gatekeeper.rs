@@ -63,52 +63,24 @@ impl Gatekeeper {
 
     fn evaluate_user_companion(
         msg: &IncomingMessage,
-        trimmed_text: &str,
-        bot_jid: &str,
-        bot_name: &str,
-        bot_lid: Option<&str>,
+        _trimmed_text: &str,
+        _bot_jid: &str,
+        _bot_name: &str,
+        _bot_lid: Option<&str>,
     ) -> GatekeeperDecision {
         match msg.chat_type {
             ChatType::DirectMessage => {
-                if msg.is_from_me {
-                    // Check if user is chatting with themselves (Saved Messages / Message Yourself)
-                    let sender_clean = msg.sender.jid.split('@').next().unwrap_or(&msg.sender.jid);
-                    let chat_clean = msg.chat_jid.split('@').next().unwrap_or(&msg.chat_jid);
-                    let is_chat_to_self = sender_clean == chat_clean;
-
-                    if is_chat_to_self {
-                        return GatekeeperDecision::Respond {
-                            reason: "Companion owner message in saved chat / chat-to-self".to_string(),
-                        };
-                    }
-
-                    // In private DM with another contact, only respond if explicitly invoked
-                    if let Some(trigger_reason) = Self::detect_trigger(msg, trimmed_text, bot_jid, bot_name, bot_lid) {
-                        return GatekeeperDecision::Respond {
-                            reason: format!("Companion owner explicit trigger in DM: {}", trigger_reason),
-                        };
-                    }
-
-                    GatekeeperDecision::Ignore {
-                        reason: "Companion owner message in private DM without trigger ignored".to_string(),
-                    }
-                } else {
-                    // Critical Privacy Rule: NEVER interfere in private 1-on-1 chats from external contacts to user's personal number
-                    GatekeeperDecision::Ignore {
-                        reason: "Companion received DM from external contact; ignored for strict privacy".to_string(),
-                    }
+                // Strict Privacy & De-duplication:
+                // The companion session is a passive shadow sensor. It never intervenes in personal DMs,
+                // and DMs addressed to Aina are already handled directly by the PrimaryBot gateway.
+                GatekeeperDecision::Ignore {
+                    reason: "Companion session strictly ignores all DMs for privacy and de-duplication".to_string(),
                 }
             }
             ChatType::Group => {
-                // In group chats where user companion is connected:
-                if let Some(trigger_reason) = Self::detect_trigger(msg, trimmed_text, bot_jid, bot_name, bot_lid) {
-                    let caller = if msg.is_from_me { "Companion owner" } else { "Group member" };
-                    return GatekeeperDecision::Respond {
-                        reason: format!("{} invoked Aina in group: {}", caller, trigger_reason),
-                    };
-                }
-
-                // Ambient group message -> Ingest passively into knowledge base / FTS5
+                // Passive Sensor (Shadow Mode):
+                // Group messages are ingested passively into the knowledge base (FTS5 / SQLite) as ambient context.
+                // Aina NEVER sends replies or speaks using the user's personal companion account.
                 GatekeeperDecision::RecordOnly {
                     reason: "Companion ambient group message recorded for context".to_string(),
                 }
@@ -357,23 +329,23 @@ mod tests {
     }
 
     #[test]
-    fn test_companion_chat_to_self_responds() {
-        // User sends a message to their own number (Saved Messages)
+    fn test_companion_dm_strictly_ignored() {
+        // User sends a message in DM (e.g. chatting with Aina or chatting with himself)
         let msg = make_msg(
             ChatType::DirectMessage,
-            "Ingatkan besok belanja server",
+            "!aina ingatkan besok belanja server",
             true,
             SessionRole::UserCompanion,
             "628111@s.whatsapp.net",
             "628111@s.whatsapp.net",
         );
         let dec = Gatekeeper::evaluate(&msg, "628999@s.whatsapp.net", "Aina", None);
-        assert!(matches!(dec, GatekeeperDecision::Respond { .. }));
+        assert!(matches!(dec, GatekeeperDecision::Ignore { .. }));
     }
 
     #[test]
-    fn test_companion_owner_group_trigger_responds() {
-        // User speaks in group calling !aina
+    fn test_companion_group_with_trigger_records_only() {
+        // User speaks in group calling !aina; companion records passively and never speaks as user
         let msg = make_msg(
             ChatType::Group,
             "!aina rangkum diskusi barusan",
@@ -383,7 +355,7 @@ mod tests {
             "628111@s.whatsapp.net",
         );
         let dec = Gatekeeper::evaluate(&msg, "628999@s.whatsapp.net", "Aina", None);
-        assert!(matches!(dec, GatekeeperDecision::Respond { .. }));
+        assert!(matches!(dec, GatekeeperDecision::RecordOnly { .. }));
     }
 
     #[test]

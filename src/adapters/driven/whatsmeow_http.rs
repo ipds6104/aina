@@ -13,7 +13,9 @@ pub struct WhatsmeowHttpAdapter {
     presence_endpoint: String,
     bot_session_id: Option<String>,
     companion_session_id: Option<String>,
+    #[allow(dead_code)]
     companion_base_url: Option<String>,
+    #[allow(dead_code)]
     companion_api_key: Option<String>,
 }
 
@@ -93,14 +95,10 @@ impl WhatsmeowHttpAdapter {
         session_id: Option<&str>,
         session_role: SessionRole,
     ) -> anyhow::Result<()> {
-        let (base_url, api_key) = if session_role == SessionRole::UserCompanion && self.companion_base_url.is_some() {
-            (
-                self.companion_base_url.as_deref().unwrap(),
-                self.companion_api_key.as_deref().unwrap_or(&self.api_key),
-            )
-        } else {
-            (self.base_url.as_str(), self.api_key.as_str())
-        };
+        // ALL outbound messages from Aina are STRICTLY sent via the PrimaryBot gateway (Aina's official bot number).
+        // The companion account is purely a passive read-only sensor and must NEVER be used to send outbound chats.
+        let base_url = self.base_url.as_str();
+        let api_key = self.api_key.as_str();
 
         let url = format!("{}{}", base_url.trim_end_matches('/'), self.send_endpoint);
         
@@ -228,14 +226,9 @@ impl WhatsmeowHttpAdapter {
         session_id: Option<&str>,
         session_role: SessionRole,
     ) -> anyhow::Result<()> {
-        let (base_url, api_key) = if session_role == SessionRole::UserCompanion && self.companion_base_url.is_some() {
-            (
-                self.companion_base_url.as_deref().unwrap(),
-                self.companion_api_key.as_deref().unwrap_or(&self.api_key),
-            )
-        } else {
-            (self.base_url.as_str(), self.api_key.as_str())
-        };
+        // ALL outbound presence indicators are sent via the PrimaryBot gateway.
+        let base_url = self.base_url.as_str();
+        let api_key = self.api_key.as_str();
 
         let url = format!("{}{}", base_url.trim_end_matches('/'), self.presence_endpoint);
         let state_str = match state {
