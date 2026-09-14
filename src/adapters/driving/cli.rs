@@ -121,6 +121,22 @@ PENGGUNAAN:
                               Options:
                                 --json                  Output format JSON terstruktur
 
+    schedule list             Daftar tugas & riset terjadwal aktif
+                              Options:
+                                --all                   Tampilkan semua tugas (termasuk non-aktif)
+                                --json                  Output format JSON terstruktur
+
+    schedule add              Tambah tugas pengingat atau riset terjadwal baru
+                              Options:
+                                --title <judul>         Judul pengingat / tugas
+                                --type <agent|notify>   Tipe: 'agent' (riset/tindakan AI) atau 'notify' (pesan teks langsung)
+                                --target <jid>          Target WhatsApp (misal: 628xxx@s.whatsapp.net)
+                                --when <once|daily|interval> Tipe: 'once' (satu kali), 'daily' (tiap hari), 'interval' (berkala)
+                                --time <waktu>          Waktu eksekusi (misal: '07:30', '22:26', '+10m', '+1h')
+                                --payload <pesan>       Prompt riset (untuk agent) atau teks pesan (untuk notify)
+
+    schedule delete <id>      Hapus tugas terjadwal berdasarkan ID
+
     model get                 Tampilkan model AI aktif saat ini
                               Options:
                                 --json                  Output format JSON terstruktur
@@ -174,6 +190,7 @@ PENGGUNAAN:
             "whatsapp" | "wa" => Self::handle_whatsapp(&args[2..]),
             "status" => Self::handle_whatsapp(&args[1..]),
             "user" | "profile" => Self::handle_user(&args[2..]),
+            "schedule" | "cron" => Self::handle_schedule(&args[2..]).await,
             "model" => Self::handle_model(&args[2..]).await,
             _ => {
                 eprintln!("Subcommand tidak dikenal: `{}`. Ketik `aina help`.", cmd);
@@ -1161,6 +1178,185 @@ PENGGUNAAN:
             }
             _ => {
                 eprintln!("Subcommand user tidak dikenal: `{}`. Pilihan: list, get, set, search.", subcmd);
+                Ok(())
+            }
+        }
+    }
+
+    async fn handle_schedule(args: &[String]) -> anyhow::Result<()> {
+        use crate::core::ports::SessionStorePort;
+
+        if args.is_empty() {
+            println!(
+                r#"Manajemen Tugas & Riset Terjadwal (Aina Scheduled Wake-up & Reminders):
+    aina schedule list [--all] [--json]
+    aina schedule get <id> [--json]
+    aina schedule add --title <judul> --type <agent|notify> --target <jid> --when <once|daily|interval> --time <waktu> --payload <isi>
+    aina schedule delete <id>
+"#
+            );
+            return Ok(());
+        }
+
+        let config_path = std::env::var("AINA_CONFIG").unwrap_or_else(|_| "config/config.yaml".to_string());
+        let config = crate::config::AppConfig::load_from_file_or_default(&config_path);
+        let db_path = std::env::var("DATABASE_PATH").unwrap_or(config.database.path);
+        let store = crate::adapters::driven::SqliteSessionStore::new(&db_path)?;
+
+        let subcmd = args[0].as_str();
+        match subcmd {
+            "list" | "ls" => {
+                let as_json = args.iter().any(|a| a == "--json");
+                let show_all = args.iter().any(|a| a == "--all");
+                let tasks = store.list_scheduled_tasks(!show_all).await?;
+
+                if as_json {
+                    println!("{}", serde_json::to_string_pretty(&tasks)?);
+                    return Ok(());
+                }
+
+                println!("⏰ Daftar Tugas & Riset Terjadwal (Aina Scheduler)");
+                println!("================================================================================");
+                if tasks.is_empty() {
+                    println!("(Tidak ada tugas terjadwal aktif)");
+                } else {
+                    for t in &tasks {
+                        let status_str = if t.is_active { "AKTIF" } else { "SELESAI / NON-AKTIF" };
+                        let type_str = match t.task_type {
+                            crate::core::domain::ScheduledTaskType::AgentAction => "Riset / Tindakan Agentik",
+                            crate::core::domain::ScheduledTaskType::DirectNotification => "Pesan Pengingat Langsung",
+                        };
+                        println!("• [#ID: {}] {} ({})", t.id, t.title, status_str);
+                        println!("  Tipe      : {}", type_str);
+                        println!("  Jadwal    : {} ({})", t.schedule_type, t.schedule_expr);
+                        println!("  Penerima  : {}", t.target_jid);
+                        println!("  Epoch Run : {}", t.next_run_epoch);
+                        println!("  Isi/Tugas : {}", t.payload);
+                        println!("--------------------------------------------------------------------------------");
+                    }
+                }
+                Ok(())
+            }
+            "get" => {
+                if args.len() < 2 {
+                    eprintln!("Format salah. Contoh: aina schedule get 1");
+                    std::process::exit(1);
+                }
+                let id: i64 = args[1].parse()?;
+                let as_json = args.iter().any(|a| a == "--json");
+                let task = store.get_scheduled_task(id).await?;
+
+                match task {
+                    Some(t) => {
+                        if as_json {
+                            println!("{}", serde_json::to_string_pretty(&t)?);
+                        } else {
+                            println!("ID: {}", t.id);
+                            println!("Title: {}", t.title);
+                            println!("Type: {:?}", t.task_type);
+                            println!("Target: {}", t.target_jid);
+                            println!("Schedule: {} ({})", t.schedule_type, t.schedule_expr);
+                            println!("Next Run Epoch: {}", t.next_run_epoch);
+                            println!("Payload: {}", t.payload);
+                            println!("Active: {}", t.is_active);
+                        }
+                    }
+                    None => {
+                        eprintln!("Tugas terjadwal dengan ID #{} tidak ditemukan.", id);
+                    }
+                }
+                Ok(())
+            }
+            "add" => {
+                let mut title = String::from("Pengingat");
+                let mut task_type = crate::core::domain::ScheduledTaskType::DirectNotification;
+                let mut target_jid = String::new();
+                let mut payload = String::new();
+                let mut schedule_type = String::from("once");
+                let mut schedule_expr = String::new();
+
+                let mut i = 1;
+                while i < args.len() {
+                    match args[i].as_str() {
+                        "--title" if i + 1 < args.len() => {
+                            title = args[i + 1].clone();
+                            i += 2;
+                        }
+                        "--type" if i + 1 < args.len() => {
+                            task_type = crate::core::domain::ScheduledTaskType::from_str(&args[i + 1]);
+                            i += 2;
+                        }
+                        "--target" if i + 1 < args.len() => {
+                            target_jid = args[i + 1].clone();
+                            i += 2;
+                        }
+                        "--when" if i + 1 < args.len() => {
+                            schedule_type = args[i + 1].clone();
+                            i += 2;
+                        }
+                        "--time" if i + 1 < args.len() => {
+                            schedule_expr = args[i + 1].clone();
+                            i += 2;
+                        }
+                        "--payload" if i + 1 < args.len() => {
+                            payload = args[i + 1].clone();
+                            i += 2;
+                        }
+                        _ => i += 1,
+                    }
+                }
+
+                if schedule_expr.is_empty() || payload.is_empty() {
+                    eprintln!("Parameter --time dan --payload wajib diisi. Ketik `aina schedule` untuk panduan.");
+                    std::process::exit(1);
+                }
+
+                let now_epoch = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(0);
+
+                let next_epoch = crate::core::domain::ScheduleParser::compute_next_run(
+                    &schedule_type,
+                    &schedule_expr,
+                    config.app.timezone_offset_hours,
+                    now_epoch,
+                )?;
+
+                let new_task = crate::core::domain::NewScheduledTask {
+                    title: title.clone(),
+                    task_type,
+                    target_jid: target_jid.clone(),
+                    payload,
+                    schedule_type: schedule_type.clone(),
+                    schedule_expr: schedule_expr.clone(),
+                    next_run_epoch: next_epoch,
+                };
+
+                let id = store.create_scheduled_task(&new_task).await?;
+                println!("✅ Berhasil menambahkan tugas terjadwal #{} ('{}')", id, title);
+                println!("   Tipe      : {:?}", task_type);
+                println!("   Jadwal    : {} ({})", schedule_type, schedule_expr);
+                println!("   Target WA : {}", target_jid);
+                println!("   Next Epoch: {}", next_epoch);
+                Ok(())
+            }
+            "delete" | "rm" => {
+                if args.len() < 2 {
+                    eprintln!("Format salah. Contoh: aina schedule delete 1");
+                    std::process::exit(1);
+                }
+                let id: i64 = args[1].parse()?;
+                let deleted = store.delete_scheduled_task(id).await?;
+                if deleted {
+                    println!("✅ Tugas terjadwal #{} berhasil dihapus.", id);
+                } else {
+                    println!("⚠️ Tugas terjadwal #{} tidak ditemukan.", id);
+                }
+                Ok(())
+            }
+            _ => {
+                eprintln!("Subcommand schedule tidak dikenal: `{}`. Pilihan: list, get, add, delete.", subcmd);
                 Ok(())
             }
         }

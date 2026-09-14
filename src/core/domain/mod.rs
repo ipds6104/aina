@@ -4,6 +4,7 @@ pub mod gatekeeper;
 pub mod knowledge;
 pub mod message;
 pub mod persona;
+pub mod scheduler;
 pub mod sensor;
 pub mod version;
 
@@ -13,6 +14,7 @@ pub use gatekeeper::Gatekeeper;
 pub use knowledge::KnowledgeEngine;
 pub use message::*;
 pub use persona::PersonaEngine;
+pub use scheduler::*;
 #[allow(unused_imports)]
 pub use sensor::*;
 pub use version::*;

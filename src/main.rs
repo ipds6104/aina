@@ -92,7 +92,10 @@ async fn main() -> anyhow::Result<()> {
     let scheduled_tick_usecase = Arc::new(ScheduledTickUseCase::new(
         Arc::clone(&session_store) as _,
         Arc::clone(&whatsapp) as _,
+        Some(Arc::clone(&agent_engine) as _),
+        Some(Arc::clone(&persona_engine)),
         Some(std::path::PathBuf::from(&config.agent.workspace_dir)),
+        config.app.timezone_offset_hours,
     ));
 
     // 4. Start Scheduler if enabled (Driving Adapter)

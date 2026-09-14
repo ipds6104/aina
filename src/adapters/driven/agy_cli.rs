@@ -452,6 +452,19 @@ fn is_intermediate_agent_status(line: &str) -> bool {
         return true;
     }
 
+    // 5. Tool execution confirmation and diagnostic message leakages
+    if (lower.starts_with("status: terkirim") || lower.starts_with("status: berhasil"))
+        && (lower.contains("message_id") || lower.contains("3eb0"))
+    {
+        return true;
+    }
+    if lower.starts_with("pengingat sudah berhasil dikirimkan ke whatsapp")
+        || lower.starts_with("pesan sudah berhasil dikirimkan ke whatsapp")
+        || lower.starts_with("pesan telah berhasil dikirimkan ke whatsapp")
+    {
+        return true;
+    }
+
     false
 }
 

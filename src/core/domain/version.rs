@@ -118,6 +118,14 @@ pub fn get_active_capabilities() -> Vec<CapabilityItem> {
             "python3 skills/gdrive/scripts/gdrive_tool.py status",
         ),
         CapabilityItem::new(
+            "scheduled_wake_up_engine",
+            "Autonomous Scheduled Tasks & Wake-Up Engine",
+            "Penjadwalan alarm, pengingat, dan riset web otonom berulang (cron/daily/once) dengan eksekusi background non-blocking.",
+            "v0.2.0",
+            "stable",
+            "aina schedule list",
+        ),
+        CapabilityItem::new(
             "version_self_introspection",
             "Self-Version & Upstream Introspection",
             "Pemeriksaan commit build lokal terhadap upstream GitHub secara mandiri untuk mencegah halusinasi kapabilitas.",
@@ -382,6 +390,7 @@ mod tests {
         assert!(!caps.is_empty());
         assert!(caps.iter().any(|c| c.id == "dual_whatsapp_gateway"));
         assert!(caps.iter().any(|c| c.id == "multi_bubble_splitting"));
+        assert!(caps.iter().any(|c| c.id == "scheduled_wake_up_engine"));
         assert!(caps.iter().any(|c| c.id == "version_self_introspection"));
     }
 }

@@ -2765,6 +2765,12 @@ mod tests {
         async fn record_message(&self, _chat_jid: &str, _sender_jid: &str, _text: &str, _is_from_me: bool) -> anyhow::Result<()> { Ok(()) }
         async fn get_user_profile(&self, _sender_jid: &str) -> anyhow::Result<Option<crate::core::ports::UserProfile>> { Ok(None) }
         async fn save_user_profile(&self, _profile: &crate::core::ports::UserProfile) -> anyhow::Result<()> { Ok(()) }
+        async fn create_scheduled_task(&self, _task: &crate::core::domain::NewScheduledTask) -> anyhow::Result<i64> { Ok(1) }
+        async fn list_scheduled_tasks(&self, _active_only: bool) -> anyhow::Result<Vec<crate::core::domain::ScheduledTask>> { Ok(vec![]) }
+        async fn get_due_scheduled_tasks(&self, _current_epoch: i64) -> anyhow::Result<Vec<crate::core::domain::ScheduledTask>> { Ok(vec![]) }
+        async fn update_scheduled_task_run(&self, _id: i64, _last_run: i64, _next_run: Option<i64>, _is_active: bool) -> anyhow::Result<()> { Ok(()) }
+        async fn delete_scheduled_task(&self, _id: i64) -> anyhow::Result<bool> { Ok(true) }
+        async fn get_scheduled_task(&self, _id: i64) -> anyhow::Result<Option<crate::core::domain::ScheduledTask>> { Ok(None) }
     }
 
     struct DummyAgentEngine;
