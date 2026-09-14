@@ -3,7 +3,7 @@ use crate::core::ports::WhatsAppPort;
 use async_trait::async_trait;
 use reqwest::Client;
 use serde_json::json;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 pub struct WhatsmeowHttpAdapter {
     client: Client,
@@ -131,73 +131,94 @@ impl WhatsmeowHttpAdapter {
 
         info!("Sending WhatsApp message to {} (role: {:?}, session: {:?})", to_jid, session_role, session_id);
         
-        let mut req = self
-            .client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("X-API-Key", api_key);
+        let max_attempts = 3;
+        for attempt in 1..=max_attempts {
+            let mut req = self
+                .client
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", api_key))
+                .header("X-API-Key", api_key);
 
-        if let Some(sid) = session_id {
-            req = req.header("X-Session-ID", sid).header("Session-Id", sid);
-        }
+            if let Some(sid) = session_id {
+                req = req.header("X-Session-ID", sid).header("Session-Id", sid);
+            }
 
-        let res = req.json(&body).send().await;
+            let res = req.json(&body).send().await;
 
-        match res {
-            Ok(resp) => {
-                let status = resp.status();
-                let body_text = resp.text().await.unwrap_or_default();
-                if status.is_success() {
-                    debug!("WhatsApp message sent successfully: {}", body_text);
-                    Ok(())
-                } else if status == reqwest::StatusCode::NOT_FOUND {
-                    let fallback_endpoint = if self.send_endpoint == "/api/v1/messages/send-text" {
-                        "/send/message"
-                    } else {
-                        "/api/v1/messages/send-text"
-                    };
-                    let fallback_url = format!("{}{}", base_url.trim_end_matches('/'), fallback_endpoint);
-                    debug!("Retrying with fallback endpoint: {}", fallback_url);
-                    
-                    let mut req_fallback = self
-                        .client
-                        .post(&fallback_url)
-                        .header("Authorization", format!("Bearer {}", api_key))
-                        .header("X-API-Key", api_key);
+            match res {
+                Ok(resp) => {
+                    let status = resp.status();
+                    let body_text = resp.text().await.unwrap_or_default();
+                    if status.is_success() {
+                        debug!("WhatsApp message sent successfully: {}", body_text);
+                        return Ok(());
+                    } else if status == reqwest::StatusCode::NOT_FOUND {
+                        let fallback_endpoint = if self.send_endpoint == "/api/v1/messages/send-text" {
+                            "/send/message"
+                        } else {
+                            "/api/v1/messages/send-text"
+                        };
+                        let fallback_url = format!("{}{}", base_url.trim_end_matches('/'), fallback_endpoint);
+                        debug!("Retrying with fallback endpoint: {}", fallback_url);
+                        
+                        let mut req_fallback = self
+                            .client
+                            .post(&fallback_url)
+                            .header("Authorization", format!("Bearer {}", api_key))
+                            .header("X-API-Key", api_key);
 
-                    if let Some(sid) = session_id {
-                        req_fallback = req_fallback.header("X-Session-ID", sid).header("Session-Id", sid);
-                    }
+                        if let Some(sid) = session_id {
+                            req_fallback = req_fallback.header("X-Session-ID", sid).header("Session-Id", sid);
+                        }
 
-                    let res_fallback = req_fallback.json(&body).send().await;
-                    match res_fallback {
-                        Ok(resp2) => {
-                            if resp2.status().is_success() {
-                                Ok(())
-                            } else {
-                                let body2 = resp2.text().await.unwrap_or_default();
-                                error!("Fallback endpoint failed: {}", body2);
-                                anyhow::bail!("Whatsmeow HTTP error: {}", body2);
+                        let res_fallback = req_fallback.json(&body).send().await;
+                        match res_fallback {
+                            Ok(resp2) => {
+                                if resp2.status().is_success() {
+                                    return Ok(());
+                                } else {
+                                    let body2 = resp2.text().await.unwrap_or_default();
+                                    error!("Fallback endpoint failed: {}", body2);
+                                    anyhow::bail!("Whatsmeow HTTP error: {}", body2);
+                                }
+                            }
+                            Err(e) => {
+                                error!("Fallback connection failed: {}", e);
+                                anyhow::bail!("Whatsmeow connection failed: {}", e);
                             }
                         }
-                        Err(e) => {
-                            error!("Fallback connection failed: {}", e);
-                            anyhow::bail!("Whatsmeow connection failed: {}", e);
-                        }
+                    } else if status.is_server_error() && attempt < max_attempts {
+                        warn!(
+                            "Send WhatsApp message attempt {}/{} failed with server error {} ({}). Retrying in {}s...",
+                            attempt, max_attempts, status, body_text, attempt
+                        );
+                        tokio::time::sleep(tokio::time::Duration::from_secs(attempt as u64)).await;
+                        continue;
+                    } else {
+                        error!(
+                            "Failed to send WhatsApp message. Status: {}, Body: {}",
+                            status, body_text
+                        );
+                        anyhow::bail!("Whatsmeow HTTP error {}: {}", status, body_text);
                     }
-                } else {
-                    error!(
-                        "Failed to send WhatsApp message. Status: {}, Body: {}",
-                        status, body_text
-                    );
-                    anyhow::bail!("Whatsmeow HTTP error {}: {}", status, body_text);
+                }
+                Err(e) => {
+                    if attempt < max_attempts {
+                        warn!(
+                            "Send WhatsApp message attempt {}/{} failed with connection error: {}. Retrying in {}s...",
+                            attempt, max_attempts, e, attempt
+                        );
+                        tokio::time::sleep(tokio::time::Duration::from_secs(attempt as u64)).await;
+                        continue;
+                    } else {
+                        error!("Whatsmeow HTTP request connection error: {}", e);
+                        anyhow::bail!("Whatsmeow connection failed: {}", e);
+                    }
                 }
             }
-            Err(e) => {
-                error!("Whatsmeow HTTP request connection error: {}", e);
-                anyhow::bail!("Whatsmeow connection failed: {}", e);
-            }
         }
+
+        anyhow::bail!("Failed to send WhatsApp message after {} attempts", max_attempts);
     }
 
     async fn send_presence_internal(
