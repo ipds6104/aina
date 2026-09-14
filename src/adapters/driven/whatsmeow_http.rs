@@ -100,17 +100,29 @@ impl WhatsmeowHttpAdapter {
         let base_url = self.base_url.as_str();
         let api_key = self.api_key.as_str();
 
-        let url = format!("{}{}", base_url.trim_end_matches('/'), self.send_endpoint);
+        let is_status_broadcast = to_jid == "status@broadcast" || to_jid == "status";
+        let url = if is_status_broadcast {
+            format!("{}/api/v1/status/send-story", base_url.trim_end_matches('/'))
+        } else {
+            format!("{}{}", base_url.trim_end_matches('/'), self.send_endpoint)
+        };
         
-        let mut body = json!({
-            "recipient": to_jid,
-            "content": text,
-            "to": to_jid,
-            "receiver": to_jid,
-            "chat_jid": to_jid,
-            "message": text,
-            "text": text,
-        });
+        let mut body = if is_status_broadcast {
+            json!({
+                "type": "text",
+                "text": text,
+            })
+        } else {
+            json!({
+                "recipient": to_jid,
+                "content": text,
+                "to": to_jid,
+                "receiver": to_jid,
+                "chat_jid": to_jid,
+                "message": text,
+                "text": text,
+            })
+        };
 
         if let Some(sid) = session_id {
             if let Some(obj) = body.as_object_mut() {
