@@ -72,6 +72,7 @@ pub fn create_router(state: Arc<WebhookServerState>) -> Router {
         .route("/setup", get(setup_page_handler))
         .route("/health", get(health_handler))
         .route("/api/status", get(api_status_handler))
+        .route("/api/version", get(api_version_handler))
         .route("/api/models", get(api_get_models_handler))
         .route("/api/model", post(api_set_model_handler))
         .route("/api/setup", post(api_setup_handler))
@@ -101,6 +102,9 @@ struct ApiStatusResponse {
     pub companion_url: Option<String>,
     pub timezone: String,
     pub locale: String,
+    pub version: String,
+    pub git_commit: String,
+    pub build_time: String,
 }
 
 async fn api_status_handler(
@@ -121,7 +125,15 @@ async fn api_status_handler(
         companion_url: state.companion_base_url.clone(),
         timezone: state.timezone.clone(),
         locale: state.locale.clone(),
+        version: crate::core::domain::version::CURRENT_VERSION.to_string(),
+        git_commit: crate::core::domain::version::CURRENT_COMMIT.to_string(),
+        build_time: crate::core::domain::version::BUILD_TIMESTAMP.to_string(),
     })
+}
+
+async fn api_version_handler() -> impl IntoResponse {
+    let report = crate::core::domain::version::VersionEngine::check_upstream_status().await;
+    Json(report)
 }
 
 #[derive(Debug, Serialize)]

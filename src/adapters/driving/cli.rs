@@ -1,5 +1,5 @@
 use crate::core::domain::knowledge::GhPollStatus;
-use crate::core::domain::{ArchiveEngine, ArchiveSearchFilter, AuditEngine, KnowledgeEngine};
+use crate::core::domain::{ArchiveEngine, ArchiveSearchFilter, AuditEngine, KnowledgeEngine, VersionEngine};
 use std::path::{Path, PathBuf};
 
 pub struct CliDispatcher;
@@ -133,6 +133,15 @@ PENGGUNAAN:
                               Options:
                                 --json                  Output format JSON terstruktur
 
+    version, -v, --version    Informasi versi binary, commit hash, dan daftar kapabilitas aktif
+                              Options:
+                                --check, -c             Periksa & bandingkan commit dengan upstream GitHub
+                                --json                  Output format JSON terstruktur
+
+    update [check]            Periksa pembaruan commit dan fitur baru dari upstream repo GitHub
+                              Options:
+                                --json                  Output format JSON terstruktur
+
     help, --help, -h          Tampilkan panduan ini
 "#
         );
@@ -150,6 +159,8 @@ PENGGUNAAN:
                 Self::print_help();
                 Ok(())
             }
+            "version" | "-v" | "--version" => Self::handle_version(&args[2..]).await,
+            "update" => Self::handle_update(&args[2..]).await,
             "archive" => Self::handle_archive(&args[2..]),
             "kb" => Self::handle_kb(&args[2..]),
             "workspace" | "ws" => Self::handle_workspace(&args[2..]),
@@ -1261,5 +1272,90 @@ PENGGUNAAN:
         }
 
         Ok(())
+    }
+
+    async fn handle_version(args: &[String]) -> anyhow::Result<()> {
+        let is_json = args.iter().any(|a| a == "--json");
+        let is_check = args.iter().any(|a| a == "--check" || a == "-c" || a == "check");
+
+        if is_check {
+            let report = VersionEngine::check_upstream_status().await;
+            if is_json {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                println!("================================================================================");
+                println!("Aina Self-Version & Upstream Introspection Report");
+                println!("================================================================================");
+                println!(
+                    "Versi Lokal:         v{} (Commit: {}, Branch: {})",
+                    report.current.version, report.current.commit_hash, report.current.git_branch
+                );
+                println!("Waktu Kompilasi:     {}", report.current.build_timestamp);
+                println!("Repositori Resmi:    {}", report.current.repository);
+                println!("Upstream Branch:     {}", report.upstream_branch);
+                if let Some(ref up_commit) = report.upstream_latest_commit {
+                    println!("Upstream Commit:     {}", up_commit);
+                }
+                let status_icon = if report.is_up_to_date {
+                    "✓ UP-TO-DATE (Sesuai Upstream GitHub)"
+                } else {
+                    "⚠️ UPDATE TERSEDIA DI GITHUB"
+                };
+                println!("Status Kelayakan:    {}", status_icon);
+                println!();
+                println!("Pesan Status:");
+                println!("  {}", report.message);
+
+                if !report.unpulled_commits.is_empty() {
+                    println!();
+                    println!("Commit Terbaru di Upstream (Belum Ditarik ke Container):");
+                    for c in &report.unpulled_commits {
+                        println!("  • {} - {} ({}, {})", c.sha, c.message, c.author, c.date);
+                    }
+                    println!();
+                    println!("Tindakan Direkomendasikan:");
+                    println!("  Jalankan redeploy di Coolify (atau git pull & cargo build) agar fitur terbaru aktif.");
+                }
+
+                println!();
+                println!("Kapabilitas Aktif pada Build Saat Ini:");
+                for cap in &report.capabilities {
+                    println!("  [✓] {:<38} | {}", cap.name, cap.verification_hint);
+                }
+                println!("================================================================================");
+            }
+        } else {
+            let info = VersionEngine::get_build_info();
+            let caps = VersionEngine::get_capabilities();
+            if is_json {
+                let payload = serde_json::json!({
+                    "build": info,
+                    "capabilities": caps
+                });
+                println!("{}", serde_json::to_string_pretty(&payload)?);
+            } else {
+                println!("Aina AI Assistant v{}", info.version);
+                println!("Commit:    {}", info.commit_hash);
+                println!("Branch:    {}", info.git_branch);
+                println!("Build:     {}", info.build_timestamp);
+                println!("Repo:      {}", info.repository);
+                println!();
+                println!("Daftar Kapabilitas Aktif (Manifest):");
+                for cap in caps {
+                    println!("  • {:<38} ({})", cap.name, cap.introduced_in);
+                    println!("    Verifikasi: {}", cap.verification_hint);
+                }
+                println!();
+                println!("Gunakan `aina version --check` untuk memeriksa sinkronisasi dengan repo GitHub.");
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn handle_update(args: &[String]) -> anyhow::Result<()> {
+        let mut check_args = vec!["--check".to_string()];
+        check_args.extend_from_slice(args);
+        Self::handle_version(&check_args).await
     }
 }
