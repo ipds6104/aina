@@ -11,11 +11,12 @@ COPY Cargo.toml Cargo.lock ./
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     mkdir src && echo "fn main() {}" > src/main.rs && \
+    echo "fn main() {}" > build.rs && \
     cargo build --release && \
-    rm -rf src target/release/deps/aina* target/release/aina*
+    rm -rf src build.rs target/release/deps/aina* target/release/aina*
 
-# Copy actual source code and compile
-COPY src ./src
+# Copy actual source code, build script, and compile
+COPY . .
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     cargo build --release
