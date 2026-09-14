@@ -243,10 +243,22 @@ impl ProcessIncomingMessageUseCase {
                         .record_message(&msg.chat_jid, &self.bot_jid, &agent_res.response_text, true)
                         .await?;
 
-                    // 8. Send reply back to WhatsApp
-                    self.whatsapp
-                        .send_text_with_session(&msg.chat_jid, &agent_res.response_text, quote_id, msg.session_role)
-                        .await?;
+                    // 8. Send reply back to WhatsApp (supports multi-bubble splitting)
+                    let bubbles = split_response_into_bubbles(&agent_res.response_text);
+                    for (i, bubble) in bubbles.iter().enumerate() {
+                        let quote = if i == 0 { quote_id } else { None };
+                        if i > 0 {
+                            let _ = self
+                                .whatsapp
+                                .send_presence_with_session(&msg.chat_jid, PresenceState::Composing, msg.session_role)
+                                .await;
+                            tokio::time::sleep(tokio::time::Duration::from_millis(600)).await;
+                        }
+
+                        self.whatsapp
+                            .send_text_with_session(&msg.chat_jid, bubble, quote, msg.session_role)
+                            .await?;
+                    }
                 }
 
                 // 8b. If message had media, append AI response analysis to the companion .txt transcript sidecar
@@ -278,3 +290,62 @@ impl ProcessIncomingMessageUseCase {
     }
 }
 
+/// Splits a combined AI response string into multiple WhatsApp message bubbles
+/// if explicit delimiter tokens are present.
+pub fn split_response_into_bubbles(text: &str) -> Vec<String> {
+    let delimiters = ["<<<SPLIT_CHAT>>>", "<<<NEXT_CHAT>>>", "<<<SPLIT>>>", "[SPLIT_CHAT]"];
+    for delim in &delimiters {
+        if text.contains(delim) {
+            let parts: Vec<String> = text
+                .split(delim)
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            if !parts.is_empty() {
+                return parts;
+            }
+        }
+    }
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        vec![]
+    } else {
+        vec![trimmed.to_string()]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_split_response_single_bubble() {
+        let text = "Halo Bang, ini satu pesan utuh.";
+        let bubbles = split_response_into_bubbles(text);
+        assert_eq!(bubbles, vec!["Halo Bang, ini satu pesan utuh."]);
+    }
+
+    #[test]
+    fn test_split_response_multiple_bubbles() {
+        let text = "Ini pesan 1 untuk Abang\n<<<SPLIT_CHAT>>>\nIni pesan 2 draf siap forward";
+        let bubbles = split_response_into_bubbles(text);
+        assert_eq!(bubbles, vec![
+            "Ini pesan 1 untuk Abang",
+            "Ini pesan 2 draf siap forward"
+        ]);
+    }
+
+    #[test]
+    fn test_split_response_multiple_aliases() {
+        let text = "Bagian A<<<NEXT_CHAT>>>Bagian B<<<NEXT_CHAT>>>Bagian C";
+        let bubbles = split_response_into_bubbles(text);
+        assert_eq!(bubbles, vec!["Bagian A", "Bagian B", "Bagian C"]);
+    }
+
+    #[test]
+    fn test_split_response_empty_chunks_filtered() {
+        let text = "<<<SPLIT_CHAT>>>Pesan Tunggal<<<SPLIT_CHAT>>>   ";
+        let bubbles = split_response_into_bubbles(text);
+        assert_eq!(bubbles, vec!["Pesan Tunggal"]);
+    }
+}

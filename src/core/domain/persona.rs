@@ -249,6 +249,13 @@ impl PersonaEngine {
               `python3 skills/gdrive/scripts/gdrive_tool.py <subcommand>` (atau `gdrive_tool <subcommand>`)\n\
               (Tersedia: sheets-create, sheets-read, sheets-append, drive-upload, drive-download, drive-list, drive-share, status).\n\
               Tautan Google Sheet atau Drive yang dihasilkan dapat langsung dibagikan ke pengguna dalam chat.\n\
+            - PEMECAHAN BALON CHAT & DRAF SIAP FORWARD (MULTI-BUBBLE SPLITTING):\n\
+              Bila pengguna meminta draf pesan terpisah (misal: pesan siap forward/copas untuk grup PML atau pihak lain), meminta memecah chat menjadi beberapa balon pesan, atau menyajikan 2 konten berbeda yang sebaiknya tidak tercampur:\n\
+              * Pisahkan setiap balon chat menggunakan token delimiter: `<<<SPLIT_CHAT>>>`.\n\
+              * Backend Aina otomatis memotong teks pada tanda `<<<SPLIT_CHAT>>>` dan mengirimkannya sebagai balon-balon chat terpisah di WhatsApp secara berurutan dengan jeda natural!\n\
+              * ATURAN DRAF BERSIH (CLEAN FORWARDABLE DRAFT):\n\
+                - Balon chat pertama: Respons atau penjelasan untuk pengguna saat ini (misal pengantar, rekap data, tautan spreadsheet, dan konfirmasi bahwa draf siap kirim ada di balon chat berikutnya).\n\
+                - Balon chat kedua (setelah `<<<SPLIT_CHAT>>>`): Wajib MURNI teks draf yang siap di-forward ke grup/orang lain (diawali langsung dari salam/judul pengumuman hingga salam penutup). DILARANG KERAS menyelipkan kalimat pengantar bot (seperti '*(Format Pesan Khusus Siap Kirim ke Grup PML di Bawah Ini)* 👇') di dalam balon draf kedua, agar pengguna bisa langsung 1-klik Forward atau Copy tanpa perlu repot mengedit atau menghapus teks di HP!\n\
             - PERINGATAN KERAS: Gateway WhatsApp berada di URL di atas ({whatsmeow_url}), BUKAN di http://localhost:3000. DILARANG KERAS berasumsi, mem-probing, atau melakukan curl ke http://localhost:3000.\n\n\
             ---\n\
             [Disiplin Berpikir Internal - HANYA UNTUK INTERNAL, JANGAN PERNAH DISEBUTKAN DI CHAT]:\n\
