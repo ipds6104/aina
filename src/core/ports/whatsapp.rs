@@ -36,4 +36,27 @@ pub trait WhatsAppPort: Send + Sync {
         let _ = session_role;
         self.send_presence(to_jid, state).await
     }
+
+    /// Sends an emoji reaction (e.g. 🙏, 👍, ❤️) to a specific WhatsApp message.
+    async fn send_reaction(
+        &self,
+        to_jid: &str,
+        message_id: &str,
+        emoji: &str,
+    ) -> anyhow::Result<()> {
+        let _ = (to_jid, message_id, emoji);
+        Ok(())
+    }
+
+    /// Sends an emoji reaction routed via a specific SessionRole.
+    async fn send_reaction_with_session(
+        &self,
+        to_jid: &str,
+        message_id: &str,
+        emoji: &str,
+        session_role: SessionRole,
+    ) -> anyhow::Result<()> {
+        let _ = session_role;
+        self.send_reaction(to_jid, message_id, emoji).await
+    }
 }

@@ -283,6 +283,67 @@ impl WhatsmeowHttpAdapter {
 
         Ok(())
     }
+
+    async fn send_reaction_internal(
+        &self,
+        to_jid: &str,
+        message_id: &str,
+        emoji: &str,
+        session_id: Option<&str>,
+        _session_role: SessionRole,
+    ) -> anyhow::Result<()> {
+        let base_url = self.base_url.as_str();
+        let api_key = self.api_key.as_str();
+
+        let primary_url = format!("{}/api/v1/messages/reaction", base_url.trim_end_matches('/'));
+        let body = json!({
+            "recipient": to_jid,
+            "to": to_jid,
+            "chat_jid": to_jid,
+            "message_id": message_id,
+            "reaction": emoji,
+            "emoji": emoji
+        });
+
+        let mut req = self
+            .client
+            .post(&primary_url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("X-API-Key", api_key);
+
+        if let Some(sid) = session_id {
+            req = req.header("X-Session-ID", sid).header("Session-Id", sid);
+        }
+
+        match req.json(&body).send().await {
+            Ok(resp) if resp.status().is_success() => {
+                debug!("Reaction {} sent to {} on message {}", emoji, to_jid, message_id);
+                Ok(())
+            }
+            Ok(resp) if resp.status() == reqwest::StatusCode::NOT_FOUND => {
+                let fallback_url = format!("{}/send/reaction", base_url.trim_end_matches('/'));
+                let mut req_fb = self
+                    .client
+                    .post(&fallback_url)
+                    .header("Authorization", format!("Bearer {}", api_key))
+                    .header("X-API-Key", api_key);
+                if let Some(sid) = session_id {
+                    req_fb = req_fb.header("X-Session-ID", sid).header("Session-Id", sid);
+                }
+                let _ = req_fb.json(&body).send().await;
+                Ok(())
+            }
+            Ok(resp) => {
+                let status = resp.status();
+                debug!("Whatsmeow reaction endpoint returned status {} (non-critical)", status);
+                Ok(())
+            }
+            Err(e) => {
+                debug!("Whatsmeow reaction connection failed (non-critical): {}", e);
+                Ok(())
+            }
+        }
+    }
 }
 
 #[async_trait]
@@ -319,5 +380,25 @@ impl WhatsAppPort for WhatsmeowHttpAdapter {
     ) -> anyhow::Result<()> {
         let session_id = self.resolve_session_id(session_role);
         self.send_presence_internal(to_jid, state, session_id, session_role).await
+    }
+
+    async fn send_reaction(
+        &self,
+        to_jid: &str,
+        message_id: &str,
+        emoji: &str,
+    ) -> anyhow::Result<()> {
+        self.send_reaction_internal(to_jid, message_id, emoji, self.bot_session_id.as_deref(), SessionRole::PrimaryBot).await
+    }
+
+    async fn send_reaction_with_session(
+        &self,
+        to_jid: &str,
+        message_id: &str,
+        emoji: &str,
+        session_role: SessionRole,
+    ) -> anyhow::Result<()> {
+        let session_id = self.resolve_session_id(session_role);
+        self.send_reaction_internal(to_jid, message_id, emoji, session_id, session_role).await
     }
 }

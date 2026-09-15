@@ -190,6 +190,24 @@ def cmd_send_text(args):
         res = make_request("POST", "/send/message", payload)
     print(json.dumps(res, indent=2, ensure_ascii=False))
 
+def cmd_reaction(args):
+    recipient = args.to.strip()
+    msg_id = args.id.strip()
+    emoji = args.emoji.strip()
+    payload = {
+        "recipient": recipient,
+        "to": recipient,
+        "chat_jid": recipient,
+        "message_id": msg_id,
+        "reaction": emoji,
+        "emoji": emoji,
+    }
+    res = make_request("POST", "/api/v1/messages/reaction", payload)
+    if res.get("error") and res.get("status_code") == 404:
+        # Fallback to legacy endpoint /send/reaction
+        res = make_request("POST", "/send/reaction", payload)
+    print(json.dumps(res, indent=2, ensure_ascii=False))
+
 def cmd_search(args):
     jid = args.jid.strip()
     limit = args.limit or 100
@@ -470,6 +488,13 @@ def main():
     p_send_text.add_argument("--to", required=True, help="Recipient JID (e.g. 628xxx@s.whatsapp.net or 120363xxx@g.us)")
     p_send_text.add_argument("--text", required=True, help="Message text content")
     p_send_text.set_defaults(func=cmd_send_text)
+
+    # reaction
+    p_reaction = subparsers.add_parser("reaction", help="Send an emoji reaction to a WhatsApp message", parents=[common_parser])
+    p_reaction.add_argument("--to", required=True, help="Recipient or chat JID (e.g. 628xxx@s.whatsapp.net)")
+    p_reaction.add_argument("--id", required=True, help="Message ID to react to")
+    p_reaction.add_argument("--emoji", default="🙏", help="Emoji reaction (e.g. 🙏, 👍, ❤️)")
+    p_reaction.set_defaults(func=cmd_reaction)
 
     # send-media
     p_media = subparsers.add_parser("send-media", help="Send media or document file", parents=[common_parser])

@@ -108,7 +108,8 @@ impl ScheduledTickUseCase {
                 continue;
             }
 
-            // 2. Execute task payload
+            // 2. Execute task payload with duration & diagnostics recording
+            let start_instant = std::time::Instant::now();
             match task.task_type {
                 ScheduledTaskType::DirectNotification => {
                     if let Err(e) = self
@@ -116,10 +117,17 @@ impl ScheduledTickUseCase {
                         .send_text_with_session(&task.target_jid, &task.payload, None, SessionRole::PrimaryBot)
                         .await
                     {
+                        let duration = start_instant.elapsed().as_secs_f64();
+                        let err_str = e.to_string();
                         error!("Failed to deliver direct notification for task #{}: {}", task.id, e);
+                        let _ = self.session_store.update_scheduled_task_result(task.id, "failed", Some(&err_str), duration).await;
+                        let _ = self.session_store.record_scheduled_task_run(task.id, &task.title, &task.target_jid, "failed", duration, Some(&err_str), None).await;
                     } else {
+                        let duration = start_instant.elapsed().as_secs_f64();
                         info!("Delivered scheduled notification for task #{} to {}", task.id, task.target_jid);
                         let _ = self.session_store.record_message(&task.target_jid, "bot", &task.payload, true).await;
+                        let _ = self.session_store.update_scheduled_task_result(task.id, "success", None, duration).await;
+                        let _ = self.session_store.record_scheduled_task_run(task.id, &task.title, &task.target_jid, "success", duration, None, Some(&task.payload)).await;
                     }
                 }
                 ScheduledTaskType::AgentAction => {
@@ -158,6 +166,7 @@ impl ScheduledTickUseCase {
 
                         match agent.execute(None, &prompt).await {
                             Ok(res) => {
+                                let duration = start_instant.elapsed().as_secs_f64();
                                 let clean_res = res.response_text.trim();
                                 if !clean_res.is_empty() {
                                     // Filter out accidental tool confirmation reports from being posted to story
@@ -169,6 +178,8 @@ impl ScheduledTickUseCase {
 
                                     if is_story && is_redundant_report {
                                         info!("Suppressed redundant agent status report from being published to story: {}", clean_res);
+                                        let _ = self.session_store.update_scheduled_task_result(task.id, "success", None, duration).await;
+                                        let _ = self.session_store.record_scheduled_task_run(task.id, &task.title, &task.target_jid, "success", duration, None, Some(clean_res)).await;
                                         continue;
                                     }
 
@@ -184,6 +195,16 @@ impl ScheduledTickUseCase {
                                         &task.target_jid
                                     };
 
+                                    let (status, err_msg) = if is_error_output {
+                                        ("failed", Some(clean_res))
+                                    } else {
+                                        ("success", None)
+                                    };
+
+                                    let preview = if clean_res.len() > 300 { &clean_res[..300] } else { clean_res };
+                                    let _ = self.session_store.update_scheduled_task_result(task.id, status, err_msg, duration).await;
+                                    let _ = self.session_store.record_scheduled_task_run(task.id, &task.title, actual_target, status, duration, err_msg, Some(preview)).await;
+
                                     if let Err(e) = self
                                         .whatsapp
                                         .send_text_with_session(actual_target, clean_res, None, SessionRole::PrimaryBot)
@@ -194,10 +215,18 @@ impl ScheduledTickUseCase {
                                         info!("Successfully executed and delivered AgentAction task #{} to {}", task.id, actual_target);
                                         let _ = self.session_store.record_message(actual_target, "bot", clean_res, true).await;
                                     }
+                                } else {
+                                    let _ = self.session_store.update_scheduled_task_result(task.id, "success", None, duration).await;
+                                    let _ = self.session_store.record_scheduled_task_run(task.id, &task.title, &task.target_jid, "success", duration, None, None).await;
                                 }
                             }
                             Err(e) => {
+                                let duration = start_instant.elapsed().as_secs_f64();
+                                let err_str = e.to_string();
                                 error!("Agent failed to execute scheduled task #{}: {}", task.id, e);
+                                let _ = self.session_store.update_scheduled_task_result(task.id, "failed", Some(&err_str), duration).await;
+                                let _ = self.session_store.record_scheduled_task_run(task.id, &task.title, &task.target_jid, "failed", duration, Some(&err_str), None).await;
+
                                 let err_msg = format!("⚠️ _Gagal menjalankan tugas terjadwal '{}': {}_", task.title, e);
                                 let fallback_target = if is_story {
                                     self.persona_engine.as_ref()

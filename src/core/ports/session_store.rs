@@ -59,4 +59,31 @@ pub trait SessionStorePort: Send + Sync {
 
     /// Gets a single scheduled task by ID.
     async fn get_scheduled_task(&self, id: i64) -> anyhow::Result<Option<crate::core::domain::ScheduledTask>>;
+
+    /// Records an execution run of a scheduled task into the audit log.
+    async fn record_scheduled_task_run(
+        &self,
+        task_id: i64,
+        task_title: &str,
+        target_jid: &str,
+        status: &str,
+        duration_secs: f64,
+        error_message: Option<&str>,
+        output_preview: Option<&str>,
+    ) -> anyhow::Result<i64>;
+
+    /// Lists recent task run logs (up to `limit`).
+    async fn list_scheduled_task_runs(&self, limit: usize) -> anyhow::Result<Vec<crate::core::domain::ScheduledTaskRun>>;
+
+    /// Updates task execution record with final status, error message, and duration.
+    async fn update_scheduled_task_result(
+        &self,
+        id: i64,
+        status: &str,
+        error_message: Option<&str>,
+        duration_secs: f64,
+    ) -> anyhow::Result<()>;
+
+    /// Retrieves diagnostic summary of the scheduler subsystem.
+    async fn get_scheduler_diagnostics(&self) -> anyhow::Result<crate::core::domain::SchedulerDiagnostics>;
 }

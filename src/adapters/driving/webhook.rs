@@ -80,6 +80,9 @@ pub fn create_router(state: Arc<WebhookServerState>) -> Router {
         .route("/api/simulate", post(simulate_handler))
         .route("/api/simulate/reset", post(simulate_reset_handler))
         .route("/api/simulate/job/{id}", get(simulate_job_status_handler))
+        .route("/api/schedule/tasks", get(api_schedule_tasks_handler))
+        .route("/api/schedule/runs", get(api_schedule_runs_handler))
+        .route("/api/schedule/diagnostics", get(api_schedule_diagnostics_handler))
         .route("/webhook", post(webhook_handler))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
         .with_state(state)
@@ -206,6 +209,85 @@ async fn api_set_model_handler(
                 })),
             )
         }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ScheduleTasksQuery {
+    pub active_only: Option<bool>,
+}
+
+async fn api_schedule_tasks_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    Query(query): Query<ScheduleTasksQuery>,
+) -> impl IntoResponse {
+    let active_only = query.active_only.unwrap_or(false);
+    match state.session_store.list_scheduled_tasks(active_only).await {
+        Ok(tasks) => (
+            StatusCode::OK,
+            Json(json!({
+                "success": true,
+                "count": tasks.len(),
+                "tasks": tasks,
+            })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "success": false,
+                "error": format!("Gagal memuat daftar jadwal: {}", e),
+            })),
+        ),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ScheduleRunsQuery {
+    pub limit: Option<usize>,
+}
+
+async fn api_schedule_runs_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    Query(query): Query<ScheduleRunsQuery>,
+) -> impl IntoResponse {
+    let limit = query.limit.unwrap_or(50).min(500);
+    match state.session_store.list_scheduled_task_runs(limit).await {
+        Ok(runs) => (
+            StatusCode::OK,
+            Json(json!({
+                "success": true,
+                "count": runs.len(),
+                "runs": runs,
+            })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "success": false,
+                "error": format!("Gagal memuat riwayat eksekusi jadwal: {}", e),
+            })),
+        ),
+    }
+}
+
+async fn api_schedule_diagnostics_handler(
+    State(state): State<Arc<WebhookServerState>>,
+) -> impl IntoResponse {
+    match state.session_store.get_scheduler_diagnostics().await {
+        Ok(diag) => (
+            StatusCode::OK,
+            Json(json!({
+                "success": true,
+                "diagnostics": diag,
+            })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "success": false,
+                "error": format!("Gagal mengambil metrik diagnostik scheduler: {}", e),
+            })),
+        ),
     }
 }
 
@@ -2771,6 +2853,21 @@ mod tests {
         async fn update_scheduled_task_run(&self, _id: i64, _last_run: i64, _next_run: Option<i64>, _is_active: bool) -> anyhow::Result<()> { Ok(()) }
         async fn delete_scheduled_task(&self, _id: i64) -> anyhow::Result<bool> { Ok(true) }
         async fn get_scheduled_task(&self, _id: i64) -> anyhow::Result<Option<crate::core::domain::ScheduledTask>> { Ok(None) }
+        async fn record_scheduled_task_run(&self, _task_id: i64, _task_title: &str, _target_jid: &str, _status: &str, _duration_secs: f64, _error_message: Option<&str>, _output_preview: Option<&str>) -> anyhow::Result<i64> { Ok(1) }
+        async fn list_scheduled_task_runs(&self, _limit: usize) -> anyhow::Result<Vec<crate::core::domain::ScheduledTaskRun>> { Ok(vec![]) }
+        async fn update_scheduled_task_result(&self, _id: i64, _status: &str, _error_message: Option<&str>, _duration_secs: f64) -> anyhow::Result<()> { Ok(()) }
+        async fn get_scheduler_diagnostics(&self) -> anyhow::Result<crate::core::domain::SchedulerDiagnostics> {
+            Ok(crate::core::domain::SchedulerDiagnostics {
+                total_tasks: 0,
+                active_tasks: 0,
+                total_runs: 0,
+                successful_runs: 0,
+                failed_runs: 0,
+                last_run: None,
+                last_failure: None,
+                next_task: None,
+            })
+        }
     }
 
     struct DummyAgentEngine;

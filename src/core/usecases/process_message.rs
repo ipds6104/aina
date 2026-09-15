@@ -136,6 +136,29 @@ impl ProcessIncomingMessageUseCase {
                     }
                 }
 
+                // Check for polite conversational closing / acknowledgment / gratitude:
+                // Rather than intimidating users with walls of text for short closing messages like "Sama-sama kak",
+                // react politely with an appropriate emoji (e.g. 🙏 or 👍) and close the interaction smoothly.
+                if let Some(reaction_emoji) = detect_conversational_closing(&msg.text) {
+                    info!(
+                        "Detected conversational closing in message '{}' from {}, responding with reaction {}",
+                        msg.text, msg.sender.jid, reaction_emoji
+                    );
+                    if let Err(e) = self
+                        .whatsapp
+                        .send_reaction_with_session(&msg.chat_jid, &msg.id, reaction_emoji, msg.session_role)
+                        .await
+                    {
+                        warn!("Failed to send reaction {} to {}: {}", reaction_emoji, msg.chat_jid, e);
+                    }
+                    let reaction_note = format!("[Reaksi WhatsApp: {}]", reaction_emoji);
+                    let _ = self
+                        .session_store
+                        .record_message(&msg.chat_jid, &self.bot_jid, &reaction_note, true)
+                        .await;
+                    return Ok(());
+                }
+
                 // 2. Send 'typing...' indicator immediately
                 if let Err(e) = self
                     .whatsapp
@@ -314,6 +337,101 @@ pub fn split_response_into_bubbles(text: &str) -> Vec<String> {
     }
 }
 
+/// Detects if a message is a pure conversational closing/acknowledgment/gratitude
+/// that should receive a polite emoji reaction instead of an intimidating text reply.
+pub fn detect_conversational_closing(text: &str) -> Option<&'static str> {
+    let clean = text.trim();
+    if clean.is_empty() || clean.len() > 60 {
+        return None;
+    }
+
+    // Never auto-react if text has question mark
+    if clean.contains('?') {
+        return None;
+    }
+
+    let lower = clean.to_lowercase();
+
+    // Check for negative or request keywords that indicate a follow-up inquiry
+    let question_keywords = [
+        "kenapa", "mengapa", "bagaimana", "gimana", "kapan", "siapa", "dimana", "mana",
+        "tolong", "bisa tolong", "mohon bantuan", "jadwalkan", "kirimkan", "carikan",
+        "tapi", "namun", "tetapi", "masih ada", "belum",
+    ];
+    for kw in &question_keywords {
+        if lower.contains(kw) {
+            return None;
+        }
+    }
+
+    // Strip punctuation to normalize
+    let normalized: String = lower
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { ' ' })
+        .collect();
+    let words: Vec<&str> = normalized.split_whitespace().collect();
+
+    if words.is_empty() || words.len() > 6 {
+        return None;
+    }
+
+    let joined = words.join(" ");
+
+    // 1. Gratitude & polite warmth -> "🙏"
+    let gratitude_phrases = [
+        "sama sama", "samasama", "sama2", "samik samik", "sam2",
+        "terima kasih", "terimakasih", "makasih", "makasi", "makasihh", "tengkyu",
+        "thank you", "thanks", "thx", "tks", "matur nuwun", "nuhun",
+        "sukses selalu", "sehat selalu", "aamiin", "amin ya rabbal alamin",
+        "semoga lancar", "semangat", "semangat kak",
+    ];
+
+    for pat in &gratitude_phrases {
+        if joined == *pat
+            || joined.starts_with(&format!("{} ", pat))
+            || joined.ends_with(&format!(" {}", pat))
+            || joined == format!("{} kak", pat)
+            || joined == format!("{} mas", pat)
+            || joined == format!("{} mba", pat)
+            || joined == format!("{} pak", pat)
+            || joined == format!("{} bu", pat)
+            || joined == format!("{} aina", pat)
+            || joined == format!("{} ya", pat)
+            || joined == format!("{} yaa", pat)
+            || joined == format!("{} banyak", pat)
+            || joined == format!("{} infonya", pat)
+        {
+            return Some("🙏");
+        }
+    }
+
+    // 2. Acknowledgment & confirmation -> "👍"
+    let ack_phrases = [
+        "siap", "siapp", "siappp", "siap kak", "siap pak", "siap bu", "siap mba", "siap mas",
+        "oke siap", "ok siap", "oke siap kak", "ok siap kak",
+        "noted", "noted kak", "noted pak", "noted bu",
+        "oke", "ok", "okee", "okey", "sip", "sipp", "sippp", "oke sip", "ok sip", "mantap",
+        "baik", "baik kak", "baik pak", "baik bu", "baik siap", "siap laksanakan",
+        "paham", "paham kak", "mengerti", "mengerti kak", "sudah kak", "siap terima kasih",
+    ];
+
+    for pat in &ack_phrases {
+        if joined == *pat
+            || joined == format!("{} kak", pat)
+            || joined == format!("{} pak", pat)
+            || joined == format!("{} bu", pat)
+            || joined == format!("{} mba", pat)
+            || joined == format!("{} mas", pat)
+            || joined == format!("{} aina", pat)
+            || joined == format!("{} ya", pat)
+        {
+            return Some("👍");
+        }
+    }
+
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -347,5 +465,40 @@ mod tests {
         let text = "<<<SPLIT_CHAT>>>Pesan Tunggal<<<SPLIT_CHAT>>>   ";
         let bubbles = split_response_into_bubbles(text);
         assert_eq!(bubbles, vec!["Pesan Tunggal"]);
+    }
+
+    #[test]
+    fn test_detect_conversational_closing_gratitude() {
+        assert_eq!(detect_conversational_closing("Sama-sama kak"), Some("🙏"));
+        assert_eq!(detect_conversational_closing("sama2 yaa"), Some("🙏"));
+        assert_eq!(detect_conversational_closing("Terima kasih banyak!"), Some("🙏"));
+        assert_eq!(detect_conversational_closing("Makasih infonya"), Some("🙏"));
+        assert_eq!(detect_conversational_closing("tks"), Some("🙏"));
+        assert_eq!(detect_conversational_closing("Aamiin"), Some("🙏"));
+    }
+
+    #[test]
+    fn test_detect_conversational_closing_acknowledgment() {
+        assert_eq!(detect_conversational_closing("Siap kak"), Some("👍"));
+        assert_eq!(detect_conversational_closing("Oke siap!"), Some("👍"));
+        assert_eq!(detect_conversational_closing("Noted"), Some("👍"));
+        assert_eq!(detect_conversational_closing("Siap laksanakan"), Some("👍"));
+        assert_eq!(detect_conversational_closing("Mantap"), Some("👍"));
+        assert_eq!(detect_conversational_closing("Sipp"), Some("👍"));
+    }
+
+    #[test]
+    fn test_detect_conversational_closing_ignores_inquiries_and_questions() {
+        // Question mark present
+        assert_eq!(detect_conversational_closing("Kenapa SLS belum selesai?"), None);
+        assert_eq!(detect_conversational_closing("Makasih kak, tapi ada kendala?"), None);
+        // Conjunctions indicating follow-up inquiry
+        assert_eq!(detect_conversational_closing("Siap kak tapi masih ada selisih"), None);
+        assert_eq!(detect_conversational_closing("Terima kasih tolong cek kembali"), None);
+        // Long messages
+        assert_eq!(
+            detect_conversational_closing("Terima kasih banyak atas infonya, nanti saya koordinasikan lagi dengan PPL desa sebelah agar cepat tuntas"),
+            None
+        );
     }
 }

@@ -213,6 +213,19 @@ WhatsApp supports ephemeral 24-hour stories broadcasted to status contacts (`sta
    python3 skills/whatsmeow/scripts/wa_tool.py revoke --id "3EB0XXXXX" --chat-jid "628xxx@s.whatsapp.net"
    ```
 
+### SOP 7: Conversational Closure & WhatsApp Emoji Reactions
+Untuk pesan penutup obrolan yang santun (seperti ucapan terima kasih *"Sama-sama kak"*, *"Makasih infonya"*, atau konfirmasi *"Siap kak"*, *"Noted"*):
+- **Hindari balasan teks panjang (wall of text)** yang mengintimidasi atau membebani lawan bicara dengan kewajiban membalas lagi.
+- Berikan reaksi emoji WhatsApp (Reaction):
+  ```bash
+  # Kirim reaksi tanda terima kasih / santun (Folded hands)
+  python3 skills/whatsmeow/scripts/wa_tool.py reaction --to "<CHAT_JID>" --id "<MSG_ID>" --emoji "🙏"
+
+  # Kirim reaksi konfirmasi / siap (Thumbs up)
+  python3 skills/whatsmeow/scripts/wa_tool.py reaction --to "<CHAT_JID>" --id "<MSG_ID>" --emoji "👍"
+  ```
+- *Catatan*: Gateway backend Aina secara cerdas mendeteksi pesan penutup singkat ini dan langsung memberikan reaksi emoji tanpa memanggil LLM (menghemat kuota dan mematuhi etika percakapan alami).
+
 ---
 
 ## 4. OpSec & Authority Policy (Strict Enforcement)

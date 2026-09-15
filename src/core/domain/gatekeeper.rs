@@ -11,6 +11,15 @@ impl Gatekeeper {
         bot_name: &str,
         bot_lid: Option<&str>,
     ) -> GatekeeperDecision {
+        // 0. Explicitly ignore incoming status broadcast stories (WhatsApp Status / Stories)
+        // When contacts (including Admin) post a WhatsApp story, it arrives with chat_jid="status@broadcast".
+        // Aina should NEVER treat an incoming status story as a direct message or auto-reply with a counter status story!
+        if msg.chat_jid == "status@broadcast" || msg.chat_jid.starts_with("status@") || msg.sender.jid == "status@broadcast" {
+            return GatekeeperDecision::Ignore {
+                reason: "WhatsApp status broadcast story ignored".to_string(),
+            };
+        }
+
         // 1. Ignore empty text unless media (photo/document) is attached
         let trimmed_text = msg.text.trim();
         if trimmed_text.is_empty() && !msg.has_media {
@@ -389,6 +398,20 @@ mod tests {
 
         let dec = Gatekeeper::evaluate(&msg, "628999@s.whatsapp.net", "Aina", None);
         assert!(matches!(dec, GatekeeperDecision::Respond { .. }));
+    }
+
+    #[test]
+    fn test_status_broadcast_story_strictly_ignored() {
+        let msg = make_msg(
+            ChatType::DirectMessage,
+            "Lagi ngopi santai sambil coding",
+            false,
+            SessionRole::PrimaryBot,
+            "status@broadcast",
+            "628111@s.whatsapp.net",
+        );
+        let dec = Gatekeeper::evaluate(&msg, "628999@s.whatsapp.net", "Aina", None);
+        assert!(matches!(dec, GatekeeperDecision::Ignore { .. }));
     }
 }
 

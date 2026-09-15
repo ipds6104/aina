@@ -34,8 +34,36 @@ pub struct ScheduledTask {
     pub schedule_expr: String, // "YYYY-MM-DD HH:MM", "HH:MM", or "<seconds>"
     pub next_run_epoch: i64,
     pub last_run_epoch: Option<i64>,
+    pub last_status: Option<String>,
+    pub last_error: Option<String>,
+    pub last_duration_secs: Option<f64>,
     pub is_active: bool,
     pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScheduledTaskRun {
+    pub id: i64,
+    pub task_id: i64,
+    pub task_title: String,
+    pub target_jid: String,
+    pub status: String, // "success" or "failed"
+    pub duration_secs: f64,
+    pub error_message: Option<String>,
+    pub output_preview: Option<String>,
+    pub executed_at_epoch: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SchedulerDiagnostics {
+    pub total_tasks: usize,
+    pub active_tasks: usize,
+    pub total_runs: usize,
+    pub successful_runs: usize,
+    pub failed_runs: usize,
+    pub last_run: Option<ScheduledTaskRun>,
+    pub last_failure: Option<ScheduledTaskRun>,
+    pub next_task: Option<ScheduledTask>,
 }
 
 #[derive(Debug, Clone)]
