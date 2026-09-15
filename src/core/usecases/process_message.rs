@@ -231,12 +231,9 @@ impl ProcessIncomingMessageUseCase {
                     }
                     Err(e) => {
                         heartbeat_handle.abort();
-                        error!("Agent engine failed to execute: {}", e);
-                        let err_reply = "Maaf, terjadi kesalahan saat memproses permintaan Anda. Silakan coba sesaat lagi.";
-                        let _ = self
-                            .whatsapp
-                            .send_text_with_session(&msg.chat_jid, err_reply, quote_id, msg.session_role)
-                            .await;
+                        error!("Agent engine failed to execute for chat {}: {}", msg.chat_jid, e);
+                        // Do NOT send robotic/technical error messages ("Maaf, terjadi kesalahan...") to WhatsApp!
+                        // Silent logging prevents confusion, embarrassment, and conversational error loops.
                         return Err(e);
                     }
                 };

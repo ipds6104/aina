@@ -4,6 +4,14 @@ set -e
 # Setup Antigravity config directory
 mkdir -p /root/.gemini/antigravity-cli /root/.gemini/config
 
+# Ensure persistent brain storage across Coolify redeployments
+mkdir -p /app/data/brain
+if [ -d "/root/.gemini/antigravity-cli/brain" ] && [ ! -L "/root/.gemini/antigravity-cli/brain" ]; then
+    cp -rn /root/.gemini/antigravity-cli/brain/* /app/data/brain/ 2>/dev/null || true
+    rm -rf /root/.gemini/antigravity-cli/brain
+fi
+ln -sfn /app/data/brain /root/.gemini/antigravity-cli/brain
+
 # If OAuth token is provided via environment variable (e.g. from Coolify secrets), write it directly
 if [ -n "$AINA_OAUTH_TOKEN" ]; then
     echo "Found AINA_OAUTH_TOKEN in environment, writing to credentials store..."
@@ -12,6 +20,23 @@ if [ -n "$AINA_OAUTH_TOKEN" ]; then
 elif [ -n "$ANTIGRAVITY_OAUTH_TOKEN" ]; then
     echo "Found ANTIGRAVITY_OAUTH_TOKEN in environment, writing to credentials store..."
     echo -n "$ANTIGRAVITY_OAUTH_TOKEN" > /root/.gemini/antigravity-cli/antigravity-oauth-token
+    chmod 600 /root/.gemini/antigravity-cli/antigravity-oauth-token
+elif [ -n "$AINA_OAUTH_TOKENS" ]; then
+    echo "Found AINA_OAUTH_TOKENS in environment, extracting first token to credentials store..."
+    FIRST_TOKEN=$(echo "$AINA_OAUTH_TOKENS" | grep -o '{"[^}]*}' | head -n 1)
+    if [ -z "$FIRST_TOKEN" ]; then
+        FIRST_TOKEN=$(echo "$AINA_OAUTH_TOKENS" | grep -o '"[^"]*"' | head -n 1 | tr -d '"')
+    fi
+    if [ -z "$FIRST_TOKEN" ]; then
+        FIRST_TOKEN=$(echo "$AINA_OAUTH_TOKENS" | cut -d',' -f1 | tr -d ' \n\r')
+    fi
+    if [ -n "$FIRST_TOKEN" ]; then
+        echo -n "$FIRST_TOKEN" > /root/.gemini/antigravity-cli/antigravity-oauth-token
+        chmod 600 /root/.gemini/antigravity-cli/antigravity-oauth-token
+    fi
+elif [ -n "$AINA_OAUTH_TOKEN_1" ]; then
+    echo "Found AINA_OAUTH_TOKEN_1 in environment, writing to credentials store..."
+    echo -n "$AINA_OAUTH_TOKEN_1" > /root/.gemini/antigravity-cli/antigravity-oauth-token
     chmod 600 /root/.gemini/antigravity-cli/antigravity-oauth-token
 fi
 

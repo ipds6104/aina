@@ -1046,7 +1046,8 @@ async fn webhook_handler(
 
 async fn dispatch_message_to_queue(state: &Arc<WebhookServerState>, msg: IncomingMessage) {
     let usecase = Arc::clone(&state.usecase);
-    dispatch_incoming_message_to_queue(&state.chat_queues, msg, 300, move |m| {
+    // 3500ms (3.5s) debounce window to aggregate rapid consecutive typing bursts (e.g. multi-line thoughts)
+    dispatch_incoming_message_to_queue(&state.chat_queues, msg, 300, 3500, move |m| {
         let uc = Arc::clone(&usecase);
         async move { uc.execute(m).await }
     })
@@ -1057,6 +1058,7 @@ pub async fn dispatch_incoming_message_to_queue<F, Fut>(
     chat_queues: &Arc<tokio::sync::Mutex<HashMap<String, tokio::sync::mpsc::UnboundedSender<IncomingMessage>>>>,
     msg: IncomingMessage,
     idle_timeout_secs: u64,
+    debounce_ms: u64,
     handler: F,
 ) where
     F: Fn(IncomingMessage) -> Fut + Send + Sync + 'static,
@@ -1084,9 +1086,69 @@ pub async fn dispatch_incoming_message_to_queue<F, Fut>(
             info!("Started sequential FIFO message queue worker for chat {}", worker_chat_jid);
             loop {
                 match tokio::time::timeout(std::time::Duration::from_secs(idle_timeout_secs), rx.recv()).await {
-                    Ok(Some(queued_msg)) => {
-                        if let Err(e) = handler(queued_msg).await {
-                            error!("Error processing queued message for {}: {:?}", worker_chat_jid, e);
+                    Ok(Some(mut current_msg)) => {
+                        // Debounce buffer for rapid consecutive messages
+                        if debounce_ms > 0 && !current_msg.has_media {
+                            let mut aggregated_texts = vec![current_msg.text.clone()];
+                            let debounce_delay = std::time::Duration::from_millis(debounce_ms);
+                            let max_wait_deadline = std::time::Instant::now() + std::time::Duration::from_secs(12);
+                            let mut pending_divergent = None;
+
+                            loop {
+                                if std::time::Instant::now() >= max_wait_deadline {
+                                    break;
+                                }
+
+                                match tokio::time::timeout(debounce_delay, rx.recv()).await {
+                                    Ok(Some(next_msg)) => {
+                                        if next_msg.sender.jid == current_msg.sender.jid && !next_msg.has_media {
+                                            info!(
+                                                "Debounce buffer: combining consecutive message from {} in {}",
+                                                next_msg.sender.jid, worker_chat_jid
+                                            );
+                                            aggregated_texts.push(next_msg.text);
+                                            current_msg.id = next_msg.id; // quote/reply points to latest bubble
+                                        } else {
+                                            pending_divergent = Some(next_msg);
+                                            break;
+                                        }
+                                    }
+                                    Ok(None) => break,
+                                    Err(_) => break, // Debounce timer expired: user finished typing!
+                                }
+                            }
+
+                            // Non-blockingly drain any messages already available in queue from the same sender
+                            while pending_divergent.is_none() {
+                                match rx.try_recv() {
+                                    Ok(extra_msg) => {
+                                        if extra_msg.sender.jid == current_msg.sender.jid && !extra_msg.has_media {
+                                            aggregated_texts.push(extra_msg.text);
+                                            current_msg.id = extra_msg.id;
+                                        } else {
+                                            pending_divergent = Some(extra_msg);
+                                            break;
+                                        }
+                                    }
+                                    Err(_) => break,
+                                }
+                            }
+
+                            current_msg.text = aggregated_texts.join("\n");
+
+                            if let Err(e) = handler(current_msg).await {
+                                error!("Error processing queued message for {}: {:?}", worker_chat_jid, e);
+                            }
+
+                            if let Some(divergent_msg) = pending_divergent {
+                                if let Err(e) = handler(divergent_msg).await {
+                                    error!("Error processing queued divergent message for {}: {:?}", worker_chat_jid, e);
+                                }
+                            }
+                        } else {
+                            if let Err(e) = handler(current_msg).await {
+                                error!("Error processing queued message for {}: {:?}", worker_chat_jid, e);
+                            }
                         }
                     }
                     Ok(None) => break,
@@ -2705,7 +2767,7 @@ mod tests {
         };
 
         let p1 = Arc::clone(&processed);
-        dispatch_incoming_message_to_queue(&chat_queues, make_msg("M1", "First"), 1, move |msg| {
+        dispatch_incoming_message_to_queue(&chat_queues, make_msg("M1", "First"), 1, 0, move |msg| {
             let p_inner = Arc::clone(&p1);
             async move {
                 tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
@@ -2716,7 +2778,7 @@ mod tests {
         .await;
 
         let p2 = Arc::clone(&processed);
-        dispatch_incoming_message_to_queue(&chat_queues, make_msg("M2", "Second"), 1, move |msg| {
+        dispatch_incoming_message_to_queue(&chat_queues, make_msg("M2", "Second"), 1, 0, move |msg| {
             let p_inner = Arc::clone(&p2);
             async move {
                 tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
@@ -2727,7 +2789,7 @@ mod tests {
         .await;
 
         let p3 = Arc::clone(&processed);
-        dispatch_incoming_message_to_queue(&chat_queues, make_msg("M3", "Third"), 1, move |msg| {
+        dispatch_incoming_message_to_queue(&chat_queues, make_msg("M3", "Third"), 1, 0, move |msg| {
             let p_inner = Arc::clone(&p3);
             async move {
                 tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
@@ -2761,6 +2823,60 @@ mod tests {
         }
         let queues = chat_queues.lock().await;
         assert!(!queues.contains_key("group123@g.us"));
+    }
+
+    #[tokio::test]
+    async fn test_dispatch_incoming_message_to_queue_debouncing() {
+        let chat_queues = Arc::new(tokio::sync::Mutex::new(HashMap::new()));
+        let aggregated_results = Arc::new(tokio::sync::Mutex::new(Vec::new()));
+
+        let make_msg = |id: &str, text: &str| IncomingMessage {
+            id: id.to_string(),
+            platform: crate::core::domain::Platform::WhatsApp,
+            session_role: SessionRole::PrimaryBot,
+            chat_jid: "user_debounce@s.whatsapp.net".to_string(),
+            chat_type: ChatType::DirectMessage,
+            sender: Sender {
+                jid: "user_debounce@s.whatsapp.net".to_string(),
+                name: Some("Debounce User".to_string()),
+            },
+            text: text.to_string(),
+            timestamp: 1000,
+            is_from_me: false,
+            quoted_message: None,
+            mentioned_jids: vec![],
+            is_bot_mentioned: true,
+            bot_lid: None,
+            has_media: false,
+            media_type: None,
+            media_path: None,
+        };
+
+        let res_clone = Arc::clone(&aggregated_results);
+        let handler = move |msg: IncomingMessage| {
+            let inner = Arc::clone(&res_clone);
+            async move {
+                inner.lock().await.push((msg.id, msg.text));
+                Ok(())
+            }
+        };
+
+        // Send 3 rapid messages within 50ms with 200ms debounce
+        dispatch_incoming_message_to_queue(&chat_queues, make_msg("M1", "Pesan 1"), 1, 200, handler.clone()).await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(30)).await;
+        dispatch_incoming_message_to_queue(&chat_queues, make_msg("M2", "Pesan 2"), 1, 200, handler.clone()).await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(30)).await;
+        dispatch_incoming_message_to_queue(&chat_queues, make_msg("M3", "Pesan 3"), 1, 200, handler.clone()).await;
+
+        // Wait for debounce timer (200ms) to expire
+        tokio::time::sleep(tokio::time::Duration::from_millis(350)).await;
+
+        let results = aggregated_results.lock().await.clone();
+        // Should be aggregated into exactly 1 execution!
+        assert_eq!(results.len(), 1);
+        let (id, combined_text) = &results[0];
+        assert_eq!(id, "M3"); // Points to latest message ID
+        assert_eq!(combined_text, "Pesan 1\nPesan 2\nPesan 3");
     }
 
     #[tokio::test]

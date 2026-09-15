@@ -93,6 +93,15 @@ pub fn get_available_models() -> Vec<(&'static str, &'static str)> {
     ]
 }
 
+#[derive(Debug, Clone)]
+pub struct AccountToken {
+    #[allow(dead_code)]
+    pub id: usize,
+    pub label: String,
+    pub token_json: String,
+    pub cooldown_until: Arc<RwLock<Option<std::time::Instant>>>,
+}
+
 pub struct AntigravityCliAdapter {
     binary_path: PathBuf,
     model: Arc<RwLock<String>>,
@@ -102,6 +111,7 @@ pub struct AntigravityCliAdapter {
     whatsmeow_api_key: String,
     companion_base_url: Option<String>,
     companion_api_key: Option<String>,
+    token_pool: Arc<RwLock<Vec<AccountToken>>>,
 }
 
 impl AntigravityCliAdapter {
@@ -138,6 +148,10 @@ impl AntigravityCliAdapter {
     ) -> Self {
         let raw_model = model.into();
         let initial_model = resolve_model_name(&raw_model).unwrap_or(raw_model);
+        let pool = Self::load_initial_token_pool();
+        if !pool.is_empty() {
+            info!("Initialized Antigravity account pool with {} account(s)", pool.len());
+        }
         Self {
             binary_path: binary_path.into(),
             model: Arc::new(RwLock::new(initial_model)),
@@ -147,7 +161,87 @@ impl AntigravityCliAdapter {
             whatsmeow_api_key: whatsmeow_api_key.into(),
             companion_base_url,
             companion_api_key,
+            token_pool: Arc::new(RwLock::new(pool)),
         }
+    }
+
+    fn load_initial_token_pool() -> Vec<AccountToken> {
+        let mut pool = Vec::new();
+
+        // 1. Check AINA_OAUTH_TOKENS (JSON array of token strings or objects)
+        if let Ok(val) = std::env::var("AINA_OAUTH_TOKENS") {
+            let trimmed = val.trim();
+            if let Ok(parsed_arr) = serde_json::from_str::<Vec<serde_json::Value>>(trimmed) {
+                for (idx, item) in parsed_arr.into_iter().enumerate() {
+                    let token_str = if item.is_string() {
+                        item.as_str().unwrap().to_string()
+                    } else {
+                        item.to_string()
+                    };
+                    if !token_str.trim().is_empty() {
+                        pool.push(AccountToken {
+                            id: idx + 1,
+                            label: format!("Account-{}", idx + 1),
+                            token_json: token_str,
+                            cooldown_until: Arc::new(RwLock::new(None)),
+                        });
+                    }
+                }
+            }
+        }
+
+        // 2. Check individual environment variables AINA_OAUTH_TOKEN_1 ... AINA_OAUTH_TOKEN_20
+        if pool.is_empty() {
+            for i in 1..=20 {
+                if let Ok(val) = std::env::var(format!("AINA_OAUTH_TOKEN_{}", i)) {
+                    let trimmed = val.trim().to_string();
+                    if !trimmed.is_empty() {
+                        pool.push(AccountToken {
+                            id: i,
+                            label: format!("Account-{}", i),
+                            token_json: trimmed,
+                            cooldown_until: Arc::new(RwLock::new(None)),
+                        });
+                    }
+                }
+            }
+        }
+
+        // 3. Fallback to single environment variable AINA_OAUTH_TOKEN or ANTIGRAVITY_OAUTH_TOKEN
+        if pool.is_empty() {
+            if let Ok(val) = std::env::var("AINA_OAUTH_TOKEN").or_else(|_| std::env::var("ANTIGRAVITY_OAUTH_TOKEN")) {
+                let trimmed = val.trim().to_string();
+                if !trimmed.is_empty() {
+                    pool.push(AccountToken {
+                        id: 1,
+                        label: "Account-Primary".to_string(),
+                        token_json: trimmed,
+                        cooldown_until: Arc::new(RwLock::new(None)),
+                    });
+                }
+            }
+        }
+
+        // 4. Fallback to existing token file on disk if available
+        if pool.is_empty() {
+            let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+            let default_path = PathBuf::from(home).join(".gemini/antigravity-cli/antigravity-oauth-token");
+            if default_path.exists() {
+                if let Ok(content) = std::fs::read_to_string(&default_path) {
+                    let trimmed = content.trim().to_string();
+                    if !trimmed.is_empty() {
+                        pool.push(AccountToken {
+                            id: 1,
+                            label: "Account-Default".to_string(),
+                            token_json: trimmed,
+                            cooldown_until: Arc::new(RwLock::new(None)),
+                        });
+                    }
+                }
+            }
+        }
+
+        pool
     }
 
     fn get_token_path(&self) -> PathBuf {
@@ -211,125 +305,187 @@ impl AgentEnginePort for AntigravityCliAdapter {
         };
 
         let bin_path = self.resolve_binary();
-        let mut cmd = Command::new(&bin_path);
         
         // Ensure workspace directory exists
         if !self.workspace_dir.exists() {
             tokio::fs::create_dir_all(&self.workspace_dir).await?;
         }
-        cmd.current_dir(&self.workspace_dir);
 
-        // Add conversation flag if continuing a session
-        if let Some(conv_id) = conversation_id {
-            if !conv_id.trim().is_empty() {
-                cmd.arg("--conversation").arg(conv_id);
-            }
-        }
+        let pool = self.token_pool.read().await.clone();
+        let max_attempts = if pool.is_empty() { 1 } else { pool.len() };
 
-        // Add headless execution flags
-        let print_timeout_sec = self.timeout_duration.as_secs().saturating_sub(5).max(30);
-        cmd.arg("-p").arg(prompt);
-        cmd.arg("--output-format").arg("json");
-        cmd.arg("--print-timeout").arg(format!("{}s", print_timeout_sec));
-        cmd.arg("--dangerously-skip-permissions");
-        cmd.arg("--model").arg(&active_model);
-
-        // Inject live WhatsApp gateway connection variables so CLI tools (wa_tool.py) work seamlessly
-        cmd.env("WHATSMEOW_BASE_URL", &self.whatsmeow_base_url);
-        cmd.env("WHATSMEOW_URL", &self.whatsmeow_base_url);
-        cmd.env("WHATSMEOW_API_KEY", &self.whatsmeow_api_key);
-        cmd.env("API_KEY", &self.whatsmeow_api_key);
-
-        if let Some(ref comp_url) = self.companion_base_url {
-            cmd.env("WHATSMEOW_COMPANION_BASE_URL", comp_url);
-            cmd.env("WHATSMEOW_COMPANION_URL", comp_url);
-        }
-        if let Some(ref comp_key) = self.companion_api_key {
-            cmd.env("WHATSMEOW_COMPANION_API_KEY", comp_key);
-        }
-
-        debug!(
-            "Executing Antigravity CLI: {:?} (conv: {:?}, model: {})",
-            bin_path, conversation_id, active_model
-        );
-
-        // Run with timeout
-        let child_future = cmd.output();
-        let output = match tokio::time::timeout(self.timeout_duration, child_future).await {
-            Ok(res) => res?,
-            Err(_) => {
-                anyhow::bail!(
-                    "Antigravity CLI execution timed out after {:?}",
-                    self.timeout_duration
-                );
-            }
-        };
-
-        let stdout_raw = String::from_utf8_lossy(&output.stdout);
-        let stderr_raw = String::from_utf8_lossy(&output.stderr);
-
-        if !output.status.success() {
-            error!(
-                "Antigravity CLI failed with code {:?}. Stderr: {}",
-                output.status.code(),
-                stderr_raw
-            );
-            anyhow::bail!("Antigravity CLI failed: {}", stderr_raw);
-        }
-
-        if !stderr_raw.is_empty() {
-            debug!("Antigravity CLI stderr: {}", stderr_raw);
-        }
-
-        // Find and parse the JSON block in stdout
-        let json_line = stdout_raw
-            .lines()
-            .rev()
-            .find(|line| {
-                let trimmed = line.trim();
-                trimmed.starts_with('{') && trimmed.ends_with('}')
-            })
-            .or_else(|| {
-                // Fallback: extract substring between first '{' and last '}'
-                let first = stdout_raw.find('{')?;
-                let last = stdout_raw.rfind('}')?;
-                if first < last {
-                    Some(&stdout_raw[first..=last])
-                } else {
-                    None
+        for attempt in 0..max_attempts {
+            let active_acc = if !pool.is_empty() {
+                let now = std::time::Instant::now();
+                let mut candidate = None;
+                for acc in &pool {
+                    let cd = acc.cooldown_until.read().await;
+                    if let Some(until) = *cd {
+                        if now < until {
+                            continue;
+                        }
+                    }
+                    candidate = Some(acc.clone());
+                    break;
                 }
-            });
+                let chosen = candidate.unwrap_or_else(|| pool[attempt % pool.len()].clone());
 
-        match json_line {
-            Some(payload) => {
+                let token_path = self.get_token_path();
+                if let Some(parent) = token_path.parent() {
+                    let _ = tokio::fs::create_dir_all(parent).await;
+                }
+                if let Err(e) = tokio::fs::write(&token_path, chosen.token_json.trim()).await {
+                    warn!("Failed to write active token for {}: {}", chosen.label, e);
+                }
+                Some(chosen)
+            } else {
+                None
+            };
+
+            let mut cmd = Command::new(&bin_path);
+            cmd.current_dir(&self.workspace_dir);
+
+            // Add conversation flag if continuing a session
+            if let Some(conv_id) = conversation_id {
+                if !conv_id.trim().is_empty() {
+                    cmd.arg("--conversation").arg(conv_id);
+                }
+            }
+
+            // Add headless execution flags
+            let print_timeout_sec = self.timeout_duration.as_secs().saturating_sub(5).max(30);
+            cmd.arg("-p").arg(prompt);
+            cmd.arg("--output-format").arg("json");
+            cmd.arg("--print-timeout").arg(format!("{}s", print_timeout_sec));
+            cmd.arg("--dangerously-skip-permissions");
+            cmd.arg("--model").arg(&active_model);
+
+            // Inject live WhatsApp gateway connection variables so CLI tools (wa_tool.py) work seamlessly
+            cmd.env("WHATSMEOW_BASE_URL", &self.whatsmeow_base_url);
+            cmd.env("WHATSMEOW_URL", &self.whatsmeow_base_url);
+            cmd.env("WHATSMEOW_API_KEY", &self.whatsmeow_api_key);
+            cmd.env("API_KEY", &self.whatsmeow_api_key);
+
+            if let Some(ref comp_url) = self.companion_base_url {
+                cmd.env("WHATSMEOW_COMPANION_BASE_URL", comp_url);
+                cmd.env("WHATSMEOW_COMPANION_URL", comp_url);
+            }
+            if let Some(ref comp_key) = self.companion_api_key {
+                cmd.env("WHATSMEOW_COMPANION_API_KEY", comp_key);
+            }
+
+            debug!(
+                "Executing Antigravity CLI (attempt {}/{}): {:?} (conv: {:?}, model: {}, acc: {:?})",
+                attempt + 1, max_attempts, bin_path, conversation_id, active_model, active_acc.as_ref().map(|a| &a.label)
+            );
+
+            // Run with timeout
+            let child_future = cmd.output();
+            let output = match tokio::time::timeout(self.timeout_duration, child_future).await {
+                Ok(res) => res?,
+                Err(_) => {
+                    anyhow::bail!(
+                        "Antigravity CLI execution timed out after {:?}",
+                        self.timeout_duration
+                    );
+                }
+            };
+
+            let stdout_raw = String::from_utf8_lossy(&output.stdout);
+            let stderr_raw = String::from_utf8_lossy(&output.stderr);
+            let combined = format!("{}\n{}", stderr_raw, stdout_raw);
+
+            let is_quota = combined.contains("503")
+                || combined.contains("429")
+                || combined.contains("quota")
+                || combined.contains("Resource has been exhausted")
+                || combined.contains("rate limit");
+
+            if !output.status.success() {
+                if is_quota && pool.len() > 1 && attempt + 1 < max_attempts {
+                    if let Some(ref acc) = active_acc {
+                        *acc.cooldown_until.write().await = Some(std::time::Instant::now() + std::time::Duration::from_secs(300));
+                        warn!(
+                            "Account {} hit quota limit. Cooling down for 5m. Failing over (attempt {}/{})...",
+                            acc.label, attempt + 1, max_attempts
+                        );
+                        continue;
+                    }
+                }
+                error!(
+                    "Antigravity CLI failed with code {:?}. Stderr: {}",
+                    output.status.code(),
+                    stderr_raw
+                );
+                anyhow::bail!("Antigravity CLI failed: {}", stderr_raw);
+            }
+
+            if !stderr_raw.is_empty() {
+                debug!("Antigravity CLI stderr: {}", stderr_raw);
+            }
+
+            // Find and parse the JSON block in stdout
+            let json_line = stdout_raw
+                .lines()
+                .rev()
+                .find(|line| {
+                    let trimmed = line.trim();
+                    trimmed.starts_with('{') && trimmed.ends_with('}')
+                })
+                .or_else(|| {
+                    let first = stdout_raw.find('{')?;
+                    let last = stdout_raw.rfind('}')?;
+                    if first < last {
+                        Some(&stdout_raw[first..=last])
+                    } else {
+                        None
+                    }
+                });
+
+            if let Some(payload) = json_line {
                 let parsed: AgyJsonOutput = serde_json::from_str(payload)?;
                 info!(
                     "Agent turn finished: conv={}, status={}, model={}",
                     parsed.conversation_id, parsed.status, active_model
                 );
-                let response_text = if !parsed.response.trim().is_empty() {
-                    sanitize_agent_response(parsed.response.trim())
-                } else if let Some(ref err) = parsed.error {
-                    format!("⚠️ Mohon maaf, terjadi kendala saat memproses permintaan: {}", err)
-                } else {
-                    "(Tidak ada respons dari agen AI)".to_string()
-                };
 
-                Ok(AgentResponse {
+                if let Some(ref err) = parsed.error {
+                    if parsed.response.trim().is_empty() {
+                        let is_err_quota = err.contains("503")
+                            || err.contains("429")
+                            || err.contains("quota")
+                            || err.contains("exhausted");
+                        if is_err_quota && pool.len() > 1 && attempt + 1 < max_attempts {
+                            if let Some(ref acc) = active_acc {
+                                *acc.cooldown_until.write().await = Some(std::time::Instant::now() + std::time::Duration::from_secs(300));
+                                warn!(
+                                    "Account {} returned quota error in JSON: {}. Cooling down for 5m. Failing over (attempt {}/{})...",
+                                    acc.label, err, attempt + 1, max_attempts
+                                );
+                                continue;
+                            }
+                        }
+                        error!("Antigravity agent failed with error in payload: {}", err);
+                        anyhow::bail!("Antigravity agent error: {}", err);
+                    }
+                }
+
+                let response_text = sanitize_agent_response(parsed.response.trim());
+                return Ok(AgentResponse {
                     conversation_id: parsed.conversation_id,
                     response_text,
                     duration_seconds: parsed.duration_seconds,
-                })
-            }
-            None => {
-                warn!("Could not find JSON in stdout, returning raw text: {}", stdout_raw);
-                Ok(AgentResponse {
+                });
+            } else {
+                return Ok(AgentResponse {
                     conversation_id: conversation_id.unwrap_or_default().to_string(),
                     response_text: sanitize_agent_response(stdout_raw.trim()),
                     duration_seconds: 0.0,
-                })
+                });
             }
         }
+
+        anyhow::bail!("All accounts in token pool failed or exhausted quota.")
     }
 
     async fn get_model(&self) -> String {
@@ -369,6 +525,22 @@ impl AgentEnginePort for AntigravityCliAdapter {
             use std::os::unix::fs::PermissionsExt;
             let perms = std::fs::Permissions::from_mode(0o600);
             let _ = tokio::fs::set_permissions(&path, perms).await;
+        }
+
+        // Synchronize in-memory token pool
+        {
+            let mut pool = self.token_pool.write().await;
+            if let Some(existing) = pool.iter_mut().find(|a| a.token_json == trimmed) {
+                *existing.cooldown_until.write().await = None;
+            } else {
+                let next_id = pool.len() + 1;
+                pool.push(AccountToken {
+                    id: next_id,
+                    label: format!("Account-{}", next_id),
+                    token_json: trimmed.to_string(),
+                    cooldown_until: Arc::new(RwLock::new(None)),
+                });
+            }
         }
 
         info!("Auth token saved to {:?}, verifying with quick test...", path);

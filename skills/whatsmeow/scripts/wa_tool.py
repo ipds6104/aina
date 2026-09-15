@@ -113,7 +113,7 @@ def make_request(method: str, endpoint: str, data: Optional[Dict[str, Any]] = No
     req = urllib.request.Request(url, data=body, headers=headers, method=method)
     
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=10) as resp:
             content = resp.read().decode("utf-8")
             if not content.strip():
                 return {"status": "ok", "code": resp.status}
