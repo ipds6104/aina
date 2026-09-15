@@ -194,6 +194,41 @@ impl SessionStorePort for SqliteSessionStore {
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0);
 
+        // Idempotency check: check if an active task already exists for this target around the same time (+/- 120s)
+        // to prevent double execution if LLM retries or calls schedule add multiple times
+        let mut check_stmt = conn.prepare(
+            "SELECT id FROM scheduled_tasks 
+             WHERE is_active = 1 
+               AND target_jid = ?1 
+               AND schedule_type = ?2 
+               AND ABS(next_run_epoch - ?3) <= 120
+             LIMIT 1",
+        )?;
+        let mut existing_id: Option<i64> = None;
+        let mut rows = check_stmt.query(params![task.target_jid, task.schedule_type, task.next_run_epoch])?;
+        if let Some(row) = rows.next()? {
+            existing_id = Some(row.get(0)?);
+        }
+        drop(rows);
+        drop(check_stmt);
+
+        if let Some(eid) = existing_id {
+            conn.execute(
+                "UPDATE scheduled_tasks 
+                 SET title = ?1, task_type = ?2, payload = ?3, schedule_expr = ?4, next_run_epoch = ?5 
+                 WHERE id = ?6",
+                params![
+                    task.title,
+                    task.task_type.as_str(),
+                    task.payload,
+                    task.schedule_expr,
+                    task.next_run_epoch,
+                    eid
+                ],
+            )?;
+            return Ok(eid);
+        }
+
         conn.execute(
             "INSERT INTO scheduled_tasks 
              (title, task_type, target_jid, payload, schedule_type, schedule_expr, next_run_epoch, is_active, created_at)
@@ -372,9 +407,22 @@ mod tests {
         let task_id = store.create_scheduled_task(&new_task).await.unwrap();
         assert!(task_id > 0);
 
+        // Deduplication test: adding task with same target & close timestamp should return same task_id
+        let duplicate_task = crate::core::domain::NewScheduledTask {
+            title: "Pengingat YouTube (Updated)".to_string(),
+            task_type: crate::core::domain::ScheduledTaskType::DirectNotification,
+            target_jid: "6289625345646@s.whatsapp.net".to_string(),
+            payload: "Buka YouTube ya, jangan lupa!".to_string(),
+            schedule_type: "once".to_string(),
+            schedule_expr: "22:26".to_string(),
+            next_run_epoch: 1000,
+        };
+        let dup_id = store.create_scheduled_task(&duplicate_task).await.unwrap();
+        assert_eq!(task_id, dup_id);
+
         let active_tasks = store.list_scheduled_tasks(true).await.unwrap();
         assert_eq!(active_tasks.len(), 1);
-        assert_eq!(active_tasks[0].title, "Pengingat YouTube");
+        assert_eq!(active_tasks[0].title, "Pengingat YouTube (Updated)");
 
         // Query when now < 1000 -> not due yet
         let due_before = store.get_due_scheduled_tasks(999).await.unwrap();

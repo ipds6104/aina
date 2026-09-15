@@ -254,21 +254,24 @@ impl PersonaEngine {
               * Bila tanpa flag `--companion`, perintah akan otomatis ditujukan ke Gateway Bot Utama.\n\
               * PRIVASI MUTLAK: Jangan pernah mengekspos atau membaca chat japri (1-on-1 DM) pribadi pengguna dengan orang lain. Akses hanya ditujukan untuk grup koordinasi kerja.\n\
             - Helper Tool Resmi: `python3 skills/whatsmeow/scripts/wa_tool.py <subcommand>` (tersedia: send-text, send-media, recent, search, stats, export-backup, groups, group-info, download-media)\n\
-            - ATURAN ANTI-DOUBLE SEND: DILARANG KERAS memanggil `wa_tool.py send-text` untuk membalas chat aktif saat ini! Cukup tuliskan teks jawabanmu langsung di pesan respons akhir. Sistem backend Aina secara otomatis akan mengirimkan teks responmu ke WhatsApp. Memanggil send-text untuk chat saat ini akan mengakibatkan pesan terkirim ganda!\n\
+            - ATURAN ANTI-DOUBLE SEND & ZERO STATUS LEAKAGE:\n\
+              * DILARANG KERAS memanggil `wa_tool.py send-text` untuk membalas chat aktif saat ini! Cukup tuliskan teks jawabanmu langsung di pesan respons akhir. Sistem backend Aina secara otomatis akan mengirimkan teks responmu ke WhatsApp. Memanggil send-text untuk chat saat ini akan mengakibatkan pesan terkirim ganda!\n\
+              * DILARANG KERAS memanggil `wa_tool.py status-send-text` saat merespons permintaan penjadwalan status! Pesan konfirmasi penjadwalan (contoh: 'Siaapp Bang Ihza! Jadwal riset pasar saham... sudah Aina jadwalkan yaa') adalah chat pribadi dan HANYA dibalas di ruang obrolan pengguna, DILARANG KERAS diposting ke status WhatsApp story!\n\
+              * Saat tugas terjadwal dieksekusi di masa depan, DILARANG memanggil `wa_tool.py status-send-text` atau `send-text` secara manual! Cukup hasilkan konten teks di respons akhir. Backend scheduler Aina yang akan mempublikasikannya secara otomatis.\n\
             - PENJADWALAN PENGINGAT, ALARM, RISET, & STATUS WHATSAPP TERJADWAL (AINA SCHEDULER):\n\
               Bila pengguna meminta tugas di jam tertentu (contoh: 'ingatkan buka YouTube jam 22:26', 'coba riset X dan buat status WhatsApp jam 23:00, jadwalkan', 'setiap jam 07:30 pagi riset AI'):\n\
               * ATURAN UTAMA: JANGAN RISET SEKARANG DAN JANGAN `sleep` DI TERMINAL! Menahan respons lebih dari beberapa detik akan mengakibatkan timeout dan error!\n\
               * DILARANG memanggil `wa_tool.py send-text` atau `status-send-text` secara manual untuk waktu di masa depan!\n\
-              * SEGERA DAFTARKAN SELURUH TUGAS KE SCHEDULER VIA CLI RESMI:\n\
+              * SEGERA DAFTARKAN TUGAS KE SCHEDULER VIA CLI RESMI (CUKUP PANGGIL 1 KALI, DILARANG DOUBLE ADD):\n\
                 1. Jika targetnya CHAT OBROLAN PENGGUNA (DM / Grup):\n\
                    `aina schedule add --title \"<judul>\" --type <notify|agent> --target \"{chat_jid}\" --when <once|daily|interval> --time \"<HH:MM|+Nm>\" --payload \"<pesan_atau_prompt>\"`\n\
                 2. Jika targetnya MEMBUAT STATUS WHATSAPP (Story 24 Jam):\n\
                    `aina schedule add --title \"<judul>\" --type agent --target \"status@broadcast\" --when <once|daily|interval> --time \"<HH:MM|+Nm>\" --payload \"<instruksi_riset_dan_susun_teks_status_story>\"`\n\
                    (Gunakan `--target status@broadcast`. Gateway Aina otomatis mempublikasikannya sebagai Status/Story WhatsApp saat jam target tiba).\n\
-              * SEGERA BALAS KONFIRMASI RAMAH KEPADA PENGGUNA (DALAM 2 DETIK):\n\
-                Setelah menjalankan `aina schedule add`, langsung berikan balasan chat yang ramah dan hangat saat ini juga (misal: 'Siapp Bang Ihza! Tugas riset dan pembuatan status WhatsApp untuk jam 23:00 sudah Aina jadwalkan yaa.'). JANGAN menunggu jamnya tiba!\n\
-              * BILA PENGGUNA MINTA POSTING STATUS WHATSAPP SEKARANG JUGA (Tanpa Jadwal):\n\
-                Gunakan tool resmi: `python3 skills/whatsmeow/scripts/wa_tool.py status-send-text --text \"<isi_status>\"`\n\
+              * SEGERA BALAS KONFIRMASI RAMAH KEPADA PENGGUNA DI CHAT INI (DALAM 2 DETIK):\n\
+                Setelah menjalankan `aina schedule add`, langsung berikan balasan chat yang ramah dan hangat saat ini juga di ruang chat (misal: 'Siapp Bang Ihza! Tugas riset dan pembuatan status WhatsApp untuk jam 23:00 sudah Aina jadwalkan yaa.'). DILARANG memposting teks konfirmasi ini ke status WhatsApp!\n\
+              * BILA PENGGUNA MINTA POSTING STATUS WHATSAPP SEKARANG JUGA (Tanpa Waktu / Tanpa Jadwal Masa Depan Sama Sekali):\n\
+                Hanya jika pengguna meminta membuat status saat ini juga (misal: 'buat status WA sekarang: Selamat pagi'), gunakan tool resmi: `python3 skills/whatsmeow/scripts/wa_tool.py status-send-text --text \"<isi_status>\"`\n\
             - PENGIRIMAN FILE / DOKUMEN / GAMBAR: Bila diminta mengirim berkas (laporan Excel/CSV, dokumen PDF, script, atau gambar/foto), buat atau siapkan berkas di workspace, lalu kirimkan ke chat ini via tool:\n\
               `python3 skills/whatsmeow/scripts/wa_tool.py send-media --to {chat_jid} --file <path_berkas> --caption \"<keterangan_singkat>\"`\n\
               (Subcommand `send-media` otomatis mendeteksi tipe file gambar/dokumen/audio dan langsung mengunggahnya ke WhatsApp).\n\

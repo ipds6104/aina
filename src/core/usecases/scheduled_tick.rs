@@ -141,9 +141,10 @@ impl ScheduledTickUseCase {
                             PETUNJUK FORMAT RESPON & EFISIENSI KUOTA UNTUK AINA:\n\
                             1. EFISIENSI KUOTA: Lakukan maksimal 1 hingga 2 kali pencarian web (search_web) yang paling esensial. DILARANG KERAS melakukan pencarian berulang-ulang tanpa henti!\n\
                             2. Susun hasil akhir secara rapi, padat, dan ramah ponsel (format WhatsApp: *tebal*, bullet points •).\n\
-                            3. {}
-                            4. DILARANG KERAS menyertakan laporan status teknis internal seperti 'Status: Terkirim', 'Pesan berhasil dikirim', dsb.\n\
-                            5. Berikan langsung teks hasil riset atau informasi akhir yang siap dibaca oleh penerima.",
+                            3. {}\
+                            4. ATURAN PENGIRIMAN OTOMATIS: DILARANG KERAS memanggil wa_tool.py, send-text, atau status-send-text di terminal! Cukup susun teks konten akhir pada pesan respons Anda. Sistem backend scheduler Aina yang akan mempublikasikannya secara otomatis ke WhatsApp!\n\
+                            5. DILARANG KERAS menyertakan laporan status teknis internal seperti 'Status: Terkirim', 'Pesan berhasil dikirim', 'Status telah diterbitkan', dsb.\n\
+                            6. Berikan langsung teks hasil riset atau informasi akhir yang siap dibaca oleh penerima.",
                             task.title,
                             current_time_str,
                             task.target_jid,
@@ -159,6 +160,18 @@ impl ScheduledTickUseCase {
                             Ok(res) => {
                                 let clean_res = res.response_text.trim();
                                 if !clean_res.is_empty() {
+                                    // Filter out accidental tool confirmation reports from being posted to story
+                                    let is_redundant_report = clean_res.starts_with("Pesan balasan sudah terkirim")
+                                        || clean_res.starts_with("Pesan tanggapan telah berhasil dikirim")
+                                        || clean_res.starts_with("Pesan telah berhasil dikirim")
+                                        || clean_res.starts_with("Pesan berhasil dikirim")
+                                        || (clean_res.starts_with("Status") && (clean_res.contains("berhasil") || clean_res.contains("terbit")));
+
+                                    if is_story && is_redundant_report {
+                                        info!("Suppressed redundant agent status report from being published to story: {}", clean_res);
+                                        continue;
+                                    }
+
                                     // If destination is status story and response contains error, do not post publicly
                                     let is_error_output = clean_res.starts_with("⚠️") || clean_res.contains("503") || clean_res.contains("quota");
                                     let actual_target = if is_story && is_error_output {
