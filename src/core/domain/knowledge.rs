@@ -595,14 +595,25 @@ impl KnowledgeEngine {
         let universal_dir = knowledge_dir.join("universal");
         let kegiatan_dir = knowledge_dir.join("kegiatan");
         let archives_dir = knowledge_dir.join("archives");
+        let manifests_dir = knowledge_dir.join("manifests");
         let data_dir = dir.join("data").join("chats");
         let scripts_dir = dir.join("scripts");
 
         std::fs::create_dir_all(&universal_dir)?;
         std::fs::create_dir_all(&kegiatan_dir)?;
         std::fs::create_dir_all(&archives_dir)?;
+        std::fs::create_dir_all(&manifests_dir)?;
         std::fs::create_dir_all(&data_dir)?;
         std::fs::create_dir_all(&scripts_dir)?;
+
+        // Auto-link global shared_data lake if not already present
+        let shared_data_link = dir.join("shared_data");
+        if !shared_data_link.exists() {
+            #[cfg(unix)]
+            {
+                let _ = std::os::unix::fs::symlink("../../shared_data", &shared_data_link);
+            }
+        }
 
         let gemini_file = dir.join("GEMINI.md");
         if !gemini_file.exists() {

@@ -263,17 +263,30 @@ def cmd_create(args):
 
     knowledge_dir = ws_dir / "knowledge"
     kegiatan_dir = knowledge_dir / "kegiatan"
+    manifests_dir = knowledge_dir / "manifests"
     data_dir = ws_dir / "data"
     scripts_dir = ws_dir / "scripts"
 
     knowledge_dir.mkdir(parents=True, exist_ok=True)
     kegiatan_dir.mkdir(parents=True, exist_ok=True)
+    manifests_dir.mkdir(parents=True, exist_ok=True)
     data_dir.mkdir(parents=True, exist_ok=True)
     scripts_dir.mkdir(parents=True, exist_ok=True)
 
     (data_dir / ".gitkeep").touch()
     (scripts_dir / ".gitkeep").touch()
     (kegiatan_dir / ".gitkeep").touch()
+    (manifests_dir / ".gitkeep").touch()
+
+    # Symlink shared_data lake across workspaces
+    shared_data_link = ws_dir / "shared_data"
+    shared_data_target = REPO_ROOT / "shared_data"
+    if shared_data_target.exists() and not shared_data_link.exists():
+        try:
+            rel_target = os.path.relpath(shared_data_target, ws_dir)
+            shared_data_link.symlink_to(rel_target)
+        except Exception:
+            pass
 
     title = args.title or f"Domain {name.capitalize()}"
     domain_desc = args.domain or f"Workspace terdedikasi untuk proyek dan domain {name}."

@@ -1,6 +1,6 @@
 # 📚 Indeks Terpadu Knowledge Base: DEFAULT
 
-> Terakhir dirapikan: **2026-09-11 23:14 WIB** | Berkas Dokumen: **2** | Kegiatan Aktif: **1** | Agenda Tertunda: **2**
+> Terakhir dirapikan: **2026-09-16 21:23 WIB** | Berkas Dokumen: **2** | Kegiatan Aktif: **1** | Agenda Tertunda: **2**
 
 ---
 
@@ -21,8 +21,8 @@
 
 ## ⏰ 3. Sorotan Agenda & Deadline Terdekat
 
-- **12 Sep 2026** (1 hari lagi): Uji Coba WhatsApp Gateway — *Persiapan Peluncuran Aina (2026-09)* [`Rujukan`](kegiatan/persiapan-peluncuran-aina/2026-09/README.md)
-- **15 Sep 2026** (4 hari lagi): Rilis Publik Repositori — *Persiapan Peluncuran Aina (2026-09)* [`Rujukan`](kegiatan/persiapan-peluncuran-aina/2026-09/README.md)
+- **12 Sep 2026** (**TERLEWAT 4 HARI** ⚠️): Uji Coba WhatsApp Gateway — *Persiapan Peluncuran Aina (2026-09)* [`Rujukan`](kegiatan/persiapan-peluncuran-aina/2026-09/README.md)
+- **15 Sep 2026** (**TERLEWAT 1 HARI** ⚠️): Rilis Publik Repositori — *Persiapan Peluncuran Aina (2026-09)* [`Rujukan`](kegiatan/persiapan-peluncuran-aina/2026-09/README.md)
 
 ---
 

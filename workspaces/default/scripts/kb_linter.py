@@ -30,7 +30,67 @@ def find_repo_root() -> Path:
     return current
 
 REPO_ROOT = find_repo_root()
-WORKSPACES_ROOT = REPO_ROOT / "workspaces"
+
+def get_workspaces_root() -> Path:
+    """
+    Menemukan direktori induk kumpulan workspace dengan hierarki:
+    1. AINA_WORKSPACES_DIR (variabel environment eksplisit)
+    2. Parent directory dari AGENT_WORKSPACE jika diset
+    3. REPO_ROOT / 'workspaces'
+    4. CWD / 'workspaces'
+    """
+    if os.environ.get("AINA_WORKSPACES_DIR"):
+        p = Path(os.environ["AINA_WORKSPACES_DIR"]).resolve()
+        if p.exists():
+            return p
+
+    if os.environ.get("AGENT_WORKSPACE"):
+        p = Path(os.environ["AGENT_WORKSPACE"]).resolve()
+        if p.is_dir() and (p / "knowledge").exists():
+            return p.parent
+        elif p.exists() and p.is_dir():
+            return p
+
+    repo_ws = REPO_ROOT / "workspaces"
+    if repo_ws.exists():
+        return repo_ws
+
+    return Path.cwd() / "workspaces"
+
+def resolve_workspace_dir(ws_input: str | None = None) -> Path:
+    if ws_input and ws_input.strip():
+        val = ws_input.strip()
+        raw_path = Path(val)
+        if raw_path.is_dir():
+            return raw_path.resolve()
+
+        cwd_cand = (Path.cwd() / val).resolve()
+        if cwd_cand.is_dir():
+            return cwd_cand
+
+        root = get_workspaces_root()
+        slug_cand = root / val
+        if slug_cand.is_dir():
+            return slug_cand.resolve()
+
+        lower_cand = root / val.lower()
+        if lower_cand.is_dir():
+            return lower_cand.resolve()
+
+        return slug_cand
+
+    if os.environ.get("AGENT_WORKSPACE"):
+        p = Path(os.environ["AGENT_WORKSPACE"]).resolve()
+        if p.is_dir():
+            return p
+
+    cwd = Path.cwd()
+    if (cwd / "knowledge").is_dir():
+        return cwd.resolve()
+
+    return (get_workspaces_root() / "default").resolve()
+
+WORKSPACES_ROOT = get_workspaces_root()
 
 # ─── PURE-PYTHON YAML FRONTMATTER EXTRACTOR ──────────────────────────────────
 
@@ -289,7 +349,7 @@ def run_linter(workspaces: list[Path], auto_heal: bool = False) -> tuple[int, li
                 if not rep.is_clean:
                     # Run groom
                     print(f"   ⚡ Menjalankan grooming otomatis untuk '{rep.workspace_name}'...")
-                    subprocess.run([sys.executable, str(ws_mgr_script), "groom", rep.workspace_name], check=False)
+                    subprocess.run([sys.executable, str(ws_mgr_script), "groom", str(rep.workspace_name)], check=False)
 
             # Re-linting for Closed-Loop Verification
             print("\n🔄 Memverifikasi Ulang Setelah Grooming (Closed-Loop Verification)...")
@@ -314,7 +374,7 @@ def run_linter(workspaces: list[Path], auto_heal: bool = False) -> tuple[int, li
 
 def main():
     parser = argparse.ArgumentParser(description="Aina KB Deterministic Linter")
-    parser.add_argument("workspace", nargs="?", help="Nama workspace tertentu (opsional, default: semua)")
+    parser.add_argument("workspace", nargs="?", help="Nama atau path workspace tertentu (opsional, default: semua)")
     parser.add_argument("--auto-heal", action="store_true", help="Otomatis picu grooming jika ditemukan ketidakrapian")
     parser.add_argument("--json", action="store_true", help="Output hasil dalam format JSON")
 
@@ -322,14 +382,23 @@ def main():
 
     target_dirs = []
     if args.workspace:
-        ws_path = WORKSPACES_ROOT / args.workspace.strip().lower()
+        ws_path = resolve_workspace_dir(args.workspace)
         if not ws_path.exists():
-            print(f"❌ Workspace '{args.workspace}' tidak ditemukan.")
+            print(f"❌ Workspace '{args.workspace}' tidak ditemukan di {ws_path}.")
             sys.exit(1)
         target_dirs.append(ws_path)
     else:
-        if WORKSPACES_ROOT.exists():
-            target_dirs = [p for p in WORKSPACES_ROOT.iterdir() if p.is_dir() and not p.name.startswith(".")]
+        root = get_workspaces_root()
+        seen = set()
+        if root.exists() and root.is_dir():
+            for p in root.iterdir():
+                if p.is_dir() and not p.name.startswith("."):
+                    target_dirs.append(p)
+                    seen.add(str(p.resolve()))
+        if os.environ.get("AGENT_WORKSPACE"):
+            aw = Path(os.environ["AGENT_WORKSPACE"]).resolve()
+            if aw.is_dir() and str(aw) not in seen:
+                target_dirs.append(aw)
 
     if not target_dirs:
         print("ℹ️ Tidak ada workspace yang ditemukan.")

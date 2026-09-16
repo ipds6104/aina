@@ -349,7 +349,7 @@ def run_linter(workspaces: list[Path], auto_heal: bool = False) -> tuple[int, li
                 if not rep.is_clean:
                     # Run groom
                     print(f"   ⚡ Menjalankan grooming otomatis untuk '{rep.workspace_name}'...")
-                    subprocess.run([sys.executable, str(ws_mgr_script), "groom", str(rep.workspace_dir)], check=False)
+                    subprocess.run([sys.executable, str(ws_mgr_script), "groom", str(rep.workspace_name)], check=False)
 
             # Re-linting for Closed-Loop Verification
             print("\n🔄 Memverifikasi Ulang Setelah Grooming (Closed-Loop Verification)...")

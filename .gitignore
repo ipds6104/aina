@@ -16,8 +16,23 @@
 *.pyc
 
 /workspaces/**/skills
+/workspaces/**/shared_data
 .env
 *.log
+
+# Global Shared Data Lake (heavy analytical datasets, DuckDB, Parquet, SQLite)
+/shared_data/*
+!/shared_data/.gitkeep
+!/shared_data/README.md
+
+# Heavy analytical & database file extensions
+*.duckdb
+*.duckdb.wal
+*.parquet
+*.arrow
+*.feather
+*.h5
+*.hdf5
 
 # Google OAuth secrets & tokens
 *client_secrets*.json

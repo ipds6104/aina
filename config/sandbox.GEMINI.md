@@ -88,3 +88,30 @@
    - Sebutkan angka progres riil (misal: "X dari Y kecamatan selesai", "draf tabel Google Sheets sudah terbentuk", dsb.) agar rekan kerja mengetahui persentase capaian secara transparan.
 4. **Penyampaian Hasil Akhir yang Komprehensif**:
    - Setelah seluruh tahapan tuntas, sajikan ringkasan hasil akhir, tautan Google Drive / Google Sheets yang telah dibuat, atau berkas Excel yang siap diunduh di pesan penutup akhir.
+
+---
+
+## 7. Tata Kelola Data Masif (>10 MB s.d. Multi-GB) & Global Shared Data Lake
+
+1. **Pemisahan Ketat Data Masif dari Repositori Git**:
+   - Data mentah analitis berukuran besar (>10 MB, dataset tabular ratusan MB hingga multi-GB seperti 1.8 GB) **DILARANG KERAS dimasukkan ke dalam folder `knowledge/` atau di-commit ke Git**.
+   - Repositori Git hanya diperuntukkan bagi dokumen Markdown, konfigurasi YAML, skrip, dan metadata ringan.
+   - Seluruh data fisik masif wajib disimpan di direktori terpusat **`shared_data/`** (yang otomatis di-`.gitignore` dan ditautkan ke setiap workspace via symlink).
+2. **Format Tahan Banting Listrik Padam (Crash Resilient) & Hemat RAM**:
+   - **DuckDB (`.duckdb`)**: Standar utama untuk analisis OLAP masif. Mampu mengeksekusi query agregasi jutaan baris (1.8 GB+) langsung dari disk dengan konsumsi RAM sangat rendah (<50 MB).
+   - **SQLite (`.db`)**: Wajib aktifkan mode WAL (`PRAGMA journal_mode = WAL;`) agar kebal dari kerusakan data (*zero corruption*) bila server mati listrik mendadak.
+   - **Parquet (`.parquet`)**: Format kompresi biner kolumnar untuk transfer dan pembacaan efisien.
+   - **DILARANG KERAS** memuat file CSV/JSON mentah raksasa (>500 MB) secara utuh ke memori Python Pandas (`pd.read_csv`) karena akan memicu crash *Out of Memory (OOM Killer)* pada server. Gunakan selalu engine DuckDB/SQLite streaming.
+3. **Akses Lintas Workspace (Global Shared Data Lake)**:
+   - Dataset masif di `shared_data/` dapat diakses oleh seluruh workspace tanpa perlu menyalin atau menduplikasi file fisik. Cukup akses path `shared_data/<nama_dataset>`.
+4. **Disaster Recovery & Backup Remote (Google Drive via `gdrive_tool`)**:
+   - Untuk menjamin data tidak hilang jika hardware server rusak total atau disk diganti:
+     * Unggah cadangan data masif ke Google Drive tim:
+       `gdrive_tool drive-upload --file "shared_data/<nama_file>" --share anyone`
+     * Daftarkan metadata, kamus skema tabel, checksum SHA-256, dan tautan/File ID Google Drive ke berkas manifest Git:
+       `knowledge/manifests/<nama_dataset>.yaml`
+     * Bila server dipulihkan dari nol, unduh kembali file fisik menggunakan `gdrive_tool drive-download`.
+5. **Mekanisme Pengetahuan yang Tumbuh Sendiri (Progressive Distillation)**:
+   - Mesin data (DuckDB/SQLite) bertindak sebagai penyimpan fakta mentah berkecepatan tinggi.
+   - Setiap kali Anda melakukan analisis atas permintaan rekan kerja, distilasikan intisari temuan, rekapitulasi angka kunci, tren, dan daftar anomali ke dalam berkas Markdown di `knowledge/facts.md` atau `knowledge/kegiatan/<slug>/README.md`.
+   - Dengan pola ini, basis pengetahuan Git terus bertumbuh (*self-growing*) secara organik, kaya wawasan, dan tetap sangat ringan (<50 MB) untuk disinkronkan ke GitHub.
