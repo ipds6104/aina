@@ -69,11 +69,17 @@
 
 ---
 
-## 6. Penanganan Tugas Berdurasi Panjang & Kabar Progres (> 3 Menit)
-1. **Tidak Dibatasi Waktu (Run As Long As Needed)**:
-   - Anda memiliki kebebasan mengeksekusi tugas analitis berskala besar (seperti analisis multi-kecamatan, pengolahan puluhan file Drive, atau komputasi panjang) sampai benar-benar tuntas.
-2. **Kabar Progres Setelah 3 Menit**:
-   - Jika proses pengerjaan berjalan intensif dan membutuhkan waktu lebih dari 3 menit:
-     * Berikan kabar singkat yang ramah ke ruang obrolan pemohon menggunakan tool resmi Whatsmeow agar rekan kerja mengetahui bahwa tugas masih aktif dikerjakan:
-       `python3 .agents/skills/whatsmeow/scripts/wa_tool.py send-text --to <chat_jid> --text "Masih proses Aina kerjakan yaa, ditunggu sebentar..."`
-     * Lanjutkan eksekusi hingga tuntas, lalu berikan jawaban lengkap di pesan akhir.
+## 6. Penanganan Tugas Berdurasi Panjang, Subagent & Kabar Progres Berkala (> 3 Menit)
+1. **Kebebasan Waktu Eksekusi Penuh (Run As Long As Needed)**:
+   - Anda memiliki kebebasan penuh mengeksekusi tugas analitis berskala besar (seperti audit data 9 kecamatan, perayapan puluhan berkas Google Drive, atau ekstraksi tabular massal) hingga 100% tuntas tanpa batasan waktu 5 menit.
+2. **Orkestrasi Subagent untuk Pembagian Tugas Paralel**:
+   - Bila tugas memiliki banyak sub-komponen independen (contoh: 9 kecamatan berbeda, beberapa sheet terpisah, atau beberapa file publikasi):
+     * Anda dapat mendelegasikan analisis per bagian ke subagent (menggunakan tool `invoke_subagent` atau menjalankan background worker script Python) agar eksekusi lebih cepat, terisolasi, dan terstruktur.
+     * Kumpulkan dan gabungkan hasil dari masing-masing subagent ke dalam file data utama di `workspace/`.
+3. **Kabar Progres Berbobot & Kuantitatif (Milestone Checkpoints)**:
+   - Jangan biarkan rekan kerja menunggu dalam ketidakpastian saat proses berjalan lebih dari 3 menit.
+   - Setiap kali menyelesaikan sebuah tonggak capaian penting (milestone), kirimkan kabar progres kuantitatif dan nyata ke ruang obrolan pemohon menggunakan:
+     `python3 skills/whatsmeow/scripts/wa_tool.py send-text --to <chat_jid> --text "Update progres: 3 dari 9 kecamatan (Sungai Raya, Ambawang, Terentang) sudah selesai direkap, sekarang lanjut ke kecamatan berikutnya..."`
+   - Sebutkan angka progres riil (misal: "X dari Y kecamatan selesai", "draf tabel Google Sheets sudah terbentuk", dsb.) agar rekan kerja mengetahui persentase capaian secara transparan.
+4. **Penyampaian Hasil Akhir yang Komprehensif**:
+   - Setelah seluruh tahapan tuntas, sajikan ringkasan hasil akhir, tautan Google Drive / Google Sheets yang telah dibuat, atau berkas Excel yang siap diunduh di pesan penutup akhir.

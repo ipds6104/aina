@@ -212,7 +212,6 @@ impl ProcessIncomingMessageUseCase {
                 let heartbeat_quote_id = quote_id.map(|s| s.to_string());
                 let heartbeat_handle = tokio::spawn(async move {
                     let mut elapsed_secs: u64 = 0;
-                    let mut notified_progress = false;
 
                     loop {
                         tokio::time::sleep(tokio::time::Duration::from_secs(4)).await;
@@ -223,10 +222,15 @@ impl ProcessIncomingMessageUseCase {
                             .send_presence_with_session(&heartbeat_chat_jid, PresenceState::Composing, session_role)
                             .await;
 
-                        // After 3 minutes (180 seconds), send in-flight progress note to reassure user
-                        if elapsed_secs >= 180 && !notified_progress {
-                            notified_progress = true;
-                            let progress_note = "Masih proses Aina kerjakan yaa, ditunggu sebentar...".to_string();
+                        // Send in-flight progressive reassurance every 3 minutes (180s, 360s, 540s...)
+                        if elapsed_secs > 0 && elapsed_secs % 180 == 0 {
+                            let minutes = elapsed_secs / 60;
+                            let progress_note = match minutes {
+                                3 => "Masih proses Aina kerjakan yaa, ditunggu sebentar...".to_string(),
+                                6 => "Masih terus Aina proses yaa, tugas ini cukup panjang tapi tetap berjalan lancar...".to_string(),
+                                9 => "Masih intensif Aina proses yaa, sedang menuju tahap akhir...".to_string(),
+                                _ => format!("Masih terus Aina proses yaa (berjalan {} menit), mohon ditunggu sebentar lagi...", minutes),
+                            };
                             let _ = whatsapp
                                 .send_text_with_session(
                                     &heartbeat_chat_jid,
