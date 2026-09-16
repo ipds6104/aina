@@ -19,7 +19,7 @@ agent:
   binary_path: "agy"
   model: "gemini-3.8-flash-medium"
   workspace_dir: "./workspaces/default"
-  timeout_seconds: 300
+  timeout_seconds: 0 # 0 = unlimited execution time (runs as long as needed)
   persona_file: "config/persona.md"
 
 scheduler:

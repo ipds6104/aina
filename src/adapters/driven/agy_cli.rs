@@ -354,10 +354,16 @@ impl AgentEnginePort for AntigravityCliAdapter {
             }
 
             // Add headless execution flags
-            let print_timeout_sec = self.timeout_duration.as_secs().saturating_sub(5).max(30);
+            let is_unlimited = self.timeout_duration.is_zero() || self.timeout_duration.as_secs() >= 86400;
+            let print_timeout_str = if is_unlimited {
+                "24h".to_string()
+            } else {
+                let print_timeout_sec = self.timeout_duration.as_secs().saturating_sub(5).max(30);
+                format!("{}s", print_timeout_sec)
+            };
             cmd.arg("-p").arg(prompt);
             cmd.arg("--output-format").arg("json");
-            cmd.arg("--print-timeout").arg(format!("{}s", print_timeout_sec));
+            cmd.arg("--print-timeout").arg(&print_timeout_str);
             cmd.arg("--dangerously-skip-permissions");
             cmd.arg("--model").arg(&active_model);
 
@@ -376,19 +382,23 @@ impl AgentEnginePort for AntigravityCliAdapter {
             }
 
             debug!(
-                "Executing Antigravity CLI (attempt {}/{}): {:?} (conv: {:?}, model: {}, acc: {:?})",
-                attempt + 1, max_attempts, bin_path, conversation_id, active_model, active_acc.as_ref().map(|a| &a.label)
+                "Executing Antigravity CLI (attempt {}/{}): {:?} (conv: {:?}, model: {}, acc: {:?}, unlimited: {})",
+                attempt + 1, max_attempts, bin_path, conversation_id, active_model, active_acc.as_ref().map(|a| &a.label), is_unlimited
             );
 
-            // Run with timeout
+            // Run process (unlimited or with timeout)
             let child_future = cmd.output();
-            let output = match tokio::time::timeout(self.timeout_duration, child_future).await {
-                Ok(res) => res?,
-                Err(_) => {
-                    anyhow::bail!(
-                        "Antigravity CLI execution timed out after {:?}",
-                        self.timeout_duration
-                    );
+            let output = if is_unlimited {
+                child_future.await?
+            } else {
+                match tokio::time::timeout(self.timeout_duration, child_future).await {
+                    Ok(res) => res?,
+                    Err(_) => {
+                        anyhow::bail!(
+                            "Antigravity CLI execution timed out after {:?}",
+                            self.timeout_duration
+                        );
+                    }
                 }
             };
 

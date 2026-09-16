@@ -3,7 +3,7 @@ use crate::core::domain::{
 };
 use crate::core::ports::{AgentEnginePort, SessionStorePort, WhatsAppPort};
 use std::sync::Arc;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 pub struct ProcessIncomingMessageUseCase {
     session_store: Arc<dyn SessionStorePort>,
@@ -159,20 +159,13 @@ impl ProcessIncomingMessageUseCase {
                     return Ok(());
                 }
 
-                // 2. Send 'typing...' indicator immediately and fast ack reaction
+                // 2. Send 'typing...' indicator immediately
                 if let Err(e) = self
                     .whatsapp
                     .send_presence_with_session(&msg.chat_jid, PresenceState::Composing, msg.session_role)
                     .await
                 {
                     warn!("Failed to send typing presence: {}", e);
-                }
-                if let Err(e) = self
-                    .whatsapp
-                    .send_reaction_with_session(&msg.chat_jid, &msg.id, "👀", msg.session_role)
-                    .await
-                {
-                    debug!("Failed to send receipt reaction to {}: {}", msg.chat_jid, e);
                 }
 
                 // 3. Retrieve conversation ID for this chat
@@ -204,7 +197,7 @@ impl ProcessIncomingMessageUseCase {
                 // 5. Build prompt incorporating persona, organization context, and profiling
                 let prompt = self.persona_engine.build_prompt(&msg, profile.as_ref());
 
-                // Start async presence heartbeat + fast ack timer if execution takes long
+                // Start async presence heartbeat + 3-minute progress check
                 let whatsapp = Arc::clone(&self.whatsapp);
                 let chat_jid = msg.chat_jid.clone();
                 let session_role = msg.session_role;
@@ -214,15 +207,35 @@ impl ProcessIncomingMessageUseCase {
                     ChatType::DirectMessage => None,
                 };
 
-                // Background typing heartbeat: keep "sedang mengetik..." active until response completes
+                // Background typing heartbeat: keep "sedang mengetik..." active and notify at 3 minutes if still running
+                let heartbeat_chat_jid = chat_jid.clone();
+                let heartbeat_quote_id = quote_id.map(|s| s.to_string());
                 let heartbeat_handle = tokio::spawn(async move {
+                    let mut elapsed_secs: u64 = 0;
+                    let mut notified_progress = false;
+
                     loop {
                         tokio::time::sleep(tokio::time::Duration::from_secs(4)).await;
+                        elapsed_secs += 4;
 
                         // Keep typing presence alive on WhatsApp
                         let _ = whatsapp
-                            .send_presence_with_session(&chat_jid, PresenceState::Composing, session_role)
+                            .send_presence_with_session(&heartbeat_chat_jid, PresenceState::Composing, session_role)
                             .await;
+
+                        // After 3 minutes (180 seconds), send in-flight progress note to reassure user
+                        if elapsed_secs >= 180 && !notified_progress {
+                            notified_progress = true;
+                            let progress_note = "Masih proses Aina kerjakan yaa, ditunggu sebentar...".to_string();
+                            let _ = whatsapp
+                                .send_text_with_session(
+                                    &heartbeat_chat_jid,
+                                    &progress_note,
+                                    heartbeat_quote_id.as_deref(),
+                                    session_role,
+                                )
+                                .await;
+                        }
                     }
                 });
 
@@ -240,28 +253,14 @@ impl ProcessIncomingMessageUseCase {
                         heartbeat_handle.abort();
                         error!("Agent engine failed to execute for chat {}: {}", msg.chat_jid, e);
 
-                        // Invalidate conversation ID so a failed/stuck context does not poison future messages
-                        let _ = self.session_store.delete_conversation_id(&msg.chat_jid).await;
-
                         let err_str = e.to_string().to_lowercase();
-                        let is_timeout = err_str.contains("timed out") || err_str.contains("timeout");
                         let is_quota = err_str.contains("503")
                             || err_str.contains("429")
                             || err_str.contains("quota")
                             || err_str.contains("resource has been exhausted")
                             || err_str.contains("rate limit");
 
-                        if is_timeout {
-                            let friendly_msg = if msg.chat_type == ChatType::Group {
-                                "Waduh, tugas ini lumayan besar dan butuh waktu lebih dari biasanya, jadi prosesnya sempat terhenti (timeout). Biar cepat dan rapi, instruksinya bisa dipecah bertahap yaa, nanti Aina kerjakan satu per satu!".to_string()
-                            } else {
-                                "Waduh Bang, tugas ini prosesnya cukup berat/panjang dan sempat kepotong batas waktu (timeout). Boleh dicoba lagi atau dipecah per bagian dulu yaa biar lancar!".to_string()
-                            };
-                            let _ = self
-                                .whatsapp
-                                .send_text_with_session(&msg.chat_jid, &friendly_msg, quote_id, msg.session_role)
-                                .await;
-                        } else if is_quota {
+                        if is_quota {
                             let friendly_quota = "Aduh, kuota akses AI untuk sementara lagi penuh/cooling down nih dari Google. Tunggu sekitar 2-3 menit lagi yaa, nanti Aina langsung bisa proses lagi!".to_string();
                             let _ = self
                                 .whatsapp

@@ -199,14 +199,11 @@ Kamu berinteraksi dengan rekan-rekan kerjamu melalui WhatsApp (baik di dalam gru
       6. Unduh / ekspor spreadsheet ke Excel (.xlsx) lokal: `gdrive_tool drive-download --url "<link_sheet>" --out "workspace/rekap.xlsx" --export-format xlsx`
       7. Bagikan URL yang didapatkan langsung ke rekan kerja di obrolan WhatsApp agar dapat dibuka secara instan!
   - **Penyampaian di WhatsApp**: Berikan ringkasan yang to-the-point mengenai perubahan yang dilakukan, lokasi file di workspace, dan perintah singkat untuk menjalankannya.
-  - **Prinsip Dekomposisi & Eksekusi Bertahap untuk Tugas Skala Besar (Multi-Unit / Multi-Kecamatan / Batch)**:
-    - Bila menerima tugas yang mencakup banyak unit sekaligus (contoh: memeriksa atau membuat tabel/surat untuk seluruh 9 kecamatan, memproses puluhan dokumen, atau ekstraksi massal):
-      * **JANGAN PERNAH** mencoba menyelesaikan seluruh 9 unit/kecamatan secara serentak dalam satu tarikan napas (turn tunggal) jika berisiko melewati batas waktu timeout (300 detik)!
-      * **KERJAKAN SECARA BERTAHAP & PROGRESSIVE**:
-        1. Segera selesaikan batch pertama (misal: 1 atau 2 kecamatan pertama atau format draf awal).
-        2. Tuliskan hasil batch pertama tersebut secara jelas dan rapi di chat (sertakan link spreadsheet atau dokumen hasil batch 1).
-        3. Ajak rekan kerja melanjutkan: *"Untuk Kecamatan Sungai Raya dan Ambawang sudah selesai Aina rekap di sheet ini yaa. Lanjut ke kecamatan berikutnya sekarang?"*
-        4. Dengan pendekatan bertahap ini, hasil langsung dinikmati tim tanpa pernah mengalami timeout atau ghosting!
+  - **Pemberitahuan Tugas Panjang (> 3 Menit)**:
+    - Jika suatu tugas membutuhkan waktu pengerjaan yang panjang (seperti analisis menyeluruh seluruh kecamatan, pengolahan banyak file Google Drive, atau komputasi data besar):
+      * Biarkan proses berjalan sampai tuntas secara menyeluruh. Tidak perlu memecah tugas ke batch-batch kecil kecuali diminta oleh rekan kerja.
+      * Jika proses memakan waktu lebih dari 3 menit, berikan kabar ke ruang obrolan bahwa tugas masih aktif dikerjakan (bisa melalui `wa_tool.py send-text`): *"Masih proses Aina kerjakan yaa, ditunggu sebentar..."*.
+      * Setelah pekerjaan selesai tuntas, sajikan hasil akhirnya secara komprehensif dan rapi di ruang obrolan.
 
 ---
 

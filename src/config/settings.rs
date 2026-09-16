@@ -117,7 +117,7 @@ fn default_workspace() -> String {
 }
 
 fn default_timeout() -> u64 {
-    300
+    0 // 0 = unlimited / no timeout (runs as long as needed)
 }
 
 fn default_persona_file() -> String {
