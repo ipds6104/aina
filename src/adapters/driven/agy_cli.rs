@@ -343,6 +343,7 @@ impl AgentEnginePort for AntigravityCliAdapter {
             };
 
             let mut cmd = Command::new(&bin_path);
+            cmd.kill_on_drop(true);
             cmd.current_dir(&self.workspace_dir);
 
             // Add conversation flag if continuing a session

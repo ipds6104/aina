@@ -3,7 +3,7 @@ use crate::core::domain::{
 };
 use crate::core::ports::{AgentEnginePort, SessionStorePort, WhatsAppPort};
 use std::sync::Arc;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 pub struct ProcessIncomingMessageUseCase {
     session_store: Arc<dyn SessionStorePort>,
@@ -159,13 +159,20 @@ impl ProcessIncomingMessageUseCase {
                     return Ok(());
                 }
 
-                // 2. Send 'typing...' indicator immediately
+                // 2. Send 'typing...' indicator immediately and fast ack reaction
                 if let Err(e) = self
                     .whatsapp
                     .send_presence_with_session(&msg.chat_jid, PresenceState::Composing, msg.session_role)
                     .await
                 {
                     warn!("Failed to send typing presence: {}", e);
+                }
+                if let Err(e) = self
+                    .whatsapp
+                    .send_reaction_with_session(&msg.chat_jid, &msg.id, "👀", msg.session_role)
+                    .await
+                {
+                    debug!("Failed to send receipt reaction to {}: {}", msg.chat_jid, e);
                 }
 
                 // 3. Retrieve conversation ID for this chat
@@ -232,8 +239,36 @@ impl ProcessIncomingMessageUseCase {
                     Err(e) => {
                         heartbeat_handle.abort();
                         error!("Agent engine failed to execute for chat {}: {}", msg.chat_jid, e);
-                        // Do NOT send robotic/technical error messages ("Maaf, terjadi kesalahan...") to WhatsApp!
-                        // Silent logging prevents confusion, embarrassment, and conversational error loops.
+
+                        // Invalidate conversation ID so a failed/stuck context does not poison future messages
+                        let _ = self.session_store.delete_conversation_id(&msg.chat_jid).await;
+
+                        let err_str = e.to_string().to_lowercase();
+                        let is_timeout = err_str.contains("timed out") || err_str.contains("timeout");
+                        let is_quota = err_str.contains("503")
+                            || err_str.contains("429")
+                            || err_str.contains("quota")
+                            || err_str.contains("resource has been exhausted")
+                            || err_str.contains("rate limit");
+
+                        if is_timeout {
+                            let friendly_msg = if msg.chat_type == ChatType::Group {
+                                "Waduh, tugas ini lumayan besar dan butuh waktu lebih dari biasanya, jadi prosesnya sempat terhenti (timeout). Biar cepat dan rapi, instruksinya bisa dipecah bertahap yaa, nanti Aina kerjakan satu per satu!".to_string()
+                            } else {
+                                "Waduh Bang, tugas ini prosesnya cukup berat/panjang dan sempat kepotong batas waktu (timeout). Boleh dicoba lagi atau dipecah per bagian dulu yaa biar lancar!".to_string()
+                            };
+                            let _ = self
+                                .whatsapp
+                                .send_text_with_session(&msg.chat_jid, &friendly_msg, quote_id, msg.session_role)
+                                .await;
+                        } else if is_quota {
+                            let friendly_quota = "Aduh, kuota akses AI untuk sementara lagi penuh/cooling down nih dari Google. Tunggu sekitar 2-3 menit lagi yaa, nanti Aina langsung bisa proses lagi!".to_string();
+                            let _ = self
+                                .whatsapp
+                                .send_text_with_session(&msg.chat_jid, &friendly_quota, quote_id, msg.session_role)
+                                .await;
+                        }
+
                         return Err(e);
                     }
                 };
