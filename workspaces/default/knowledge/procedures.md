@@ -1,29 +1,29 @@
-# 📋 Standar Operasional & Alur Kerja Kantor (SOP & Playbook)
+# 📋 Standar Operasional & Alur Kerja (SOP & Playbook)
 
-## 1. Peta Sumber Data Resmi & Routing Cepat (Canonical Data Routing)
+## 1. Peta Sumber Data & Routing Cepat (Canonical Data Routing Pattern)
 
-Agar proses pencarian data tidak tersesat atau memakan waktu puluhan menit, selalu gunakan jalur resmi berikut:
+Agar proses pencarian data tidak tersesat atau memakan waktu puluhan menit, ikuti prinsip routing baku berikut:
 
-| Kategori Permintaan | Sumber Data Resmi | Tool / Skrip Eksekusi | Larangan / Catatan Kinerja |
+| Kategori Data yang Dicari | Karakteristik Sumber Data | Tool / Skrip Eksekusi | Larangan / Anti-Pattern Kinerja |
 | :--- | :--- | :--- | :--- |
-| **Sensus Ekonomi (SE / SE2026)**<br>(Nama ART, usaha, koordinat, link GMaps, SLS) | **SurrealDB (`se2026`)**<br>Tabel `nested_dtsen_var` & `assignment` | Skrip SurrealDB (`se2026_model.py`) / query langsung ke SurrealDB | ⚠️ **DILARANG KERAS** mencari di Google Drive atau membedah file PDF/DOCX! Data sensus lengkap ada di SurrealDB (hasil dalam **0,4 detik**). Google Drive hanya berisi file administrasi perjalanan dinas. |
-| **Monitoring WB2**<br>(Progress PML, target SLS) | **Google Sheets WB2** | `gdrive_tool sheets-read` (Tab Perpml) / format `htmlembed` | Untuk tangkapan layar bersih tanpa toolbar rumus, gunakan format embed. |
-| **Dokumen / Surat Tugas / SK** | **Google Drive Tim** | `gdrive_tool drive-list` / `drive-download` | Khusus dokumen PDF/Word/Excel pendukung administrasi kantor. |
+| **Data Tabular / Entitas / Transaksional**<br>(Data survei, sensus, log, metrik kuantitatif) | **Database Analitik Terstruktur**<br>(DuckDB, SQLite WAL, atau database analitik terpasang) | Kueri SQL terstruktur / skrip model data | ⚠️ **DILARANG KERAS** mencari data entitas/kuantitatif di Google Drive atau membedah file dokumen PDF/DOCX! Data terstruktur harus selalu ditarik dari database resmi (hasil instan sub-detik). |
+| **Data Spreadsheet Operasional**<br>(Monitoring harian, form input) | **Spreadsheet Resmi / Cloud Sheets** | Helper spreadsheet resmi (`gdrive_tool sheets-read`) | Gunakan format embed bersih jika dibutuhkan screenshot. |
+| **Dokumen Naratif / Surat / Administrasi** | **Penyimpanan Dokumen Cloud** | Tool penyimpanan berkas (`gdrive_tool drive-list`) | Khusus dokumen PDF/Word/surat keputusan pendukung administrasi. |
 
 ---
 
 ## 2. Standar Keamanan Akses Data (`scripts/data_guard.py`)
 
-Sebelum menyajikan data sensitif (misal data SE2026, data kepegawaian, data kemiskinan perorangan):
+Sebelum menyajikan data yang diklasifikasikan sebagai sensitif (`INTERNAL`, `RESTRICTED`, atau `CONFIDENTIAL`):
 1. **Wajib Cek Akses**: Jalankan verifikasi deterministik:
    ```bash
    python3 scripts/data_guard.py check --dataset <slug> --sender "<sender_jid>" --chat "<chat_jid>"
    ```
 2. **Jika Hasil `DENY`**:
    - Dilarang membocorkan data fisik atau ringkasannya sedikitpun.
-   - Arahkan pemohon untuk konfirmasi langsung ke Bang Ihza (Admin).
+   - Arahkan pemohon untuk konfirmasi langsung ke Administrator / Penanggung Jawab Dataset (Approver).
    - Tawarkan pembuatan tiket izin: `python3 scripts/data_guard.py request-access --dataset <slug> --sender "<sender_jid>" --reason "<alasan>"`.
-3. **Jika Hasil `ALLOW`**: Eksekusi kueri ke database resmi sesuai hak akses.
+3. **Jika Hasil `ALLOW`**: Eksekusi kueri ke database resmi sesuai hak akses yang diberikan.
 
 ---
 

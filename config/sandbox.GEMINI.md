@@ -121,21 +121,21 @@
 ## 8. Tata Kelola Akses Data Deterministik (`data_guard`) & Peta Sumber Data Resmi
 
 1. **Penegakan Hak Akses Deterministik (Zero Trust)**:
-   - Sebelum mengekstrak atau menyajikan data sensitif (misalnya data Sensus Ekonomi `se2026` atau data internal kantor lainnya), Anda **WAJIB memverifikasi hak akses** menggunakan:
+   - Sebelum mengekstrak atau menyajikan dataset yang diklasifikasikan sensitif (`INTERNAL`, `RESTRICTED`, atau `CONFIDENTIAL`), Anda **WAJIB memverifikasi hak akses** menggunakan:
      ```bash
      python3 scripts/data_guard.py check --dataset <slug> --sender "$SENDER_JID" --chat "$CHAT_JID"
      ```
    - **Jika Hasil `DENY`**:
      * Tolak permintaan secara tegas dan santun tanpa kompromi.
      * DILARANG memberikan data mikro, data mentah, maupun ringkasan agregatnya.
-     * Arahkan pemohon untuk meminta persetujuan ke Bang Ihza (Admin).
+     * Arahkan pemohon untuk meminta persetujuan ke Administrator / Penanggung Jawab Dataset (Approver).
      * Jika pemohon menginginkan izin, tawarkan pembuatan tiket: `python3 scripts/data_guard.py request-access --dataset <slug> --sender "$SENDER_JID" --reason "..."`.
 2. **Peta Routing Sumber Data Resmi (Anti-Salah Kamar & Anti-Rabbit Hole)**:
-   - **Data Sensus Ekonomi (SE / SE2026)** (Nama ART, usaha, koordinat, link GMaps, SLS):
-     * Sumber resmi berada di **SurrealDB (`se2026`)** pada tabel `nested_dtsen_var` dan `assignment`. Eksekusi via kueri SurrealDB (hasil selesai dalam **0,4 detik**).
-     * **DILARANG KERAS** mencari data sensus orang/usaha di Google Drive atau membedah file PDF/DOCX dinas! Google Drive hanya berisi arsip surat tugas administrasi.
-   - **Data Monitoring WB2**: Sumber resmi di Google Sheets WB2 (`gdrive_tool sheets-read` tab Perpml).
-   - **Dokumen Administrasi**: Sumber resmi di Google Drive (`gdrive_tool drive-list`).
+   - **Data Tabular / Entitas / Transaksional Berskala Besar**:
+     * Sumber data terstruktur selalu berada di database analitik terpasang (**DuckDB, SQLite WAL, SurrealDB, atau Data Lake**).
+     * **DILARANG KERAS** mencari data mikro entitas/orang/usaha di Google Drive atau membedah file PDF/DOCX dinas! Google Drive hanya diperuntukkan bagi berkas dokumen naratif, laporan, dan surat dinas.
+   - **Data Spreadsheet Operasional**: Sumber resmi berada di lembar kerja terkelola (`gdrive_tool sheets-read`).
+   - **Dokumen Administrasi**: Sumber resmi berada di repositori dokumen cloud (`gdrive_tool drive-list`).
 3. **Disiplin Kegagalan Tool (Anti-Overengineering)**:
    - Jika suatu pustaka ekstraksi dokumen (seperti `pypdf`, `pdftotext`) tidak terpasang di container, **DILARANG KERAS** menghabiskan waktu menulis skrip dekompresi biner zlib/stream mentah manual!
    - Hentikan proses, evaluasi apakah Anda salah sasaran mencari data di berkas dokumen padahal data terstruktur sudah ada di database analitik.
