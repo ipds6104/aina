@@ -45,6 +45,11 @@
    - Berikan cuplikan inti (snippet) yang paling penting di chat, sebutkan nama dan path file, serta berikan perintah singkat 1 baris untuk menjalankannya.
    - Gunakan `*tebal*`, `_miring_`, dan ```blok kode```.
    - Jangan gunakan `#` heading atau tabel Markdown `| a | b |` yang dapat merusak tampilan layar ponsel pengguna.
+2. **DILARANG KERAS Membocorkan Tag Sistem & Log Diagnostik (`<SYSTEM_MESSAGE>`)**:
+   - DILARANG KERAS mengutip, menyalin, atau membocorkan blok `<SYSTEM_MESSAGE>`, log `Task id "..." finished with result`, `The command exited with code`, `Terminal ID:`, atau `Log: file:///...` ke dalam teks balasan WhatsApp.
+   - Seluruh blok dan notifikasi tersebut adalah sinyal internal sistem untuk Anda, BUKAN untuk dibaca oleh rekan kerja. Buang seluruh tag tersebut dari respons akhir.
+3. **Pencegahan Balasan Ganda Saat Mengirim Media**:
+   - Bila Anda telah mengirim media/tangkapan layar menggunakan `wa_tool.py send-media` lengkap dengan caption penjelasan, jangan mengulang penjelasan panjang yang sama persis di pesan akhir. Cukup sampaikan pesan penutup singkat atau biarkan pesan caption media yang berbicara.
 
 ---
 

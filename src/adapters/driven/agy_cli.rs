@@ -571,12 +571,15 @@ impl AgentEnginePort for AntigravityCliAdapter {
 }
 
 /// Sanitizes Antigravity CLI agent output by stripping out intermediate tool-waiting
-/// logs and background task status lines that leak into multi-step JSON responses.
+/// logs, <SYSTEM_MESSAGE> blocks, and background task status lines that leak into multi-step JSON responses.
 pub fn sanitize_agent_response(raw: &str) -> String {
+    // 1. First, strip multi-line <SYSTEM_MESSAGE> blocks and system headers
+    let stripped_system_blocks = strip_system_message_blocks(raw);
+
     let mut cleaned_lines = Vec::new();
     let mut skipping_header = true;
 
-    for line in raw.lines() {
+    for line in stripped_system_blocks.lines() {
         let trimmed = line.trim();
 
         let is_intermediate = is_intermediate_agent_status(trimmed);
@@ -601,6 +604,53 @@ pub fn sanitize_agent_response(raw: &str) -> String {
     } else {
         result
     }
+}
+
+fn strip_system_message_blocks(text: &str) -> String {
+    let mut result = String::with_capacity(text.len());
+    let mut cursor = 0;
+
+    while cursor < text.len() {
+        let slice = &text[cursor..];
+
+        // Identify starting point of system message block
+        let start_offset = if let Some(pos) = slice.find("The following is a <SYSTEM_MESSAGE>") {
+            Some(pos)
+        } else if let Some(pos) = slice.find("<SYSTEM_MESSAGE>") {
+            Some(pos)
+        } else if let Some(pos) = slice.find("<SYSTEM_MESSAGE") {
+            Some(pos)
+        } else {
+            None
+        };
+
+        if let Some(start_pos) = start_offset {
+            let abs_start = cursor + start_pos;
+            result.push_str(&text[cursor..abs_start]);
+
+            let after_start = &text[abs_start..];
+            // Look for matching end tag: </SYSTEM_MESSAGE>} or </SYSTEM_MESSAGE>
+            let end_offset = if let Some(pos) = after_start.find("</SYSTEM_MESSAGE>}") {
+                Some(pos + "</SYSTEM_MESSAGE>}".len())
+            } else if let Some(pos) = after_start.find("</SYSTEM_MESSAGE>") {
+                Some(pos + "</SYSTEM_MESSAGE>".len())
+            } else {
+                None
+            };
+
+            if let Some(end_len) = end_offset {
+                cursor = abs_start + end_len;
+            } else {
+                // If no closing tag found, skip the rest of this system message block
+                break;
+            }
+        } else {
+            result.push_str(slice);
+            break;
+        }
+    }
+
+    result
 }
 
 fn is_intermediate_agent_status(line: &str) -> bool {
@@ -630,8 +680,18 @@ fn is_intermediate_agent_status(line: &str) -> bool {
         return true;
     }
 
-    // 4. Background task completion logs
+    // 4. Background task completion logs & system artifacts
     if lower.starts_with("task id \"") && lower.contains("\" finished with result") {
+        return true;
+    }
+    if lower.starts_with("the command exited with code")
+        || lower.starts_with("terminal id:")
+        || lower.starts_with("log: file:///")
+        || lower.starts_with("[message] timestamp=")
+        || lower.starts_with("the following is a <system_message>")
+        || lower.starts_with("<system_message")
+        || lower.starts_with("</system_message")
+    {
         return true;
     }
 
@@ -675,5 +735,33 @@ Bisa bangeett, Bang Ihzaa! Ini solusi yang pas banget supaya data hasil konfirma
         let raw = "Kami sedang menunggu konfirmasi resmi dari BPS terkait jadwal rilis KCDA.";
         let cleaned = sanitize_agent_response(raw);
         assert_eq!(cleaned, raw);
+    }
+
+    #[test]
+    fn test_sanitize_agent_response_strips_system_message_blocks() {
+        let raw = r#"The following is a <SYSTEM_MESSAGE> not actually sent by the user. It is provided by the system as important information to pay attention to.
+
+<SYSTEM_MESSAGE>
+[Message] timestamp=2026-09-16T13:17:10Z sender=f222b011-5303-48b6-90c7-edf593c884b5/task-1974 priority=MESSAGE_PRIORITY_HIGH content=Task id "f222b011-5303-48b6-90c7-edf593c884b5/task-1974" finished with result:
+
+The command exited with code 0.
+Output:
+-rw-r--r-- 1 root root 224855 Sep 16 20:17 /tmp/monitoring_pml_wb2.png
+
+Terminal ID: term_chrome
+
+Log: file:///root/.gemini/antigravity-cli/brain/f222b011-5303-48b6-90c7-edf593c884b5/.system_generated/tasks/task-1974.log
+</SYSTEM_MESSAGE>}
+Ini yaa Bang Ihza @Ihza Karunia! Gambarnya barusan sudah langsung Aina kirimkan ke atas.
+
+Tangkapan layar tersebut diambil langsung menggunakan browser headless bawaan pada tab *Perpml*."#;
+
+        let cleaned = sanitize_agent_response(raw);
+        assert!(!cleaned.contains("<SYSTEM_MESSAGE>"));
+        assert!(!cleaned.contains("The following is a <SYSTEM_MESSAGE>"));
+        assert!(!cleaned.contains("task-1974"));
+        assert!(!cleaned.contains("term_chrome"));
+        assert!(cleaned.starts_with("Ini yaa Bang Ihza @Ihza Karunia!"));
+        assert!(cleaned.contains("Tangkapan layar tersebut diambil langsung"));
     }
 }
