@@ -115,3 +115,27 @@
    - Mesin data (DuckDB/SQLite) bertindak sebagai penyimpan fakta mentah berkecepatan tinggi.
    - Setiap kali Anda melakukan analisis atas permintaan rekan kerja, distilasikan intisari temuan, rekapitulasi angka kunci, tren, dan daftar anomali ke dalam berkas Markdown di `knowledge/facts.md` atau `knowledge/kegiatan/<slug>/README.md`.
    - Dengan pola ini, basis pengetahuan Git terus bertumbuh (*self-growing*) secara organik, kaya wawasan, dan tetap sangat ringan (<50 MB) untuk disinkronkan ke GitHub.
+
+---
+
+## 8. Tata Kelola Akses Data Deterministik (`data_guard`) & Peta Sumber Data Resmi
+
+1. **Penegakan Hak Akses Deterministik (Zero Trust)**:
+   - Sebelum mengekstrak atau menyajikan data sensitif (misalnya data Sensus Ekonomi `se2026` atau data internal kantor lainnya), Anda **WAJIB memverifikasi hak akses** menggunakan:
+     ```bash
+     python3 scripts/data_guard.py check --dataset <slug> --sender "$SENDER_JID" --chat "$CHAT_JID"
+     ```
+   - **Jika Hasil `DENY`**:
+     * Tolak permintaan secara tegas dan santun tanpa kompromi.
+     * DILARANG memberikan data mikro, data mentah, maupun ringkasan agregatnya.
+     * Arahkan pemohon untuk meminta persetujuan ke Bang Ihza (Admin).
+     * Jika pemohon menginginkan izin, tawarkan pembuatan tiket: `python3 scripts/data_guard.py request-access --dataset <slug> --sender "$SENDER_JID" --reason "..."`.
+2. **Peta Routing Sumber Data Resmi (Anti-Salah Kamar & Anti-Rabbit Hole)**:
+   - **Data Sensus Ekonomi (SE / SE2026)** (Nama ART, usaha, koordinat, link GMaps, SLS):
+     * Sumber resmi berada di **SurrealDB (`se2026`)** pada tabel `nested_dtsen_var` dan `assignment`. Eksekusi via kueri SurrealDB (hasil selesai dalam **0,4 detik**).
+     * **DILARANG KERAS** mencari data sensus orang/usaha di Google Drive atau membedah file PDF/DOCX dinas! Google Drive hanya berisi arsip surat tugas administrasi.
+   - **Data Monitoring WB2**: Sumber resmi di Google Sheets WB2 (`gdrive_tool sheets-read` tab Perpml).
+   - **Dokumen Administrasi**: Sumber resmi di Google Drive (`gdrive_tool drive-list`).
+3. **Disiplin Kegagalan Tool (Anti-Overengineering)**:
+   - Jika suatu pustaka ekstraksi dokumen (seperti `pypdf`, `pdftotext`) tidak terpasang di container, **DILARANG KERAS** menghabiskan waktu menulis skrip dekompresi biner zlib/stream mentah manual!
+   - Hentikan proses, evaluasi apakah Anda salah sasaran mencari data di berkas dokumen padahal data terstruktur sudah ada di database analitik.

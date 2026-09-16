@@ -1,13 +1,13 @@
 # 📚 Indeks Terpadu Knowledge Base: DEFAULT
 
-> Terakhir dirapikan: **2026-09-16 21:23 WIB** | Berkas Dokumen: **2** | Kegiatan Aktif: **1** | Agenda Tertunda: **2**
+> Terakhir dirapikan: **2026-09-16 23:17 WIB** | Berkas Dokumen: **2** | Kegiatan Aktif: **1** | Agenda Tertunda: **2**
 
 ---
 
 ## 📑 1. Pengetahuan Umum & Pedoman Dasar (Universal Knowledge)
 
 - [**💡 Fakta & Parameter Umum: Workspace Default**](facts.md) — `6 baris`
-- [**📋 Standar Operasional & Alur Kerja Default**](procedures.md) — `4 baris`
+- [**📋 Standar Operasional & Alur Kerja Kantor (SOP & Playbook)**](procedures.md) — `42 baris`
 
 ---
 
