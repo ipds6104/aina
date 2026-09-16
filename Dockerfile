@@ -28,7 +28,7 @@ FROM debian:bookworm-slim
 
 WORKDIR /app
 
-# Install runtime utilities (essential for agentic coding)
+# Install runtime utilities (essential for agentic coding & headless browser)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
@@ -39,6 +39,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     python3-requests \
     sqlite3 \
+    chromium \
+    fonts-liberation \
+    fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*
 
 # Install official Google Antigravity CLI (agy)

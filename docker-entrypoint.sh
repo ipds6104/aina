@@ -77,6 +77,11 @@ if [ -f "/app/config/sandbox.GEMINI.md" ]; then
     cp /app/config/sandbox.GEMINI.md "${AGENT_WORKSPACE:-/app/workspaces/default}/GEMINI.md" 2>/dev/null || true
 fi
 
+# Ensure google-chrome alias is available for agy headless browser
+if [ ! -x "/usr/bin/google-chrome" ] && [ -x "/usr/bin/chromium" ]; then
+    ln -s /usr/bin/chromium /usr/bin/google-chrome 2>/dev/null || true
+fi
+
 # Make sure agy is in PATH
 export PATH="/root/.local/bin:/usr/local/bin:$PATH"
 
