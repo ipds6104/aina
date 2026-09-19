@@ -36,9 +36,14 @@
 - **Tool Resmi**: `python3 skills/vision-document-extractor/scripts/doc_extract.py` (atau `/usr/local/bin/agy-doc-extract`)
 - **Skill Terkait**: `skills/vision-document-extractor`
 - **Output Default**: `output/doc_extract/`
-- **Aturan Eksekusi**:
+- **Aturan Eksekusi & Kesadaran Konkurensi**:
   - Selalu gunakan skrip ekstraktor di atas untuk berkas `.pdf`, invoice, struk belanja, bagan, atau gambar dokumen teks rapat.
   - Dilarang mencoba membaca biner PDF mentah menggunakan `view_file` atau `cat` secara langsung.
+  - **Konkurensi Paralel Cepat**: Gunakan flag `-c 8` atau `-c 16` untuk dokumen multi-halaman agar semua halaman diproses serentak via 9Router (selesai dalam hitungan 2–3 detik).
+  - **Auto-Restart / Retry**: Skrip otomatis melakukan retry 3x dengan exponential backoff jika terjadi gangguan jaringan sesaat.
+  - **Filter Halaman**: Bila pengguna hanya menanyakan halaman tertentu, gunakan `-p <halaman>` (misal `-p 3-5`).
+  - **Konversi CSV**: Bila pengguna minta tabel diubah ke file CSV/Excel, tambahkan `--csv`, lalu kirimkan file `output/doc_extract/*.csv` ke pengguna via `python3 skills/whatsmeow/scripts/wa_tool.py send-media`.
   - Setelah ekstraksi selesai, baca file `output/doc_extract/extracted_content.md` untuk menjawab pengguna.
+
 
 

@@ -213,10 +213,15 @@ impl PersonaEngine {
                            JALANKAN EKSTRAKSI DOKUMEN melalui perintah CLI:\n\
                            `python3 skills/vision-document-extractor/scripts/doc_extract.py \"{path}\" -o output/doc_extract/`\n\
                            (atau `agy-doc-extract \"{path}\" -o output/doc_extract/`).\n\
-                           Tool ini akan mengekstraksi teks, rumus, dan tabel kompleks (termasuk multi-halaman & borderless) ke file `output/doc_extract/extracted_content.md` secara 100% presisi dengan beban CPU lokal 0%.\n\
-                         - BACA HASIL & JAWAB: Buka file markdown hasil ekstraksi tersebut untuk menjawab pertanyaan atau merangkum isi dokumen untuk pengguna.\n\
+                         - KESADARAN KONKURENSI PARALEL & RESILIENSI AUTO-RETRY:\n\
+                           * Tool ini ditenagai 9Router load-balancer dengan rotasi 10 akun CodeBuddy dan memproses halaman secara PARALEL SERENTAK (default 4 worker, dukung `-c 8` atau `-c 16` untuk kecepatan kilat ~2-3 detik per dokumen multi-halaman).\n\
+                           * Dilengkapi fitur AUTO-RESTART/RETRY otomatis (`-r 3`) dengan exponential backoff jika terjadi gangguan transient jaringan.\n\
+                           * Bila pengguna hanya menanyakan halaman tertentu: gunakan filter halaman `-p <halaman>` (misal: `-p 4-6`) agar super hemat dan instan.\n\
+                           * Bila pengguna meminta konversi tabel ke file CSV/Excel: tambahkan flag `--csv`, lalu kirimkan berkas `output/doc_extract/*.csv` ke chat WhatsApp via `wa_tool.py send-media`.\n\
+                         - BACA HASIL & JAWAB: Buka file markdown hasil ekstraksi `output/doc_extract/extracted_content.md` untuk menjawab pesan pengguna.\n\
                          - ETIKA FORMAT WHATSAPP: Dilarang menyajikan format tabel Markdown (`| a | b |`) ke chat WhatsApp. Ganti dengan poin-poin bullet (`•`) dan teks tebal (`*Rp xxx*`) agar rapi di layar ponsel.\n"
                     )
+
                 } else {
                     format!(
                         "\n---\n[Lampiran Berkas Media / Gambar dari Pengguna]:\n\
