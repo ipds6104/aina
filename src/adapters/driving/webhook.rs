@@ -672,20 +672,7 @@ struct AddTokenApiRequest {
 
 async fn api_get_accounts_handler(
     State(state): State<Arc<WebhookServerState>>,
-    headers: HeaderMap,
-    Query(query): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    let key_candidate = query.get("key").or_else(|| query.get("api_key")).map(|s| s.as_str());
-    if !is_api_authorized(&headers, key_candidate, &state) {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(json!({
-                "success": false,
-                "error": "Akses ditolak. Berikan API Key atau Admin Key yang valid."
-            })),
-        );
-    }
-
     let accounts = state.agent_engine.get_account_pool_status().await;
     (
         StatusCode::OK,
@@ -2043,6 +2030,11 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
 
                 <!-- FORM TAMBAH AKUN CADANGAN (EXPANDABLE) -->
                 <div id="add-account-form" style="display: none; background: rgba(0,0,0,0.2); border: 1px dashed rgba(255,255,255,0.15); border-radius: 8px; padding: 14px; margin-top: 10px;">
+                    <div style="margin-bottom: 10px;">
+                        <label class="form-label" style="font-size: 0.85rem;">Admin Key / WHATSMEOW_API_KEY:</label>
+                        <input id="add-token-key" class="form-input" type="password" placeholder="Masukkan WHATSMEOW_API_KEY atau ADMIN_KEY Anda..." style="font-size: 0.85rem; margin-bottom: 4px;" />
+                        <small style="color: #94a3b8; font-size: 0.75rem;">Kunci autentikasi server Anda (contoh: nilai <code>WHATSMEOW_API_KEY</code> dari .env)</small>
+                    </div>
                     <label class="form-label" style="font-size: 0.85rem;">Tempel OAuth Token Akun Baru (JSON dari file antigravity-oauth-token):</label>
                     <textarea id="add-token-input" class="form-input" style="height: 70px; font-family: monospace; font-size: 0.78rem;" placeholder='{{"token": "..."}}'></textarea>
                     <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px;">
@@ -2686,17 +2678,33 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
         function toggleAddAccountForm() {{
             const form = document.getElementById('add-account-form');
             if (form) {{
-                form.style.display = form.style.display === 'none' ? 'block' : 'none';
+                const isOpening = form.style.display === 'none';
+                form.style.display = isOpening ? 'block' : 'none';
+                if (isOpening) {{
+                    const keyInput = document.getElementById('add-token-key');
+                    if (keyInput && !keyInput.value) {{
+                        keyInput.value = localStorage.getItem('aina_admin_key') || '';
+                    }}
+                }}
             }}
         }}
 
         async function submitAddAccount() {{
             const tokenInput = document.getElementById('add-token-input');
+            const keyInput = document.getElementById('add-token-key');
             const btn = document.getElementById('add-token-btn');
             const alertEl = document.getElementById('add-token-alert');
-            const key = localStorage.getItem('aina_admin_key') || '';
 
+            let key = (keyInput ? keyInput.value.trim() : '') || localStorage.getItem('aina_admin_key') || '';
             const tokenVal = tokenInput.value.trim();
+
+            if (!key) {{
+                alertEl.innerText = 'Harap masukkan Admin Key atau WHATSMEOW_API_KEY Anda pada kolom di atas.';
+                alertEl.style.color = '#ef4444';
+                alertEl.style.display = 'block';
+                return;
+            }}
+
             if (!tokenVal) {{
                 alertEl.innerText = 'Harap masukkan string JSON token OAuth.';
                 alertEl.style.color = '#ef4444';
@@ -2716,6 +2724,7 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
                 }});
                 const data = await res.json();
                 if (res.ok && data.success) {{
+                    localStorage.setItem('aina_admin_key', key);
                     alertEl.innerText = '✅ ' + data.message;
                     alertEl.style.color = '#10b981';
                     alertEl.style.display = 'block';
