@@ -198,13 +198,37 @@ impl PersonaEngine {
         let media_context = if msg.has_media {
             if let Some(path) = &msg.media_path {
                 let m_type = msg.media_type.as_deref().unwrap_or("image");
-                format!(
-                    "\n---\n[Lampiran Berkas Media / Gambar dari Pengguna]:\n\
-                     - Tipe Media: {m_type}\n\
-                     - Lokasi File Lokal: {path}\n\
-                     - INSTRUKSI ANALISIS GAMBAR: Pengguna mengirimkan berkas media di atas. Buka dan periksa gambar tersebut menggunakan tool `view_file` pada path di atas untuk melihat detail visual (seperti teks OCR, struk, angka tabel, grafik, atau isi foto). Tanggapi pesan pengguna berdasarkan hasil pengamatan gambar tersebut.\n\
-                     - RETENSI MEMORI PENCARIAN (.txt): Sertakan transkripsi atau ringkasan poin-poin teks penting dari gambar tersebut dalam jawaban Anda agar tersimpan permanen di riwayat arsip obrolan dan mudah dicari di kemudian hari.\n"
-                )
+                let path_lower = path.to_lowercase();
+                let is_document_or_pdf = path_lower.ends_with(".pdf")
+                    || path_lower.ends_with(".docx")
+                    || path_lower.ends_with(".xlsx")
+                    || m_type == "document";
+
+                if is_document_or_pdf {
+                    format!(
+                        "\n---\n[Lampiran Berkas Dokumen / PDF dari Pengguna WhatsApp]:\n\
+                         - Tipe Media: {m_type}\n\
+                         - Lokasi File Lokal: {path}\n\
+                         - INSTRUKSI PEMROSESAN DOKUMEN / PDF: Berkas ini adalah dokumen/PDF. JANGAN mencoba membaca file mentah dengan `view_file` biasa.\n\
+                           JALANKAN EKSTRAKSI DOKUMEN melalui perintah CLI:\n\
+                           `python3 skills/vision-document-extractor/scripts/doc_extract.py \"{path}\" -o output/doc_extract/`\n\
+                           (atau `agy-doc-extract \"{path}\" -o output/doc_extract/`).\n\
+                           Tool ini akan mengekstraksi teks, rumus, dan tabel kompleks (termasuk multi-halaman & borderless) ke file `output/doc_extract/extracted_content.md` secara 100% presisi dengan beban CPU lokal 0%.\n\
+                         - BACA HASIL & JAWAB: Buka file markdown hasil ekstraksi tersebut untuk menjawab pertanyaan atau merangkum isi dokumen untuk pengguna.\n\
+                         - ETIKA FORMAT WHATSAPP: Dilarang menyajikan format tabel Markdown (`| a | b |`) ke chat WhatsApp. Ganti dengan poin-poin bullet (`•`) dan teks tebal (`*Rp xxx*`) agar rapi di layar ponsel.\n"
+                    )
+                } else {
+                    format!(
+                        "\n---\n[Lampiran Berkas Media / Gambar dari Pengguna]:\n\
+                         - Tipe Media: {m_type}\n\
+                         - Lokasi File Lokal: {path}\n\
+                         - INSTRUKSI ANALISIS GAMBAR / DOKUMEN:\n\
+                           * Bila berupa foto objek visual umum: Buka dan periksa dengan tool `view_file` pada path di atas.\n\
+                           * Bila berupa struk belanja, invoice, bagan/tabel, atau pindaian dokumen (scanned doc): Jalankan `python3 skills/vision-document-extractor/scripts/doc_extract.py \"{path}\" -o output/doc_extract/` untuk ekstraksi teks OCR & struktur tabel berpresisi tinggi.\n\
+                         - RETENSI MEMORI PENCARIAN (.txt): Sertakan ringkasan poin-poin teks penting dalam jawaban Anda agar tersimpan permanen di riwayat arsip obrolan.\n\
+                         - ETIKA FORMAT WHATSAPP: Hindari format tabel Markdown mentah (`| a | b |`), sajikan dalam bentuk poin-poin bullet (`•`) rapi.\n"
+                    )
+                }
             } else {
                 format!(
                     "\n---\n[Lampiran Media]: Pengguna melampirkan media ({}), namun berkas sedang tidak tersedia secara lokal.\n",
@@ -214,6 +238,7 @@ impl PersonaEngine {
         } else {
             String::new()
         };
+
 
         format!(
             "{persona}\n\n\

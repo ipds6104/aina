@@ -32,3 +32,13 @@
   3. Setelah pengguna membalas konfirmasi sudah klik Authorize, jalankan `aina gh-poll` untuk menyelesaikan otorisasi.
   4. Pengguna juga dapat menggunakan Personal Access Token (PAT) via `aina gh-login <pat>`.
 
+## 5. Ekstraksi Dokumen & PDF (Vision VLM Engine)
+- **Tool Resmi**: `python3 skills/vision-document-extractor/scripts/doc_extract.py` (atau `/usr/local/bin/agy-doc-extract`)
+- **Skill Terkait**: `skills/vision-document-extractor`
+- **Output Default**: `output/doc_extract/`
+- **Aturan Eksekusi**:
+  - Selalu gunakan skrip ekstraktor di atas untuk berkas `.pdf`, invoice, struk belanja, bagan, atau gambar dokumen teks rapat.
+  - Dilarang mencoba membaca biner PDF mentah menggunakan `view_file` atau `cat` secara langsung.
+  - Setelah ekstraksi selesai, baca file `output/doc_extract/extracted_content.md` untuk menjawab pengguna.
+
+

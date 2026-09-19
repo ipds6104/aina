@@ -39,10 +39,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     python3-requests \
     sqlite3 \
+    poppler-utils \
     chromium \
     fonts-liberation \
     fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*
+
 
 # Install official Google Antigravity CLI (agy)
 RUN curl -fsSL https://antigravity.google/cli/install.sh | bash && \

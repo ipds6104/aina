@@ -58,7 +58,10 @@ if [ -d "/app/skills" ]; then
     chmod -R +x "${AGENT_WORKSPACE:-/app/workspaces/default}/skills"/*/scripts 2>/dev/null || true
     ln -sf /app/skills/whatsmeow/scripts/wa_tool.py /usr/local/bin/wa_tool 2>/dev/null || true
     ln -sf /app/skills/gdrive/scripts/gdrive_tool.py /usr/local/bin/gdrive_tool 2>/dev/null || true
+    ln -sf /app/skills/vision-document-extractor/scripts/doc_extract.py /usr/local/bin/agy-doc-extract 2>/dev/null || true
+    ln -sf /app/skills/vision-document-extractor/scripts/doc_extract.py /usr/local/bin/doc_extract 2>/dev/null || true
 fi
+
 
 # Optional Google OAuth client secrets or token from environment variable
 if [ -n "$GOOGLE_CLIENT_SECRETS_JSON" ] && [ ! -f /app/config/client_secrets.json ]; then
