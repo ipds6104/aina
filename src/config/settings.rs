@@ -202,7 +202,39 @@ impl Default for AppConfig {
 }
 
 impl AppConfig {
+    pub fn load_dotenv() {
+        let candidates = [Path::new(".env"), Path::new("../.env")];
+        for path in &candidates {
+            if let Ok(content) = fs::read_to_string(path) {
+                for line in content.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() || trimmed.starts_with('#') {
+                        continue;
+                    }
+                    if let Some((key, val)) = trimmed.split_once('=') {
+                        let key = key.trim();
+                        let mut val = val.trim();
+                        if (val.starts_with('"') && val.ends_with('"'))
+                            || (val.starts_with('\'') && val.ends_with('\''))
+                        {
+                            if val.len() >= 2 {
+                                val = &val[1..val.len() - 1];
+                            }
+                        }
+                        if env::var(key).is_err() {
+                            unsafe {
+                                env::set_var(key, val);
+                            }
+                        }
+                    }
+                }
+                break;
+            }
+        }
+    }
+
     pub fn load_from_file_or_default<P: AsRef<Path>>(path: P) -> Self {
+        Self::load_dotenv();
         let mut config = if let Ok(content) = fs::read_to_string(path) {
             serde_yaml::from_str(&content).unwrap_or_default()
         } else {
@@ -229,7 +261,7 @@ impl AppConfig {
         if let Ok(val) = env::var("WHATSMEOW_BASE_URL") {
             self.whatsmeow.base_url = val;
         }
-        if let Ok(val) = env::var("WHATSMEOW_API_KEY") {
+        if let Ok(val) = env::var("WHATSMEOW_API_KEY").or_else(|_| env::var("AINA_API_KEY")) {
             self.whatsmeow.api_key = val;
         }
         if let Ok(val) = env::var("WHATSMEOW_BOT_JID") {

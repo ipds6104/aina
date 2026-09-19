@@ -14,6 +14,9 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // 0. Automatically load .env file if present
+    AppConfig::load_dotenv();
+
     // Check if CLI subcommands are requested (e.g. `aina archive ...`, `aina kb ...`, `aina audit ...`)
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 1 && args[1] != "server" && args[1] != "daemon" {
