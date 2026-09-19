@@ -440,12 +440,18 @@ impl AgentEnginePort for AntigravityCliAdapter {
             let stdout_raw = String::from_utf8_lossy(&output.stdout);
             let stderr_raw = String::from_utf8_lossy(&output.stderr);
             let combined = format!("{}\n{}", stderr_raw, stdout_raw);
+            let combined_lower = combined.to_lowercase();
 
-            let is_quota = combined.contains("503")
-                || combined.contains("429")
-                || combined.contains("quota")
-                || combined.contains("Resource has been exhausted")
-                || combined.contains("rate limit");
+            let is_quota = combined_lower.contains("503")
+                || combined_lower.contains("429")
+                || combined_lower.contains("quota")
+                || combined_lower.contains("resource has been exhausted")
+                || combined_lower.contains("resource_exhausted")
+                || combined_lower.contains("rate limit")
+                || combined_lower.contains("rate-limit")
+                || combined_lower.contains("too many requests")
+                || combined_lower.contains("exceeded your current quota")
+                || combined_lower.contains("capacity");
 
             if !output.status.success() {
                 if is_quota && pool.len() > 1 && attempt + 1 < max_attempts {
