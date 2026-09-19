@@ -19,7 +19,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 DEFAULT_BASE_URL = os.environ.get("DOC_EXTRACT_BASE_URL", "https://router.dvlpid.my.id/v1")
 DEFAULT_API_KEY = os.environ.get("DOC_EXTRACT_API_KEY", os.environ.get("CODEBUDDY_API_KEY", "sk-9router-master-key"))
-DEFAULT_MODEL = os.environ.get("DOC_EXTRACT_MODEL", "cbai/kimi-k2.7")
+DEFAULT_MODEL = os.environ.get("DOC_EXTRACT_MODEL", "cbai/deepseek-v4.1-flash")
+
 
 class SimpleHTMLTableToCSV(HTMLParser):
     def __init__(self):

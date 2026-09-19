@@ -43,7 +43,8 @@ agy-doc-extract "<file>" [flags]
 | `--stdout` | *(tanpa argumen)* | Menampilkan hasil langsung ke terminal (berguna jika dokumen hanya 1 halaman). |
 | `--dpi` | `150`, `200`, `300` | Resolusi rasterisasi PDF (default: `200`). Gunakan `300` untuk struk/tabel sangat kecil. |
 | `-c, --concurrency`| `1..8` | Jumlah worker paralel (default: `4`). |
-| `--model` | `<nama_model>` | Override model VLM (default: `cbai/kimi-k2.7`, alternatif: `cbai/minimax-m3`). |
+| `--model` | `<nama_model>` | Override model VLM (default: `cbai/deepseek-v4.1-flash`). |
+
 
 ---
 
