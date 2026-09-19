@@ -37,11 +37,42 @@ impl ProcessIncomingMessageUseCase {
     }
 
     pub async fn execute(&self, msg: IncomingMessage) -> anyhow::Result<()> {
+        let now_epoch = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        let chat_type_str = match msg.chat_type {
+            ChatType::DirectMessage => "direct",
+            ChatType::Group => "group",
+        };
+
         let decision = Gatekeeper::evaluate(&msg, &self.bot_jid, &self.bot_name, self.bot_lid.as_deref());
 
         match decision {
             GatekeeperDecision::Ignore { reason } => {
                 info!("Ignoring message {}: {}", msg.id, reason);
+                let audit = crate::core::domain::NewWhatsAppActionAudit {
+                    message_id: msg.id.clone(),
+                    chat_jid: msg.chat_jid.clone(),
+                    chat_type: chat_type_str.to_string(),
+                    sender_jid: msg.sender.jid.clone(),
+                    sender_name: msg.sender.name.clone(),
+                    decision: "ignore".to_string(),
+                    decision_reason: reason.clone(),
+                    conversation_id: None,
+                    status: "ignored".to_string(),
+                    input_text: msg.text.clone(),
+                    has_media: msg.has_media,
+                    media_path: msg.media_path.clone(),
+                    response_text: None,
+                    error_message: None,
+                    duration_seconds: Some(0.0),
+                    tools_invoked: vec![],
+                    created_at_epoch: now_epoch,
+                    completed_at_epoch: Some(now_epoch),
+                };
+                let _ = self.session_store.record_action_audit(&audit).await;
                 Ok(())
             }
             GatekeeperDecision::RecordOnly { reason } => {
@@ -61,6 +92,28 @@ impl ProcessIncomingMessageUseCase {
                 self.session_store
                     .record_message(&msg.chat_jid, &msg.sender.jid, &record_text, false)
                     .await?;
+
+                let audit = crate::core::domain::NewWhatsAppActionAudit {
+                    message_id: msg.id.clone(),
+                    chat_jid: msg.chat_jid.clone(),
+                    chat_type: chat_type_str.to_string(),
+                    sender_jid: msg.sender.jid.clone(),
+                    sender_name: msg.sender.name.clone(),
+                    decision: "record_only".to_string(),
+                    decision_reason: reason.clone(),
+                    conversation_id: None,
+                    status: "recorded".to_string(),
+                    input_text: record_text,
+                    has_media: msg.has_media,
+                    media_path: msg.media_path.clone(),
+                    response_text: None,
+                    error_message: None,
+                    duration_seconds: Some(0.0),
+                    tools_invoked: vec![],
+                    created_at_epoch: now_epoch,
+                    completed_at_epoch: Some(now_epoch),
+                };
+                let _ = self.session_store.record_action_audit(&audit).await;
                 Ok(())
             }
             GatekeeperDecision::Respond { reason } => {
@@ -83,6 +136,29 @@ impl ProcessIncomingMessageUseCase {
                     .record_message(&msg.chat_jid, &msg.sender.jid, &record_text, false)
                     .await?;
 
+                let audit = crate::core::domain::NewWhatsAppActionAudit {
+                    message_id: msg.id.clone(),
+                    chat_jid: msg.chat_jid.clone(),
+                    chat_type: chat_type_str.to_string(),
+                    sender_jid: msg.sender.jid.clone(),
+                    sender_name: msg.sender.name.clone(),
+                    decision: "respond".to_string(),
+                    decision_reason: reason.clone(),
+                    conversation_id: None,
+                    status: "in_progress".to_string(),
+                    input_text: record_text,
+                    has_media: msg.has_media,
+                    media_path: msg.media_path.clone(),
+                    response_text: None,
+                    error_message: None,
+                    duration_seconds: None,
+                    tools_invoked: vec![],
+                    created_at_epoch: now_epoch,
+                    completed_at_epoch: None,
+                };
+                let audit_id = self.session_store.record_action_audit(&audit).await.ok();
+                let start_instant = std::time::Instant::now();
+
                 // Check for built-in quick command: /reset, /clear, /new
                 let trimmed_text = msg.text.trim();
                 if trimmed_text.eq_ignore_ascii_case("/reset")
@@ -93,6 +169,10 @@ impl ProcessIncomingMessageUseCase {
                     let _ = self.session_store.delete_conversation_id(&msg.chat_jid).await;
                     let _ = std::fs::remove_file(std::env::temp_dir().join("aina_gh_device_session.json"));
                     let reply = "🔄 *Sesi Percakapan Berhasil Direset*\n\nMemori konteks percakapan untuk ruang obrolan ini telah dibersihkan. Sesi berikutnya akan dimulai sebagai percakapan baru yang segar. Silakan ajukan pertanyaan atau instruksi baru Anda!".to_string();
+                    if let Some(aid) = audit_id {
+                        let dur = start_instant.elapsed().as_secs_f64();
+                        let _ = self.session_store.update_action_audit_result(aid, None, Some(&reply), None, "success", Some(dur), &[]).await;
+                    }
                     self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
                     self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
                     return Ok(());
@@ -107,6 +187,10 @@ impl ProcessIncomingMessageUseCase {
                             "🤖 *Status Model AI Aina*\n\nModel aktif saat ini: *{}*\n\n*Pilihan Model Tersedia:*\n• `gemini-3.8-flash-medium` (Default Cepat & Seimbang)\n• `gemini-3.8-flash-high` (Penalaran Tinggi / Deep Thinking)\n• `gemini-3.8-flash-low` (Respons Kilat & Kasual)\n• `gemini-3.1-pro-high` (Deep Coding & Arsitektur)\n• `claude-opus-4-6-thinking` (Claude Opus Thinking - Khusus Eksplisit)\n• `claude-sonnet-4-6` (Claude Sonnet 4.6)\n\n_Untuk mengganti model, ketik:_ `/model <nama_model>`",
                             current
                         );
+                        if let Some(aid) = audit_id {
+                            let dur = start_instant.elapsed().as_secs_f64();
+                            let _ = self.session_store.update_action_audit_result(aid, None, Some(&reply), None, "success", Some(dur), &[]).await;
+                        }
                         self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
                         self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
                         return Ok(());
@@ -119,6 +203,10 @@ impl ProcessIncomingMessageUseCase {
                                     "✅ *Model AI Berhasil Diubah*\n\nAina sekarang menggunakan model: *{}*.\nRespons berikutnya akan diproses menggunakan mesin ini.",
                                     new_model
                                 );
+                                if let Some(aid) = audit_id {
+                                    let dur = start_instant.elapsed().as_secs_f64();
+                                    let _ = self.session_store.update_action_audit_result(aid, None, Some(&reply), None, "success", Some(dur), &[]).await;
+                                }
                                 self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
                                 self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
                                 return Ok(());
@@ -128,6 +216,10 @@ impl ProcessIncomingMessageUseCase {
                                     "⚠️ *Gagal Mengganti Model*\n\n{}\n\nContoh: `/model gemini-3.8-flash-medium`",
                                     e
                                 );
+                                if let Some(aid) = audit_id {
+                                    let dur = start_instant.elapsed().as_secs_f64();
+                                    let _ = self.session_store.update_action_audit_result(aid, None, Some(&reply), Some(&e.to_string()), "failed", Some(dur), &[]).await;
+                                }
                                 self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
                                 self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
                                 return Ok(());
@@ -152,6 +244,10 @@ impl ProcessIncomingMessageUseCase {
                         warn!("Failed to send reaction {} to {}: {}", reaction_emoji, msg.chat_jid, e);
                     }
                     let reaction_note = format!("[Reaksi WhatsApp: {}]", reaction_emoji);
+                    if let Some(aid) = audit_id {
+                        let dur = start_instant.elapsed().as_secs_f64();
+                        let _ = self.session_store.update_action_audit_result(aid, None, Some(&reaction_note), None, "success", Some(dur), &[]).await;
+                    }
                     let _ = self
                         .session_store
                         .record_message(&msg.chat_jid, &self.bot_jid, &reaction_note, true)
@@ -256,6 +352,18 @@ impl ProcessIncomingMessageUseCase {
                     Err(e) => {
                         heartbeat_handle.abort();
                         error!("Agent engine failed to execute for chat {}: {}", msg.chat_jid, e);
+                        if let Some(aid) = audit_id {
+                            let dur = start_instant.elapsed().as_secs_f64();
+                            let _ = self.session_store.update_action_audit_result(
+                                aid,
+                                None,
+                                None,
+                                Some(&e.to_string()),
+                                "failed",
+                                Some(dur),
+                                &[],
+                            ).await;
+                        }
 
                         let err_str = e.to_string().to_lowercase();
                         let is_quota = err_str.contains("503")
@@ -342,6 +450,23 @@ impl ProcessIncomingMessageUseCase {
                     "Successfully replied to {} in {:.2}s",
                     msg.chat_jid, agent_res.duration_seconds
                 );
+
+                let tools_invoked = crate::core::domain::AuditEngine::extract_tools_for_conversation(
+                    &crate::core::domain::AuditEngine::default_brain_path(),
+                    &agent_res.conversation_id,
+                );
+                if let Some(aid) = audit_id {
+                    let _ = self.session_store.update_action_audit_result(
+                        aid,
+                        Some(&agent_res.conversation_id),
+                        Some(&agent_res.response_text),
+                        None,
+                        "success",
+                        Some(agent_res.duration_seconds),
+                        &tools_invoked,
+                    ).await;
+                }
+
                 Ok(())
             }
         }

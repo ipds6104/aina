@@ -83,6 +83,11 @@ pub fn create_router(state: Arc<WebhookServerState>) -> Router {
         .route("/api/schedule/tasks", get(api_schedule_tasks_handler))
         .route("/api/schedule/runs", get(api_schedule_runs_handler))
         .route("/api/schedule/diagnostics", get(api_schedule_diagnostics_handler))
+        .route("/api/audit/actions", get(api_audit_actions_handler))
+        .route("/api/audit/actions/{id}", get(api_audit_action_detail_handler))
+        .route("/api/audit/summary", get(api_audit_summary_handler))
+        .route("/api/audit/diagnostics", get(api_audit_diagnostics_handler))
+        .route("/api/audit/transcripts", get(api_audit_transcripts_handler))
         .route("/webhook", post(webhook_handler))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
         .with_state(state)
@@ -289,6 +294,325 @@ async fn api_schedule_diagnostics_handler(
             })),
         ),
     }
+}
+
+fn is_api_authorized(
+    headers: &HeaderMap,
+    query_key: Option<&str>,
+    state: &WebhookServerState,
+) -> bool {
+    let expected_code = state.setup_code.trim();
+    let expected_whatsmeow = state.whatsmeow_api_key.trim();
+
+    if expected_code.is_empty() && expected_whatsmeow.is_empty() {
+        return true;
+    }
+
+    let is_match = |cand: &str| -> bool {
+        let c = cand.trim();
+        if c.is_empty() {
+            return false;
+        }
+        (!expected_code.is_empty() && c == expected_code)
+            || (!expected_whatsmeow.is_empty() && c == expected_whatsmeow)
+    };
+
+    if let Some(key) = query_key {
+        if is_match(key) {
+            return true;
+        }
+    }
+
+    if let Some(key) = headers.get("X-Admin-Key").and_then(|v| v.to_str().ok()) {
+        if is_match(key) {
+            return true;
+        }
+    }
+
+    if let Some(key) = headers.get("X-API-Key").and_then(|v| v.to_str().ok()) {
+        if is_match(key) {
+            return true;
+        }
+    }
+
+    if let Some(auth) = headers.get("Authorization").and_then(|v| v.to_str().ok()) {
+        if let Some(bearer) = auth.strip_prefix("Bearer ") {
+            if is_match(bearer) {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
+#[derive(Debug, Deserialize)]
+struct AuditActionsQuery {
+    pub chat_jid: Option<String>,
+    pub sender_jid: Option<String>,
+    pub decision: Option<String>,
+    pub status: Option<String>,
+    pub q: Option<String>,
+    pub since: Option<i64>,
+    pub until: Option<i64>,
+    pub limit: Option<usize>,
+    pub offset: Option<usize>,
+    pub key: Option<String>,
+    pub api_key: Option<String>,
+}
+
+async fn api_audit_actions_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
+    Query(query): Query<AuditActionsQuery>,
+) -> impl IntoResponse {
+    let key_candidate = query.key.as_deref().or(query.api_key.as_deref());
+    if !is_api_authorized(&headers, key_candidate, &state) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "success": false,
+                "error": "Akses ditolak. Berikan API Key yang valid via header (Authorization: Bearer <key>, X-API-Key: <key>, X-Admin-Key: <key>) atau query parameter (?key=<key>)."
+            })),
+        );
+    }
+
+    let filter = crate::core::domain::ActionAuditFilter {
+        chat_jid: query.chat_jid,
+        sender_jid: query.sender_jid,
+        decision: query.decision,
+        status: query.status,
+        query: query.q,
+        since_epoch: query.since,
+        until_epoch: query.until,
+        limit: query.limit,
+        offset: query.offset,
+    };
+
+    match state.session_store.query_action_audits(&filter).await {
+        Ok(actions) => (
+            StatusCode::OK,
+            Json(json!({
+                "success": true,
+                "count": actions.len(),
+                "actions": actions,
+            })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "success": false,
+                "error": format!("Gagal mengambil riwayat audit aksi: {}", e),
+            })),
+        ),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct AuditAuthOnlyQuery {
+    pub key: Option<String>,
+    pub api_key: Option<String>,
+}
+
+async fn api_audit_action_detail_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+    Query(query): Query<AuditAuthOnlyQuery>,
+) -> impl IntoResponse {
+    let key_candidate = query.key.as_deref().or(query.api_key.as_deref());
+    if !is_api_authorized(&headers, key_candidate, &state) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "success": false,
+                "error": "Akses ditolak. Berikan API Key yang valid via header (Authorization: Bearer <key>, X-API-Key: <key>, X-Admin-Key: <key>) atau query parameter (?key=<key>)."
+            })),
+        );
+    }
+
+    let audit_res = if let Ok(numeric_id) = id.parse::<i64>() {
+        state.session_store.get_action_audit_by_id(numeric_id).await
+    } else {
+        state.session_store.get_action_audit_by_message_id(&id).await
+    };
+
+    match audit_res {
+        Ok(Some(audit)) => {
+            let brain_path = crate::core::domain::AuditEngine::default_brain_path();
+            let (transcript_steps, _) = if let Some(ref conv_id) = audit.conversation_id {
+                crate::core::domain::AuditEngine::load_transcript_for_conversation(&brain_path, conv_id)
+            } else {
+                (Vec::new(), Vec::new())
+            };
+
+            let transcript_path = audit.conversation_id.as_deref().and_then(|conv_id| {
+                crate::core::domain::AuditEngine::find_transcript_path(&brain_path, conv_id)
+                    .map(|p| p.to_string_lossy().to_string())
+            });
+
+            let workspace_provenance = crate::core::domain::AuditEngine::inspect_workspaces(&state.workspace_dir);
+
+            let detailed = crate::core::domain::DetailedActionAudit {
+                audit,
+                transcript_path,
+                transcript_steps,
+                workspace_provenance,
+            };
+
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "success": true,
+                    "detail": detailed,
+                })),
+            )
+        }
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "success": false,
+                "error": format!("Audit aksi dengan identitas '{}' tidak ditemukan", id),
+            })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "success": false,
+                "error": format!("Gagal memuat rincian audit: {}", e),
+            })),
+        ),
+    }
+}
+
+async fn api_audit_summary_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
+    Query(query): Query<AuditAuthOnlyQuery>,
+) -> impl IntoResponse {
+    let key_candidate = query.key.as_deref().or(query.api_key.as_deref());
+    if !is_api_authorized(&headers, key_candidate, &state) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "success": false,
+                "error": "Akses ditolak. Berikan API Key yang valid via header (Authorization: Bearer <key>, X-API-Key: <key>, X-Admin-Key: <key>) atau query parameter (?key=<key>)."
+            })),
+        );
+    }
+
+    match state.session_store.get_action_audit_summary().await {
+        Ok(summary) => (
+            StatusCode::OK,
+            Json(json!({
+                "success": true,
+                "summary": summary,
+            })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "success": false,
+                "error": format!("Gagal menyusun ringkasan audit: {}", e),
+            })),
+        ),
+    }
+}
+
+async fn api_audit_diagnostics_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
+    Query(query): Query<AuditAuthOnlyQuery>,
+) -> impl IntoResponse {
+    let key_candidate = query.key.as_deref().or(query.api_key.as_deref());
+    if !is_api_authorized(&headers, key_candidate, &state) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "success": false,
+                "error": "Akses ditolak. Berikan API Key yang valid via header (Authorization: Bearer <key>, X-API-Key: <key>, X-Admin-Key: <key>) atau query parameter (?key=<key>)."
+            })),
+        );
+    }
+
+    let brain_path = crate::core::domain::AuditEngine::default_brain_path();
+    let (rss, virt) = crate::core::domain::AuditEngine::read_process_memory();
+    let db_size = std::fs::metadata("data/aina.db")
+        .or_else(|_| std::fs::metadata("aina.db"))
+        .map(|m| m.len())
+        .unwrap_or(0);
+    let brain_dir_size = crate::core::domain::AuditEngine::compute_dir_size(&brain_path);
+    let total_conversations = crate::core::domain::AuditEngine::find_transcripts(&brain_path).len();
+    let active_model = state.agent_engine.get_model().await;
+    let workspaces = crate::core::domain::AuditEngine::inspect_workspaces(&state.workspace_dir);
+
+    let diagnostics = crate::core::domain::SystemDiagnostics {
+        uptime_seconds: crate::core::domain::get_process_uptime_secs(),
+        memory_rss_bytes: rss,
+        memory_virt_bytes: virt,
+        memory_rss_human: crate::core::domain::AuditEngine::format_bytes(rss),
+        memory_virt_human: crate::core::domain::AuditEngine::format_bytes(virt),
+        db_size_bytes: db_size,
+        brain_dir_size_bytes: brain_dir_size,
+        total_conversations_in_brain: total_conversations,
+        active_model,
+        bot_jid: state.bot_jid.clone(),
+        bot_name: state.bot_name.clone(),
+        workspaces,
+        timestamp_epoch: chrono_now_secs(),
+    };
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "diagnostics": diagnostics,
+        })),
+    )
+}
+
+#[derive(Debug, Deserialize)]
+struct AuditTranscriptsQuery {
+    pub q: Option<String>,
+    pub errors_only: Option<bool>,
+    pub limit: Option<usize>,
+    pub key: Option<String>,
+    pub api_key: Option<String>,
+}
+
+async fn api_audit_transcripts_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
+    Query(query): Query<AuditTranscriptsQuery>,
+) -> impl IntoResponse {
+    let key_candidate = query.key.as_deref().or(query.api_key.as_deref());
+    if !is_api_authorized(&headers, key_candidate, &state) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "success": false,
+                "error": "Akses ditolak. Berikan API Key yang valid via header (Authorization: Bearer <key>, X-API-Key: <key>, X-Admin-Key: <key>) atau query parameter (?key=<key>)."
+            })),
+        );
+    }
+
+    let brain_path = crate::core::domain::AuditEngine::default_brain_path();
+    let limit = query.limit.unwrap_or(50).min(500);
+    let steps = crate::core::domain::AuditEngine::query_audit_trail(
+        &brain_path,
+        query.q.as_deref(),
+        query.errors_only.unwrap_or(false),
+        limit,
+    );
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "count": steps.len(),
+            "steps": steps,
+        })),
+    )
 }
 
 #[derive(Debug, Deserialize)]
@@ -613,6 +937,28 @@ async fn simulate_handler(
 
     match decision {
         GatekeeperDecision::Ignore { reason } => {
+            let audit = crate::core::domain::NewWhatsAppActionAudit {
+                message_id: msg.id.clone(),
+                chat_jid: msg.chat_jid.clone(),
+                chat_type: "direct".to_string(),
+                sender_jid: msg.sender.jid.clone(),
+                sender_name: msg.sender.name.clone(),
+                decision: "ignore".to_string(),
+                decision_reason: reason.clone(),
+                conversation_id: None,
+                status: "ignored".to_string(),
+                input_text: msg.text.clone(),
+                has_media: false,
+                media_path: None,
+                response_text: None,
+                error_message: None,
+                duration_seconds: Some(0.0),
+                tools_invoked: vec![],
+                created_at_epoch: chrono_now_secs(),
+                completed_at_epoch: Some(chrono_now_secs()),
+            };
+            let _ = state.session_store.record_action_audit(&audit).await;
+
             (
                 StatusCode::OK,
                 Json(json!(SimulateResponse {
@@ -626,6 +972,28 @@ async fn simulate_handler(
         }
         GatekeeperDecision::RecordOnly { reason } => {
             let _ = state.session_store.record_message(&msg.chat_jid, &msg.sender.jid, &msg.text, false).await;
+            let audit = crate::core::domain::NewWhatsAppActionAudit {
+                message_id: msg.id.clone(),
+                chat_jid: msg.chat_jid.clone(),
+                chat_type: "group".to_string(),
+                sender_jid: msg.sender.jid.clone(),
+                sender_name: msg.sender.name.clone(),
+                decision: "record_only".to_string(),
+                decision_reason: reason.clone(),
+                conversation_id: None,
+                status: "recorded".to_string(),
+                input_text: msg.text.clone(),
+                has_media: false,
+                media_path: None,
+                response_text: None,
+                error_message: None,
+                duration_seconds: Some(0.0),
+                tools_invoked: vec![],
+                created_at_epoch: chrono_now_secs(),
+                completed_at_epoch: Some(chrono_now_secs()),
+            };
+            let _ = state.session_store.record_action_audit(&audit).await;
+
             (
                 StatusCode::OK,
                 Json(json!(SimulateResponse {
@@ -654,6 +1022,28 @@ async fn simulate_handler(
             let job_id = format!("job-{}", chrono_now_secs() * 1000 + (rand::random::<u32>() % 1000) as i64);
 
             let now = chrono_now_secs();
+            let audit = crate::core::domain::NewWhatsAppActionAudit {
+                message_id: msg.id.clone(),
+                chat_jid: msg.chat_jid.clone(),
+                chat_type: "direct".to_string(),
+                sender_jid: msg.sender.jid.clone(),
+                sender_name: msg.sender.name.clone(),
+                decision: "respond".to_string(),
+                decision_reason: reason.clone(),
+                conversation_id: conv_id.clone(),
+                status: "in_progress".to_string(),
+                input_text: msg.text.clone(),
+                has_media: false,
+                media_path: None,
+                response_text: None,
+                error_message: None,
+                duration_seconds: None,
+                tools_invoked: vec![],
+                created_at_epoch: now,
+                completed_at_epoch: None,
+            };
+            let sim_audit_id = state.session_store.record_action_audit(&audit).await.ok();
+
             {
                 let mut jobs = state.sim_jobs.write().await;
                 // Clean up jobs older than 10 minutes
@@ -691,6 +1081,23 @@ async fn simulate_handler(
                         let _ = state_clone.session_store.save_conversation_id(&msg_chat_jid, &agent_res.conversation_id).await;
                         let _ = state_clone.session_store.record_message(&msg_chat_jid, &state_clone.bot_jid, &agent_res.response_text, true).await;
 
+                        if let Some(aid) = sim_audit_id {
+                            let brain_path = crate::core::domain::AuditEngine::default_brain_path();
+                            let tools = crate::core::domain::AuditEngine::extract_tools_for_conversation(
+                                &brain_path,
+                                &agent_res.conversation_id,
+                            );
+                            let _ = state_clone.session_store.update_action_audit_result(
+                                aid,
+                                Some(&agent_res.conversation_id),
+                                Some(&agent_res.response_text),
+                                None,
+                                "success",
+                                Some(agent_res.duration_seconds),
+                                &tools,
+                            ).await;
+                        }
+
                         jobs.insert(
                             job_id_clone.clone(),
                             SimulationJob {
@@ -708,6 +1115,19 @@ async fn simulate_handler(
                     }
                     Err(e) => {
                         error!("Agent async execution error for job {}: {}", job_id_clone, e);
+                        if let Some(aid) = sim_audit_id {
+                            let dur = (fin_time - now).max(0) as f64;
+                            let _ = state_clone.session_store.update_action_audit_result(
+                                aid,
+                                None,
+                                None,
+                                Some(&e.to_string()),
+                                "failed",
+                                Some(dur),
+                                &[],
+                            ).await;
+                        }
+
                         jobs.insert(
                             job_id_clone.clone(),
                             SimulationJob {
@@ -2984,6 +3404,26 @@ mod tests {
                 next_task: None,
             })
         }
+        async fn record_action_audit(&self, _audit: &crate::core::domain::NewWhatsAppActionAudit) -> anyhow::Result<i64> { Ok(1) }
+        async fn update_action_audit_result(&self, _id: i64, _conversation_id: Option<&str>, _response_text: Option<&str>, _error_message: Option<&str>, _status: &str, _duration_seconds: Option<f64>, _tools_invoked: &[String]) -> anyhow::Result<()> { Ok(()) }
+        async fn query_action_audits(&self, _filter: &crate::core::domain::ActionAuditFilter) -> anyhow::Result<Vec<crate::core::domain::WhatsAppActionAudit>> { Ok(vec![]) }
+        async fn get_action_audit_by_id(&self, _id: i64) -> anyhow::Result<Option<crate::core::domain::WhatsAppActionAudit>> { Ok(None) }
+        async fn get_action_audit_by_message_id(&self, _message_id: &str) -> anyhow::Result<Option<crate::core::domain::WhatsAppActionAudit>> { Ok(None) }
+        async fn get_action_audit_summary(&self) -> anyhow::Result<crate::core::domain::AuditSummaryReport> {
+            Ok(crate::core::domain::AuditSummaryReport {
+                total_actions: 0,
+                total_responses: 0,
+                total_recorded_only: 0,
+                total_ignored: 0,
+                total_errors: 0,
+                avg_duration_seconds: 0.0,
+                most_active_chats: vec![],
+                most_active_senders: vec![],
+                decision_breakdown: vec![],
+                status_breakdown: vec![],
+                top_tools_used: vec![],
+            })
+        }
     }
 
     struct DummyAgentEngine;
@@ -3136,6 +3576,126 @@ mod tests {
         assert!(sidecar_content.contains("ID: MSG_CC_TEST_001"));
         assert!(sidecar_content.contains("laporan_keuangan.pdf"));
         assert!(sidecar_content.contains("application/pdf"));
+
+        let _ = tokio::fs::remove_dir_all(&temp_dir).await;
+    }
+
+    #[tokio::test]
+    async fn test_api_audit_endpoints_secured_and_queries() {
+        let test_id = format!("aina_test_audit_api_{}", rand::random::<u32>());
+        let temp_dir = std::env::temp_dir().join(test_id);
+        let _ = tokio::fs::create_dir_all(&temp_dir).await;
+
+        let dummy_session_store = Arc::new(DummySessionStore);
+        let dummy_agent_engine = Arc::new(DummyAgentEngine);
+        let dummy_whatsapp = Arc::new(DummyWhatsApp);
+        let persona_engine = Arc::new(PersonaEngine::new(
+            "Aina".to_string(),
+            "Org".to_string(),
+            "admin@s.whatsapp.net".to_string(),
+            "Asia/Jakarta".to_string(),
+            7,
+            "id".to_string(),
+            "http://127.0.0.1:8080".to_string(),
+            "aina@s.whatsapp.net".to_string(),
+            Some(temp_dir.to_string_lossy().to_string()),
+        ));
+
+        let usecase = Arc::new(ProcessIncomingMessageUseCase::new(
+            dummy_session_store.clone(),
+            dummy_agent_engine.clone(),
+            dummy_whatsapp.clone(),
+            persona_engine.clone(),
+            "aina@s.whatsapp.net".to_string(),
+            "Aina".to_string(),
+            None,
+        ));
+
+        let state = Arc::new(WebhookServerState {
+            usecase,
+            agent_engine: dummy_agent_engine,
+            session_store: dummy_session_store,
+            persona_engine,
+            bot_name: "Aina".to_string(),
+            bot_jid: "aina@s.whatsapp.net".to_string(),
+            bot_lid: None,
+            companion_jid: None,
+            companion_name: None,
+            companion_session_id: None,
+            model: "dummy-model".to_string(),
+            whatsmeow_url: "http://127.0.0.1:8080".to_string(),
+            whatsmeow_api_key: "WM_KEY_999".to_string(),
+            companion_base_url: None,
+            companion_api_key: None,
+            setup_code: "SETUP_SECRET_777".to_string(),
+            timezone: "Asia/Jakarta".to_string(),
+            locale: "id".to_string(),
+            sim_jobs: Arc::new(RwLock::new(HashMap::new())),
+            chat_queues: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+            workspace_dir: temp_dir.clone(),
+        });
+
+        let app = create_router(state);
+        let aina_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let aina_addr = aina_listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = axum::serve(aina_listener, app).await;
+        });
+
+        let client = reqwest::Client::new();
+
+        // 1. Unauthorized request without key should return 401
+        let unauth_resp = client
+            .get(format!("http://{}/api/audit/actions", aina_addr))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(unauth_resp.status(), StatusCode::UNAUTHORIZED);
+
+        // 2. Authorized request with Bearer token matching setup_code
+        let bearer_resp = client
+            .get(format!("http://{}/api/audit/actions", aina_addr))
+            .header("Authorization", "Bearer SETUP_SECRET_777")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(bearer_resp.status(), StatusCode::OK);
+        let json_data: serde_json::Value = bearer_resp.json().await.unwrap();
+        assert_eq!(json_data["success"], true);
+
+        // 3. Authorized request with X-API-Key matching whatsmeow_api_key
+        let api_key_resp = client
+            .get(format!("http://{}/api/audit/summary", aina_addr))
+            .header("X-API-Key", "WM_KEY_999")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(api_key_resp.status(), StatusCode::OK);
+        let summary_data: serde_json::Value = api_key_resp.json().await.unwrap();
+        assert_eq!(summary_data["success"], true);
+
+        // 4. Authorized request with X-Admin-Key matching setup_code
+        let admin_key_resp = client
+            .get(format!("http://{}/api/audit/diagnostics", aina_addr))
+            .header("X-Admin-Key", "SETUP_SECRET_777")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(admin_key_resp.status(), StatusCode::OK);
+        let diag_data: serde_json::Value = admin_key_resp.json().await.unwrap();
+        assert_eq!(diag_data["success"], true);
+        assert!(diag_data["diagnostics"]["memory_rss_bytes"].is_number());
+        assert_eq!(diag_data["diagnostics"]["bot_name"], "Aina");
+
+        // 5. Authorized request via query parameter ?key=...
+        let query_resp = client
+            .get(format!("http://{}/api/audit/transcripts?key=SETUP_SECRET_777", aina_addr))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(query_resp.status(), StatusCode::OK);
+        let trans_data: serde_json::Value = query_resp.json().await.unwrap();
+        assert_eq!(trans_data["success"], true);
 
         let _ = tokio::fs::remove_dir_all(&temp_dir).await;
     }

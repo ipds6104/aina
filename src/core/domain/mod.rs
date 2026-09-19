@@ -9,7 +9,7 @@ pub mod sensor;
 pub mod version;
 
 pub use archive::{ArchiveEngine, ArchiveSearchFilter};
-pub use audit::AuditEngine;
+pub use audit::*;
 pub use gatekeeper::Gatekeeper;
 pub use knowledge::KnowledgeEngine;
 pub use message::*;

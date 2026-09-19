@@ -86,4 +86,34 @@ pub trait SessionStorePort: Send + Sync {
 
     /// Retrieves diagnostic summary of the scheduler subsystem.
     async fn get_scheduler_diagnostics(&self) -> anyhow::Result<crate::core::domain::SchedulerDiagnostics>;
+
+    /// Records an incoming message action audit entry.
+    async fn record_action_audit(&self, audit: &crate::core::domain::NewWhatsAppActionAudit) -> anyhow::Result<i64>;
+
+    /// Updates an existing action audit entry with final results.
+    async fn update_action_audit_result(
+        &self,
+        id: i64,
+        conversation_id: Option<&str>,
+        response_text: Option<&str>,
+        error_message: Option<&str>,
+        status: &str,
+        duration_seconds: Option<f64>,
+        tools_invoked: &[String],
+    ) -> anyhow::Result<()>;
+
+    /// Queries action audit records according to filter parameters.
+    async fn query_action_audits(
+        &self,
+        filter: &crate::core::domain::ActionAuditFilter,
+    ) -> anyhow::Result<Vec<crate::core::domain::WhatsAppActionAudit>>;
+
+    /// Retrieves an action audit record by its primary key ID.
+    async fn get_action_audit_by_id(&self, id: i64) -> anyhow::Result<Option<crate::core::domain::WhatsAppActionAudit>>;
+
+    /// Retrieves an action audit record by WhatsApp message ID.
+    async fn get_action_audit_by_message_id(&self, message_id: &str) -> anyhow::Result<Option<crate::core::domain::WhatsAppActionAudit>>;
+
+    /// Aggregates an audit summary report across all recorded actions.
+    async fn get_action_audit_summary(&self) -> anyhow::Result<crate::core::domain::AuditSummaryReport>;
 }
