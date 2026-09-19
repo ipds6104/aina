@@ -12,7 +12,7 @@ Key Capabilities:
 - Flexible CLI Flags: Page filtering, extraction modes, formats, DPI, concurrency, and custom prompts.
 """
 
-import sys, os, time, json, base64, urllib.request, urllib.error, re, argparse, subprocess, tempfile, shutil, csv
+import sys, os, time, json, base64, urllib.request, urllib.error, re, argparse, subprocess, tempfile, shutil, csv, html
 from pathlib import Path
 from html.parser import HTMLParser
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -83,22 +83,30 @@ def extract_table_headers(table_str: str) -> list:
     if "<table" in table_str.lower():
         th_matches = re.findall(r"<th[^>]*>([\s\S]*?)</th>", table_str, re.IGNORECASE)
         if th_matches:
-            return [re.sub(r"<[^>]+>", "", th).strip().lower() for th in th_matches]
+            return [html.unescape(re.sub(r"<[^>]+>", "", th)).strip().lower() for th in th_matches]
         first_tr = re.search(r"<tr[^>]*>([\s\S]*?)</tr>", table_str, re.IGNORECASE)
         if first_tr:
             tds = re.findall(r"<td[^>]*>([\s\S]*?)</td>", first_tr.group(1), re.IGNORECASE)
-            return [re.sub(r"<[^>]+>", "", td).strip().lower() for td in tds]
+            return [html.unescape(re.sub(r"<[^>]+>", "", td)).strip().lower() for td in tds]
         return []
     lines = [ln.strip() for ln in table_str.strip().splitlines() if ln.strip().startswith("|")]
     if lines:
-        return [c.strip().lower() for c in lines[0].split("|")[1:-1]]
+        return [html.unescape(c).strip().lower() for c in lines[0].split("|")[1:-1]]
     return []
 
 def headers_match(h1: list, h2: list) -> bool:
-    if not h1 or not h2 or len(h1) != len(h2):
+    if not h1 or not h2:
         return False
-    matches = sum(1 for a, b in zip(h1, h2) if a == b or a in b or b in a)
-    return (matches / len(h1)) >= 0.75
+    h1_clean = [re.sub(r"\s+", " ", x.strip()) for x in h1]
+    h2_clean = [re.sub(r"\s+", " ", x.strip()) for x in h2]
+    if len(h1_clean) != len(h2_clean):
+        s1 = set(h1_clean)
+        s2 = set(h2_clean)
+        inter = len(s1.intersection(s2))
+        min_len = min(len(s1), len(s2))
+        return (inter / min_len) >= 0.70 if min_len else False
+    matches = sum(1 for a, b in zip(h1_clean, h2_clean) if a == b or a in b or b in a)
+    return (matches / len(h1_clean)) >= 0.70
 
 def parse_page_range(pages_str: str, total_pages: int):
     if not pages_str or pages_str.strip().lower() == "all":
