@@ -315,6 +315,7 @@ fn is_api_authorized(
         }
         (!expected_code.is_empty() && c == expected_code)
             || (!expected_whatsmeow.is_empty() && c == expected_whatsmeow)
+            || state.companion_api_key.as_deref().map(|k| !k.trim().is_empty() && c == k.trim()).unwrap_or(false)
     };
 
     if let Some(key) = query_key {
