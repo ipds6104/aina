@@ -42,8 +42,12 @@ agy-doc-extract "<file>" [flags]
 | `-q, --prompt` | `"<teks>"` | **Fokus Khusus**: Memberi arahan pencarian tertentu ke VLM (misal: `-q "fokus pada total tagihan dan nomor rekening"`). |
 | `--stdout` | *(tanpa argumen)* | Menampilkan hasil langsung ke terminal (berguna jika dokumen hanya 1 halaman). |
 | `--dpi` | `150`, `200`, `300` | Resolusi rasterisasi PDF (default: `200`). Gunakan `300` untuk struk/tabel sangat kecil. |
-| `-c, --concurrency`| `1..8` | Jumlah worker paralel (default: `4`). |
+| `-c, --concurrency`| `1..16` | Jumlah worker paralel per halaman (default: `4`, optimal: `8`–`16`). |
+| `-r, --retries` | `<N>` | **Auto-Restart / Retry**: Jumlah percobaan ulang otomatis jika ada halaman gagal/error jaringan (default: `3`). |
+| `--retry-delay` | `<detik>` | Jeda waktu awal antar percobaan ulang dengan exponential backoff (default: `2.0` detik). |
+| `--continue-on-error`| *(tanpa argumen)* | Tetap lanjutkan pemrosesan halaman lain jika suatu halaman gagal setelah seluruh retry habis (tidak membatalkan dokumen utuh). |
 | `--model` | `<nama_model>` | Override model VLM (default: `cbai/deepseek-v4.1-flash`). |
+
 
 
 ---

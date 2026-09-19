@@ -229,8 +229,32 @@ def process_document(args):
                 b64 = base64.b64encode(f.read()).decode("utf-8")
             if not args.stdout:
                 print(f"[*] Extracting Page {page_num}...")
-            text = call_vlm_completion(base_url, api_key, model, b64, page_num, args.mode, args.prompt, args.summary)
-            return page_num, text
+
+            max_retries = max(1, args.retries)
+            last_err = None
+
+            for attempt in range(1, max_retries + 1):
+                try:
+                    text = call_vlm_completion(base_url, api_key, model, b64, page_num, args.mode, args.prompt, args.summary)
+                    if text and text.strip():
+                        return page_num, text
+                    else:
+                        raise ValueError("VLM returned empty content")
+                except Exception as e:
+                    last_err = e
+                    if attempt < max_retries:
+                        sleep_s = args.retry_delay * (1.5 ** (attempt - 1))
+                        if not args.stdout:
+                            print(f"[!] Halaman {page_num} gagal (percobaan {attempt}/{max_retries}): {e}. Mengulang otomatis dalam {sleep_s:.1f}s...")
+                        time.sleep(sleep_s)
+                    else:
+                        if not args.stdout:
+                            print(f"[-] Halaman {page_num} gagal setelah {max_retries}x percobaan: {last_err}")
+                        if args.continue_on_error:
+                            return page_num, f"*[Peringatan: Gagal mengekstrak Halaman {page_num} setelah {max_retries}x percobaan ({last_err})]*"
+                        else:
+                            raise last_err
+
 
         max_workers = min(args.concurrency, len(page_work_items))
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -339,11 +363,14 @@ def main():
     parser.add_argument("-s", "--summary", action="store_true", help="Sertakan ringkasan eksekutif cepat di awal hasil")
     parser.add_argument("--dpi", type=int, default=200, help="DPI rasterisasi PDF (default: 200, gunakan 300 untuk teks sangat rapat/kecil)")
     parser.add_argument("-c", "--concurrency", type=int, default=4, help="Jumlah thread paralel per halaman (default: 4)")
-    parser.add_argument("--no-stitch", action="store_true", help="Nonaktifkan penggabungan tabel otomatis antar-halaman")
-    parser.add_argument("--model", default="", help="Override model VLM (default: cbai/kimi-k2.7)")
+    parser.add_argument("-r", "--retries", type=int, default=3, help="Jumlah percobaan ulang otomatis jika ada halaman gagal/error (default: 3)")
+    parser.add_argument("--retry-delay", type=float, default=2.0, help="Jeda awal antar percobaan dalam detik dengan exponential backoff (default: 2.0s)")
+    parser.add_argument("--continue-on-error", action="store_true", help="Tetap lanjutkan pemrosesan halaman lain jika ada halaman yang gagal setelah retries habis")
+    parser.add_argument("--model", default="", help="Override model VLM (default: cbai/deepseek-v4.1-flash)")
     parser.add_argument("--base-url", default="", help="Override base URL VLM (default: https://router.dvlpid.my.id/v1)")
     parser.add_argument("--api-key", default="", help="Override API Key VLM (default: sk-9router-master-key)")
     parser.add_argument("--stdout", action="store_true", help="Cetak hasil markdown langsung ke stdout")
+
 
     args = parser.parse_args()
     try:
