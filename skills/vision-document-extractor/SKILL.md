@@ -46,7 +46,7 @@ agy-doc-extract "<file>" [flags]
 | `-r, --retries` | `<N>` | **Auto-Restart / Retry**: Jumlah percobaan ulang otomatis jika ada halaman gagal/error jaringan (default: `3`). |
 | `--retry-delay` | `<detik>` | Jeda waktu awal antar percobaan ulang dengan exponential backoff (default: `2.0` detik). |
 | `--continue-on-error`| *(tanpa argumen)* | Tetap lanjutkan pemrosesan halaman lain jika suatu halaman gagal setelah seluruh retry habis (tidak membatalkan dokumen utuh). |
-| `--model` | `<nama_model>` | Override model VLM (default: `cbai/deepseek-v4.1-flash`). |
+| `--model` | `<nama_model>` | Override model VLM (default: `cbai/minimax-m3`, opsi lain: `cbai/kimi-k2.7`, `cbai/glm-5v-turbo`). |
 
 
 

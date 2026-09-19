@@ -19,7 +19,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 DEFAULT_BASE_URL = os.environ.get("DOC_EXTRACT_BASE_URL", "https://router.dvlpid.my.id/v1")
 DEFAULT_API_KEY = os.environ.get("DOC_EXTRACT_API_KEY", os.environ.get("CODEBUDDY_API_KEY", "sk-9router-master-key"))
-DEFAULT_MODEL = os.environ.get("DOC_EXTRACT_MODEL", "cbai/deepseek-v4.1-flash")
+DEFAULT_MODEL = os.environ.get("DOC_EXTRACT_MODEL", "cbai/minimax-m3")
 
 
 class SimpleHTMLTableToCSV(HTMLParser):
@@ -56,6 +56,49 @@ def html_table_to_csv_rows(html_code: str):
     parser = SimpleHTMLTableToCSV()
     parser.feed(html_code)
     return parser.rows
+
+def find_markdown_tables(text: str) -> list:
+    pattern = re.compile(
+        r"((?:^[ \t]*\|.+?\|[ \t]*\r?\n)+(?:^[ \t]*\|[-:\s|]+?\|[ \t]*\r?\n)(?:^[ \t]*\|.+?\|[ \t]*(?:\r?\n|\Z))+)",
+        re.MULTILINE
+    )
+    return [m.group(1).strip() for m in pattern.finditer(text)]
+
+def markdown_table_to_csv_rows(md_table_text: str) -> list:
+    rows = []
+    lines = md_table_text.strip().splitlines()
+    for line in lines:
+        line = line.strip()
+        if not line.startswith("|") or not line.endswith("|"):
+            continue
+        inner = line[1:-1].strip()
+        if re.match(r"^[-:\s|]+$", inner):
+            continue
+        cells = [re.sub(r"\s+", " ", c.strip()) for c in line.split("|")[1:-1]]
+        rows.append(cells)
+    return rows
+
+def extract_table_headers(table_str: str) -> list:
+    """Extract list of lowercase normalized column headers from HTML or Markdown table."""
+    if "<table" in table_str.lower():
+        th_matches = re.findall(r"<th[^>]*>([\s\S]*?)</th>", table_str, re.IGNORECASE)
+        if th_matches:
+            return [re.sub(r"<[^>]+>", "", th).strip().lower() for th in th_matches]
+        first_tr = re.search(r"<tr[^>]*>([\s\S]*?)</tr>", table_str, re.IGNORECASE)
+        if first_tr:
+            tds = re.findall(r"<td[^>]*>([\s\S]*?)</td>", first_tr.group(1), re.IGNORECASE)
+            return [re.sub(r"<[^>]+>", "", td).strip().lower() for td in tds]
+        return []
+    lines = [ln.strip() for ln in table_str.strip().splitlines() if ln.strip().startswith("|")]
+    if lines:
+        return [c.strip().lower() for c in lines[0].split("|")[1:-1]]
+    return []
+
+def headers_match(h1: list, h2: list) -> bool:
+    if not h1 or not h2 or len(h1) != len(h2):
+        return False
+    matches = sum(1 for a, b in zip(h1, h2) if a == b or a in b or b in a)
+    return (matches / len(h1)) >= 0.75
 
 def parse_page_range(pages_str: str, total_pages: int):
     if not pages_str or pages_str.strip().lower() == "all":
@@ -117,7 +160,7 @@ def call_vlm_completion(base_url: str, api_key: str, model: str, img_b64: str, p
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": f"Extract document content from Page {page_num}:"},
+                    {"type": "text", "text": f"Extract document content from Page {page_num}. For any tabular data, you MUST format it as a valid HTML <table> with <thead>, <tbody>, <tr>, <th>, <td> tags (preserving colspan for section headers/banners). Do not use markdown pipe tables."},
                     {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_b64}"}}
                 ]
             }
@@ -154,7 +197,8 @@ def stitch_cross_page_tables(page_results):
         has_table_start = "<table" in content.lower()
         has_table_end = "</table>" in content.lower()
 
-        if prev_unclosed_table:
+        # Check 1: Previous page had unclosed HTML table
+        if prev_unclosed_table and stitched_pages:
             m_tbody = re.search(r"^\s*(?:<tbody>)?\s*(<tr>[\s\S]*?)(?=</table>|\Z)", content, re.IGNORECASE)
             if m_tbody and (not has_table_start or content.find("<tr") < content.find("<table")):
                 matched_rows = m_tbody.group(1)
@@ -162,6 +206,70 @@ def stitch_cross_page_tables(page_results):
                 content = re.sub(r"^\s*(?:<tbody>)?\s*<tr>[\s\S]*?</table>", "", content, flags=re.IGNORECASE)
                 prev_unclosed_table = None
 
+        # Check 2: Matching table headers across consecutive pages (HTML or Markdown)
+        if stitched_pages and (has_table_start or "|" in content):
+            prev_content = stitched_pages[-1]["content"]
+
+            # Try HTML table stitching
+            prev_html_tables = list(re.finditer(r"<table[\s\S]*?</table>", prev_content, re.IGNORECASE))
+            curr_html_tables = list(re.finditer(r"<table[\s\S]*?</table>", content, re.IGNORECASE))
+
+            if prev_html_tables and curr_html_tables:
+                last_prev_match = prev_html_tables[-1]
+                first_curr_match = curr_html_tables[0]
+                h_prev = extract_table_headers(last_prev_match.group(0))
+                h_curr = extract_table_headers(first_curr_match.group(0))
+
+                if headers_match(h_prev, h_curr):
+                    c_tbl = first_curr_match.group(0)
+                    tbody_m = re.search(r"<tbody[^>]*>([\s\S]*?)</tbody>", c_tbl, re.IGNORECASE)
+                    rows_html = tbody_m.group(1) if tbody_m else c_tbl
+                    data_trs = re.findall(r"<tr[^>]*>[\s\S]*?</tr>", rows_html, re.IGNORECASE)
+                    clean_trs = [tr for tr in data_trs if "<th" not in tr.lower()]
+
+                    if clean_trs:
+                        merged_rows = "\n" + "\n".join(clean_trs)
+                        p_tbl = last_prev_match.group(0)
+                        if "</tbody>" in p_tbl.lower():
+                            idx = p_tbl.lower().rfind("</tbody>")
+                            new_p_tbl = p_tbl[:idx] + merged_rows + "\n" + p_tbl[idx:]
+                        else:
+                            idx = p_tbl.lower().rfind("</table>")
+                            new_p_tbl = p_tbl[:idx] + merged_rows + "\n" + p_tbl[idx:]
+
+                        stitched_pages[-1]["content"] = (
+                            prev_content[:last_prev_match.start()] +
+                            new_p_tbl +
+                            prev_content[last_prev_match.end():]
+                        )
+                        stitch_notice = f"\n\n*(Tabel lanjutan telah digabungkan ke tabel Halaman {stitched_pages[-1]['page']})*\n\n"
+                        content = content[:first_curr_match.start()] + stitch_notice + content[first_curr_match.end():]
+
+            # Try Markdown table stitching
+            prev_md_tables = find_markdown_tables(stitched_pages[-1]["content"])
+            curr_md_tables = find_markdown_tables(content)
+            if prev_md_tables and curr_md_tables:
+                last_prev_md = prev_md_tables[-1]
+                first_curr_md = curr_md_tables[0]
+                h_prev_md = extract_table_headers(last_prev_md)
+                h_curr_md = extract_table_headers(first_curr_md)
+
+                if headers_match(h_prev_md, h_curr_md):
+                    md_lines = [ln for ln in first_curr_md.splitlines() if ln.strip().startswith("|")]
+                    data_lines = []
+                    for idx, ln in enumerate(md_lines):
+                        if idx == 0: continue
+                        inner = ln.strip()[1:-1].strip()
+                        if re.match(r"^[-:\s|]+$", inner): continue
+                        data_lines.append(ln)
+
+                    if data_lines:
+                        new_prev_md = last_prev_md + "\n" + "\n".join(data_lines)
+                        stitched_pages[-1]["content"] = stitched_pages[-1]["content"].replace(last_prev_md, new_prev_md)
+                        stitch_notice = f"\n\n*(Tabel lanjutan telah digabungkan ke tabel Halaman {stitched_pages[-1]['page']})*\n\n"
+                        content = content.replace(first_curr_md, stitch_notice)
+
+        # Track unclosed table
         if has_table_start and not has_table_end:
             prev_unclosed_table = page_num
         elif has_table_start and has_table_end:
@@ -293,22 +401,46 @@ def process_document(args):
         tbl_counter = 0
 
         for p in stitched:
-            found_tables = re.findall(r"(<table[\s\S]*?</table>)", p["content"], flags=re.IGNORECASE)
-            for tidx, tbl in enumerate(found_tables):
+            # Detect HTML tables
+            found_html = re.findall(r"(<table[\s\S]*?</table>)", p["content"], flags=re.IGNORECASE)
+            for tidx, tbl in enumerate(found_html):
                 tbl_counter += 1
                 table_entry = {
                     "table_id": tbl_counter,
                     "page": p["page"],
                     "table_index_on_page": tidx + 1,
+                    "format": "html",
                     "html": tbl
                 }
                 tables.append(table_entry)
 
-                # Export to CSV if requested or default
                 if args.csv or "csv" in args.format:
                     csv_name = f"table_p{p['page']}_{tidx+1}.csv"
                     csv_target = out_path / csv_name
                     rows = html_table_to_csv_rows(tbl)
+                    if rows:
+                        with open(csv_target, "w", newline="", encoding="utf-8") as cf:
+                            writer = csv.writer(cf)
+                            writer.writerows(rows)
+                        csv_files.append(str(csv_target))
+
+            # Detect Markdown tables (if any)
+            found_md = find_markdown_tables(p["content"])
+            for tidx, tbl in enumerate(found_md):
+                tbl_counter += 1
+                table_entry = {
+                    "table_id": tbl_counter,
+                    "page": p["page"],
+                    "table_index_on_page": tidx + 1,
+                    "format": "markdown",
+                    "markdown": tbl
+                }
+                tables.append(table_entry)
+
+                if args.csv or "csv" in args.format:
+                    csv_name = f"table_p{p['page']}_md{tidx+1}.csv"
+                    csv_target = out_path / csv_name
+                    rows = markdown_table_to_csv_rows(tbl)
                     if rows:
                         with open(csv_target, "w", newline="", encoding="utf-8") as cf:
                             writer = csv.writer(cf)
@@ -366,7 +498,9 @@ def main():
     parser.add_argument("-r", "--retries", type=int, default=3, help="Jumlah percobaan ulang otomatis jika ada halaman gagal/error (default: 3)")
     parser.add_argument("--retry-delay", type=float, default=2.0, help="Jeda awal antar percobaan dalam detik dengan exponential backoff (default: 2.0s)")
     parser.add_argument("--continue-on-error", action="store_true", help="Tetap lanjutkan pemrosesan halaman lain jika ada halaman yang gagal setelah retries habis")
+    parser.add_argument("--no-stitch", action="store_true", help="Nonaktifkan penggabungan tabel otomatis antar-halaman")
     parser.add_argument("--model", default="", help="Override model VLM (default: cbai/deepseek-v4.1-flash)")
+
     parser.add_argument("--base-url", default="", help="Override base URL VLM (default: https://router.dvlpid.my.id/v1)")
     parser.add_argument("--api-key", default="", help="Override API Key VLM (default: sk-9router-master-key)")
     parser.add_argument("--stdout", action="store_true", help="Cetak hasil markdown langsung ke stdout")
