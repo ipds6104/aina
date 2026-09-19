@@ -6,6 +6,7 @@ use std::time::Duration;
 use tokio::process::Command;
 use tracing::{debug, error, info, warn};
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -112,6 +113,7 @@ pub struct AntigravityCliAdapter {
     companion_base_url: Option<String>,
     companion_api_key: Option<String>,
     token_pool: Arc<RwLock<Vec<AccountToken>>>,
+    round_robin_counter: Arc<AtomicUsize>,
 }
 
 impl AntigravityCliAdapter {
@@ -162,6 +164,7 @@ impl AntigravityCliAdapter {
             companion_base_url,
             companion_api_key,
             token_pool: Arc::new(RwLock::new(pool)),
+            round_robin_counter: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -314,21 +317,53 @@ impl AgentEnginePort for AntigravityCliAdapter {
         let pool = self.token_pool.read().await.clone();
         let max_attempts = if pool.is_empty() { 1 } else { pool.len() };
 
+        let strategy = std::env::var("AINA_TOKEN_STRATEGY")
+            .unwrap_or_else(|_| "round_robin".to_string())
+            .to_lowercase();
+        let is_round_robin = strategy == "round_robin" || strategy == "rr";
+
+        // For round-robin, increment counter once at start of request
+        let rr_start_idx = if is_round_robin && !pool.is_empty() {
+            self.round_robin_counter.fetch_add(1, Ordering::Relaxed)
+        } else {
+            0
+        };
+
         for attempt in 0..max_attempts {
             let active_acc = if !pool.is_empty() {
                 let now = std::time::Instant::now();
                 let mut candidate = None;
-                for acc in &pool {
-                    let cd = acc.cooldown_until.read().await;
-                    if let Some(until) = *cd {
-                        if now < until {
-                            continue;
+                let n = pool.len();
+
+                if is_round_robin {
+                    // Try each account starting from (rr_start_idx + attempt) % n
+                    for i in 0..n {
+                        let idx = (rr_start_idx + attempt + i) % n;
+                        let acc = &pool[idx];
+                        let cd = acc.cooldown_until.read().await;
+                        if let Some(until) = *cd {
+                            if now < until {
+                                continue;
+                            }
                         }
+                        candidate = Some(acc.clone());
+                        break;
                     }
-                    candidate = Some(acc.clone());
-                    break;
+                } else {
+                    // Sticky / Priority: always try from index 0 unless in cooldown
+                    for acc in &pool {
+                        let cd = acc.cooldown_until.read().await;
+                        if let Some(until) = *cd {
+                            if now < until {
+                                continue;
+                            }
+                        }
+                        candidate = Some(acc.clone());
+                        break;
+                    }
                 }
-                let chosen = candidate.unwrap_or_else(|| pool[attempt % pool.len()].clone());
+
+                let chosen = candidate.unwrap_or_else(|| pool[(rr_start_idx + attempt) % pool.len()].clone());
 
                 let token_path = self.get_token_path();
                 if let Some(parent) = token_path.parent() {
@@ -568,6 +603,31 @@ impl AgentEnginePort for AntigravityCliAdapter {
             }
         }
     }
+
+    async fn get_account_pool_status(&self) -> Vec<crate::core::ports::AccountPoolStatus> {
+        let pool = self.token_pool.read().await;
+        let now = std::time::Instant::now();
+        let mut res = Vec::new();
+        for acc in pool.iter() {
+            let cd = acc.cooldown_until.read().await;
+            let (is_cooldown, remaining) = if let Some(until) = *cd {
+                if now < until {
+                    (true, (until - now).as_secs())
+                } else {
+                    (false, 0)
+                }
+            } else {
+                (false, 0)
+            };
+            res.push(crate::core::ports::AccountPoolStatus {
+                id: acc.id,
+                label: acc.label.clone(),
+                is_cooldown,
+                cooldown_remaining_secs: remaining,
+            });
+        }
+        res
+    }
 }
 
 /// Sanitizes Antigravity CLI agent output by stripping out intermediate tool-waiting
@@ -763,5 +823,74 @@ Tangkapan layar tersebut diambil langsung menggunakan browser headless bawaan pa
         assert!(!cleaned.contains("term_chrome"));
         assert!(cleaned.starts_with("Ini yaa Bang Ihza @Ihza Karunia!"));
         assert!(cleaned.contains("Tangkapan layar tersebut diambil langsung"));
+    }
+
+    #[tokio::test]
+    async fn test_token_pool_round_robin_rotation_and_cooldown() {
+        let pool = vec![
+            AccountToken {
+                id: 1,
+                label: "Account-1".to_string(),
+                token_json: "tok1".to_string(),
+                cooldown_until: Arc::new(RwLock::new(None)),
+            },
+            AccountToken {
+                id: 2,
+                label: "Account-2".to_string(),
+                token_json: "tok2".to_string(),
+                cooldown_until: Arc::new(RwLock::new(None)),
+            },
+            AccountToken {
+                id: 3,
+                label: "Account-3".to_string(),
+                token_json: "tok3".to_string(),
+                cooldown_until: Arc::new(RwLock::new(None)),
+            },
+            AccountToken {
+                id: 4,
+                label: "Account-4".to_string(),
+                token_json: "tok4".to_string(),
+                cooldown_until: Arc::new(RwLock::new(None)),
+            },
+        ];
+
+        let rr_counter = Arc::new(AtomicUsize::new(0));
+
+        // Test normal round-robin
+        let mut picked_labels = Vec::new();
+        for _ in 0..4 {
+            let start = rr_counter.fetch_add(1, Ordering::Relaxed);
+            let idx = start % pool.len();
+            picked_labels.push(pool[idx].label.clone());
+        }
+        assert_eq!(
+            picked_labels,
+            vec!["Account-1", "Account-2", "Account-3", "Account-4"]
+        );
+
+        // Account-2 in cooldown
+        *pool[1].cooldown_until.write().await = Some(std::time::Instant::now() + std::time::Duration::from_secs(300));
+
+        // When counter points to index 1 (Account-2), it should skip to Account-3
+        let start = rr_counter.fetch_add(1, Ordering::Relaxed);
+        assert_eq!(pool[start % pool.len()].label, "Account-1");
+
+        let start2 = rr_counter.fetch_add(1, Ordering::Relaxed);
+        let now = std::time::Instant::now();
+        let mut candidate = None;
+        let n = pool.len();
+        for i in 0..n {
+            let idx = (start2 + i) % n;
+            let acc = &pool[idx];
+            let cd = acc.cooldown_until.read().await;
+            if let Some(until) = *cd {
+                if now < until {
+                    continue;
+                }
+            }
+            candidate = Some(acc.clone());
+            break;
+        }
+        assert_eq!(candidate.unwrap().label, "Account-3");
     }
 }

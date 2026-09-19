@@ -228,6 +228,98 @@ impl ProcessIncomingMessageUseCase {
                     }
                 }
 
+                // Check for built-in quick command: /token or /auth or /account (Multi-Account Management)
+                if trimmed_text.starts_with("/token") || trimmed_text.starts_with("/auth") || trimmed_text.starts_with("/account") {
+                    let parts: Vec<&str> = trimmed_text.split_whitespace().collect();
+                    let is_status = parts.len() == 1 || (parts.len() >= 2 && (parts[1] == "status" || parts[1] == "list" || parts[1] == "pool"));
+
+                    if is_status {
+                        let pool_status = self.agent_engine.get_account_pool_status().await;
+                        let mut status_lines = Vec::new();
+                        for acc in &pool_status {
+                            let state_str = if acc.is_cooldown {
+                                format!("⏳ Cooldown (sisa {}s)", acc.cooldown_remaining_secs)
+                            } else {
+                                "🟢 Aktif & Siap".to_string()
+                            };
+                            status_lines.push(format!("• *{}*: {}", acc.label, state_str));
+                        }
+                        let list_str = if status_lines.is_empty() {
+                            "• _Belum ada akun di pool (menggunakan token file default)_".to_string()
+                        } else {
+                            status_lines.join("\n")
+                        };
+
+                        let reply = format!(
+                            "👥 *Status Pool Akun Antigravity Aina*\n\nTotal Akun Terdaftar: *{}*\n\n{}\n\n💡 *Cara Menambah Akun Cadangan:*\nKirimkan token di DM ini dengan format:\n`/token <oauth_json>`\nAtau buka Dashboard Setup di Web.",
+                            pool_status.len(),
+                            list_str
+                        );
+
+                        if let Some(aid) = audit_id {
+                            let dur = start_instant.elapsed().as_secs_f64();
+                            let _ = self.session_store.update_action_audit_result(aid, None, Some(&reply), None, "success", Some(dur), &[]).await;
+                        }
+                        self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
+                        self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
+                        return Ok(());
+                    }
+
+                    // For adding / saving token, enforce security: MUST be in Direct Message (DM)
+                    if msg.chat_type != ChatType::DirectMessage {
+                        let reply = "⚠️ *Demi Keamanan:* Perintah pendaftaran token akun OAuth HANYA boleh dikirim melalui Pesan Pribadi (DM) ke Aina, dilarang di dalam grup kerja.".to_string();
+                        self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
+                        return Ok(());
+                    }
+
+                    // Extract token JSON from the rest of the string
+                    let token_str = if let Some(stripped) = trimmed_text.strip_prefix("/token ") {
+                        stripped.trim()
+                    } else if let Some(stripped) = trimmed_text.strip_prefix("/auth ") {
+                        stripped.trim()
+                    } else if let Some(stripped) = trimmed_text.strip_prefix("/account add ") {
+                        stripped.trim()
+                    } else {
+                        ""
+                    };
+
+                    if token_str.is_empty() {
+                        let reply = "ℹ️ *Petunjuk Penggunaan Token:*\nUntuk menambahkan akun baru, ketik:\n`/token <oauth_json>`\n\nContoh:\n`/token {\"token\":\"...\"}`".to_string();
+                        self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
+                        return Ok(());
+                    }
+
+                    match self.agent_engine.save_auth_token(token_str).await {
+                        Ok(_) => {
+                            let pool = self.agent_engine.get_account_pool_status().await;
+                            let reply = format!(
+                                "✅ *Akun Antigravity Berhasil Ditambahkan!*\n\nAkun baru telah diverifikasi dan langsung aktif di dalam pool.\n• Total Akun di Pool: *{}*\n• Strategi Rotasi: *Round-Robin (Bergantian)*\n\nAina sekarang siap melanjutkan tugas tanpa gangguan kuota!",
+                                pool.len()
+                            );
+                            if let Some(aid) = audit_id {
+                                let dur = start_instant.elapsed().as_secs_f64();
+                                let _ = self.session_store.update_action_audit_result(aid, None, Some(&reply), None, "success", Some(dur), &[]).await;
+                            }
+                            self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
+                            self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
+                            return Ok(());
+                        }
+                        Err(e) => {
+                            let reply = format!(
+                                "❌ *Gagal Menyimpan Token:*\n{}\n\nPastikan format token berupa JSON yang valid dari file `antigravity-oauth-token`.",
+                                e
+                            );
+                            if let Some(aid) = audit_id {
+                                let dur = start_instant.elapsed().as_secs_f64();
+                                let _ = self.session_store.update_action_audit_result(aid, None, Some(&reply), Some(&e.to_string()), "failed", Some(dur), &[]).await;
+                            }
+                            self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
+                            self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
+                            return Ok(());
+                        }
+                    }
+                }
+
                 // Check for polite conversational closing / acknowledgment / gratitude:
                 // Rather than intimidating users with walls of text for short closing messages like "Sama-sama kak",
                 // react politely with an appropriate emoji (e.g. 🙏 or 👍) and close the interaction smoothly.
@@ -373,7 +465,17 @@ impl ProcessIncomingMessageUseCase {
                             || err_str.contains("rate limit");
 
                         if is_quota {
-                            let friendly_quota = "Aduh, kuota akses AI untuk sementara lagi penuh/cooling down nih dari Google. Tunggu sekitar 2-3 menit lagi yaa, nanti Aina langsung bisa proses lagi!".to_string();
+                            let pool_status = self.agent_engine.get_account_pool_status().await;
+                            let total_accs = pool_status.len();
+                            let friendly_quota = if msg.chat_type == ChatType::DirectMessage {
+                                if total_accs <= 1 {
+                                    "Aduh, kuota akses AI untuk akun saat ini lagi penuh/cooling down nih dari Google (429 Rate Limit).\n\n💡 *Solusi Cepat & Seamless:*\nAnda bisa menambahkan akun Pro cadangan agar Aina otomatis bergantian tanpa putus:\n1. Buka dashboard `/setup` di browser untuk paste token akun cadangan, ATAU\n2. Kirim token langsung di chat DM ini dengan perintah:\n   `/token {\"token\":\"...\"}`\n3. Atau pasang `AINA_OAUTH_TOKEN_2=...` di environment.\n\n_Konteks obrolan ini tersimpan aman dan tidak akan hilang!_".to_string()
+                                } else {
+                                    "Aduh, seluruh akun AI di pool sedang cooling down dari Google. Tunggu sekitar 2-3 menit yaa, nanti salah satu akun akan otomatis aktif kembali!".to_string()
+                                }
+                            } else {
+                                "Aduh, kuota akses AI untuk sementara lagi penuh/cooling down nih dari Google. Tunggu sekitar 2-3 menit yaa, atau admin bisa menambahkan akun cadangan di dashboard setup!".to_string()
+                            };
                             let _ = self
                                 .whatsapp
                                 .send_text_with_session(&msg.chat_jid, &friendly_quota, quote_id, msg.session_role)

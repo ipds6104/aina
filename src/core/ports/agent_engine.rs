@@ -1,4 +1,13 @@
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccountPoolStatus {
+    pub id: usize,
+    pub label: String,
+    pub is_cooldown: bool,
+    pub cooldown_remaining_secs: u64,
+}
 
 #[derive(Debug, Clone)]
 pub struct AgentResponse {
@@ -38,4 +47,9 @@ pub trait AgentEnginePort: Send + Sync {
 
     /// Saves and validates an OAuth token for the agent.
     async fn save_auth_token(&self, token_content: &str) -> anyhow::Result<()>;
+
+    /// Returns the live status of the Antigravity account pool.
+    async fn get_account_pool_status(&self) -> Vec<AccountPoolStatus> {
+        vec![]
+    }
 }

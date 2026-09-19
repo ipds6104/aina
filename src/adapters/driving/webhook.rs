@@ -76,6 +76,8 @@ pub fn create_router(state: Arc<WebhookServerState>) -> Router {
         .route("/api/models", get(api_get_models_handler))
         .route("/api/model", post(api_set_model_handler))
         .route("/api/setup", post(api_setup_handler))
+        .route("/api/auth/accounts", get(api_get_accounts_handler))
+        .route("/api/auth/token", post(api_add_token_handler))
         .route("/api/auth/verify", post(api_verify_admin_handler))
         .route("/api/simulate", post(simulate_handler))
         .route("/api/simulate/reset", post(simulate_reset_handler))
@@ -659,6 +661,83 @@ async fn api_setup_handler(
                 })),
             )
         }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct AddTokenApiRequest {
+    pub token: String,
+    pub setup_code: Option<String>,
+}
+
+async fn api_get_accounts_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
+    Query(query): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let key_candidate = query.get("key").or_else(|| query.get("api_key")).map(|s| s.as_str());
+    if !is_api_authorized(&headers, key_candidate, &state) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "success": false,
+                "error": "Akses ditolak. Berikan API Key atau Admin Key yang valid."
+            })),
+        );
+    }
+
+    let accounts = state.agent_engine.get_account_pool_status().await;
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "total_accounts": accounts.len(),
+            "accounts": accounts,
+        })),
+    )
+}
+
+async fn api_add_token_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
+    Query(query): Query<std::collections::HashMap<String, String>>,
+    Json(payload): Json<AddTokenApiRequest>,
+) -> impl IntoResponse {
+    let key_candidate = query.get("key")
+        .or_else(|| query.get("api_key"))
+        .map(|s| s.as_str())
+        .or(payload.setup_code.as_deref());
+
+    if !is_api_authorized(&headers, key_candidate, &state) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "success": false,
+                "error": "Akses ditolak. Berikan API Key atau Admin Key yang valid."
+            })),
+        );
+    }
+
+    match state.agent_engine.save_auth_token(&payload.token).await {
+        Ok(_) => {
+            let accounts = state.agent_engine.get_account_pool_status().await;
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "success": true,
+                    "message": "Token akun baru berhasil diverifikasi dan ditambahkan ke pool!",
+                    "total_accounts": accounts.len(),
+                    "accounts": accounts,
+                })),
+            )
+        }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "error": format!("Gagal memverifikasi token: {}", e),
+            })),
+        ),
     }
 }
 
@@ -1944,6 +2023,36 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
                 </div>
             </div>
 
+            <!-- MULTI-ACCOUNT POOL CARD -->
+            <div class="card" style="border-color: #3b82f6;">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 1.2rem;">👥</span>
+                        <h2>Pool Akun Antigravity (Multi-Account)</h2>
+                    </div>
+                    <button type="button" class="btn-outline" style="font-size: 0.8rem; padding: 4px 10px; cursor: pointer;" onclick="toggleAddAccountForm()">
+                        + Tambah Akun Cadangan
+                    </button>
+                </div>
+                <p style="color: var(--text-muted); font-size: 0.88rem; margin-bottom: 12px;">
+                    Daftar akun Google Antigravity yang aktif untuk rotasi otomatis (Round-Robin) saat kuota harian akun habis.
+                </p>
+                <div id="account-pool-badges" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;">
+                    <span style="color: #94a3b8; font-size: 0.85rem;">Memuat status pool akun...</span>
+                </div>
+
+                <!-- FORM TAMBAH AKUN CADANGAN (EXPANDABLE) -->
+                <div id="add-account-form" style="display: none; background: rgba(0,0,0,0.2); border: 1px dashed rgba(255,255,255,0.15); border-radius: 8px; padding: 14px; margin-top: 10px;">
+                    <label class="form-label" style="font-size: 0.85rem;">Tempel OAuth Token Akun Baru (JSON dari file antigravity-oauth-token):</label>
+                    <textarea id="add-token-input" class="form-input" style="height: 70px; font-family: monospace; font-size: 0.78rem;" placeholder='{{"token": "..."}}'></textarea>
+                    <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px;">
+                        <button type="button" class="btn-outline" style="font-size: 0.8rem; padding: 4px 12px; cursor: pointer;" onclick="toggleAddAccountForm()">Batal</button>
+                        <button type="button" id="add-token-btn" class="btn" style="font-size: 0.8rem; padding: 4px 14px; cursor: pointer;" onclick="submitAddAccount()">Simpan &amp; Verifikasi</button>
+                    </div>
+                    <div id="add-token-alert" style="display: none; font-size: 0.85rem; margin-top: 8px;"></div>
+                </div>
+            </div>
+
             <!-- ADMIN LOCK CARD -->
             <div id="sim-lock-card" class="card" style="border-color: #f59e0b; display: none;">
                 <div class="card-header">
@@ -2544,6 +2653,87 @@ fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model
             }} else {{
                 simCard.style.display = 'none';
                 lockCard.style.display = 'block';
+            }}
+            loadAccountPool();
+        }}
+
+        async function loadAccountPool() {{
+            const listEl = document.getElementById('account-pool-badges');
+            if (!listEl) return;
+            const key = localStorage.getItem('aina_admin_key') || '';
+            try {{
+                const res = await fetch('/api/auth/accounts?key=' + encodeURIComponent(key));
+                const data = await res.json();
+                if (res.ok && data.success && data.accounts) {{
+                    if (data.accounts.length === 0) {{
+                        listEl.innerHTML = '<span style="color: #94a3b8; font-size: 0.85rem;">Belum ada akun di pool (menggunakan token file default).</span>';
+                    }} else {{
+                        listEl.innerHTML = data.accounts.map(a => {{
+                            const badgeColor = a.is_cooldown ? '#f59e0b' : '#10b981';
+                            const statusText = a.is_cooldown ? ('Cooldown (' + a.cooldown_remaining_secs + 's)') : '🟢 Aktif';
+                            return '<div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 6px 12px; font-size: 0.85rem; display: flex; align-items: center; gap: 8px;">' +
+                                '<span style="font-weight: 600; color: #f8fafc;">' + a.label + '</span>' +
+                                '<span style="color: ' + badgeColor + '; font-size: 0.8rem;">' + statusText + '</span>' +
+                            '</div>';
+                        }}).join('');
+                    }}
+                }}
+            }} catch(e) {{
+                console.warn('Failed to load accounts:', e);
+            }}
+        }}
+
+        function toggleAddAccountForm() {{
+            const form = document.getElementById('add-account-form');
+            if (form) {{
+                form.style.display = form.style.display === 'none' ? 'block' : 'none';
+            }}
+        }}
+
+        async function submitAddAccount() {{
+            const tokenInput = document.getElementById('add-token-input');
+            const btn = document.getElementById('add-token-btn');
+            const alertEl = document.getElementById('add-token-alert');
+            const key = localStorage.getItem('aina_admin_key') || '';
+
+            const tokenVal = tokenInput.value.trim();
+            if (!tokenVal) {{
+                alertEl.innerText = 'Harap masukkan string JSON token OAuth.';
+                alertEl.style.color = '#ef4444';
+                alertEl.style.display = 'block';
+                return;
+            }}
+
+            btn.disabled = true;
+            btn.innerText = 'Menyimpan & Memverifikasi...';
+            alertEl.style.display = 'none';
+
+            try {{
+                const res = await fetch('/api/auth/token?key=' + encodeURIComponent(key), {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ token: tokenVal, setup_code: key }})
+                }});
+                const data = await res.json();
+                if (res.ok && data.success) {{
+                    alertEl.innerText = '✅ ' + data.message;
+                    alertEl.style.color = '#10b981';
+                    alertEl.style.display = 'block';
+                    tokenInput.value = '';
+                    loadAccountPool();
+                    setTimeout(() => {{ toggleAddAccountForm(); }}, 2000);
+                }} else {{
+                    alertEl.innerText = '❌ ' + (data.error || 'Gagal menambahkan akun.');
+                    alertEl.style.color = '#ef4444';
+                    alertEl.style.display = 'block';
+                }}
+            }} catch(e) {{
+                alertEl.innerText = '❌ Error koneksi: ' + e.message;
+                alertEl.style.color = '#ef4444';
+                alertEl.style.display = 'block';
+            }} finally {{
+                btn.disabled = false;
+                btn.innerText = 'Simpan & Verifikasi';
             }}
         }}
 
