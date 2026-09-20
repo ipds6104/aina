@@ -52,6 +52,8 @@ pub fn create_router(state: Arc<WebhookServerState>) -> Router {
         .route("/api/audit/summary", get(api_audit_summary_handler))
         .route("/api/audit/diagnostics", get(api_audit_diagnostics_handler))
         .route("/api/audit/transcripts", get(api_audit_transcripts_handler))
+        .route("/api/audit/presence", get(api_audit_presence_handler))
+        .route("/api/audit/presence/stop", post(api_audit_presence_stop_handler))
         .route("/webhook", post(webhook_handler))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
         .with_state(state)
@@ -680,6 +682,7 @@ mod tests {
             sim_jobs: Arc::new(RwLock::new(HashMap::new())),
             chat_queues: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
             active_tasks: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+            presence_tracker: Arc::new(crate::core::domain::PresenceTracker::new()),
             workspace_dir: temp_dir.clone(),
         });
 
@@ -791,6 +794,7 @@ mod tests {
             sim_jobs: Arc::new(RwLock::new(HashMap::new())),
             chat_queues: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
             active_tasks: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+            presence_tracker: Arc::new(crate::core::domain::PresenceTracker::new()),
             workspace_dir: temp_dir.clone(),
         });
 

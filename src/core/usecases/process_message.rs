@@ -1,5 +1,6 @@
 use crate::core::domain::{
     ChatType, Gatekeeper, GatekeeperDecision, IncomingMessage, PersonaEngine, PresenceState,
+    SessionRole,
 };
 use crate::core::ports::{AgentEnginePort, SessionStorePort, WhatsAppPort};
 use std::sync::Arc;
@@ -13,6 +14,49 @@ pub struct ProcessIncomingMessageUseCase {
     bot_jid: String,
     bot_name: String,
     bot_lid: Option<String>,
+}
+
+struct HeartbeatGuard {
+    handle: Option<tokio::task::JoinHandle<()>>,
+    whatsapp: Arc<dyn WhatsAppPort>,
+    chat_jid: String,
+    session_role: SessionRole,
+}
+
+impl HeartbeatGuard {
+    fn new(
+        handle: tokio::task::JoinHandle<()>,
+        whatsapp: Arc<dyn WhatsAppPort>,
+        chat_jid: String,
+        session_role: SessionRole,
+    ) -> Self {
+        Self {
+            handle: Some(handle),
+            whatsapp,
+            chat_jid,
+            session_role,
+        }
+    }
+
+    fn dismiss(&mut self) {
+        if let Some(h) = self.handle.take() {
+            h.abort();
+        }
+    }
+}
+
+impl Drop for HeartbeatGuard {
+    fn drop(&mut self) {
+        if let Some(h) = self.handle.take() {
+            h.abort();
+            let wa = Arc::clone(&self.whatsapp);
+            let jid = self.chat_jid.clone();
+            let role = self.session_role;
+            tokio::spawn(async move {
+                let _ = wa.send_presence_with_session(&jid, PresenceState::Paused, role).await;
+            });
+        }
+    }
 }
 
 impl ProcessIncomingMessageUseCase {
@@ -486,6 +530,13 @@ impl ProcessIncomingMessageUseCase {
                     }
                 });
 
+                let mut heartbeat_guard = HeartbeatGuard::new(
+                    heartbeat_handle,
+                    Arc::clone(&self.whatsapp),
+                    msg.chat_jid.clone(),
+                    msg.session_role,
+                );
+
                 // 6. Execute Antigravity agent CLI
                 let agent_res = match self
                     .agent_engine
@@ -493,7 +544,7 @@ impl ProcessIncomingMessageUseCase {
                     .await
                 {
                     Ok(res) => {
-                        heartbeat_handle.abort();
+                        heartbeat_guard.dismiss();
                         let _ = self
                             .whatsapp
                             .send_presence_with_session(&msg.chat_jid, PresenceState::Paused, msg.session_role)
@@ -501,7 +552,7 @@ impl ProcessIncomingMessageUseCase {
                         res
                     }
                     Err(e) => {
-                        heartbeat_handle.abort();
+                        heartbeat_guard.dismiss();
                         let _ = self
                             .whatsapp
                             .send_presence_with_session(&msg.chat_jid, PresenceState::Paused, msg.session_role)

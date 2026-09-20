@@ -5,6 +5,8 @@ use reqwest::Client;
 use serde_json::json;
 use tracing::{debug, error, info, warn};
 
+use std::sync::Arc;
+
 pub struct WhatsmeowHttpAdapter {
     client: Client,
     base_url: String,
@@ -17,6 +19,7 @@ pub struct WhatsmeowHttpAdapter {
     companion_base_url: Option<String>,
     #[allow(dead_code)]
     companion_api_key: Option<String>,
+    presence_tracker: Arc<crate::core::domain::PresenceTracker>,
 }
 
 impl WhatsmeowHttpAdapter {
@@ -77,7 +80,18 @@ impl WhatsmeowHttpAdapter {
             companion_session_id,
             companion_base_url,
             companion_api_key,
+            presence_tracker: Arc::new(crate::core::domain::PresenceTracker::new()),
         }
+    }
+
+    pub fn with_presence_tracker(mut self, tracker: Arc<crate::core::domain::PresenceTracker>) -> Self {
+        self.presence_tracker = tracker;
+        self
+    }
+
+    #[allow(dead_code)]
+    pub fn presence_tracker(&self) -> &Arc<crate::core::domain::PresenceTracker> {
+        &self.presence_tracker
     }
 
     fn resolve_session_id(&self, session_role: SessionRole) -> Option<&str> {
@@ -263,7 +277,11 @@ impl WhatsmeowHttpAdapter {
             }
         }
 
-        debug!("Sending presence '{}' to {} (role: {:?}, session: {:?})", state_str, to_jid, session_role, session_id);
+        info!("Presence updated to '{}' for {} (role: {:?}, session: {:?})", state_str, to_jid, session_role, session_id);
+
+        self.presence_tracker
+            .record(to_jid, state_str, &format!("{:?}", session_role), "gateway_send")
+            .await;
 
         let mut req = self
             .client
@@ -278,7 +296,7 @@ impl WhatsmeowHttpAdapter {
         let res = req.json(&body).send().await;
 
         if let Err(e) = res {
-            debug!("Presence update failed (non-critical): {}", e);
+            warn!("Presence update failed (non-critical): {}", e);
         }
 
         Ok(())

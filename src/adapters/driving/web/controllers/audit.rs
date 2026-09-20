@@ -308,3 +308,71 @@ pub async fn api_audit_transcripts_handler(
         })),
     )
 }
+
+pub async fn api_audit_presence_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
+    Query(query): Query<AuditAuthOnlyQuery>,
+) -> impl IntoResponse {
+    let key_candidate = query.key.as_deref().or(query.api_key.as_deref());
+    if !is_api_authorized(&headers, key_candidate, &state) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "success": false,
+                "error": "Akses ditolak. Berikan API Key yang valid."
+            })),
+        );
+    }
+
+    let snapshot = state.presence_tracker.snapshot().await;
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "presence": snapshot,
+        })),
+    )
+}
+
+#[derive(Deserialize)]
+pub struct StopPresencePayload {
+    pub chat_jid: Option<String>,
+}
+
+pub async fn api_audit_presence_stop_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
+    Query(query): Query<AuditAuthOnlyQuery>,
+    payload: Option<Json<StopPresencePayload>>,
+) -> impl IntoResponse {
+    let key_candidate = query.key.as_deref().or(query.api_key.as_deref());
+    if !is_api_authorized(&headers, key_candidate, &state) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "success": false,
+                "error": "Akses ditolak. Berikan API Key yang valid."
+            })),
+        );
+    }
+
+    let target_jid = payload.as_ref().and_then(|p| p.chat_jid.as_deref());
+    let cleared_jids = state.presence_tracker.clear_active(target_jid).await;
+    for jid in &cleared_jids {
+        let _ = state
+            .usecase
+            .whatsapp()
+            .send_presence_with_session(jid, crate::core::domain::PresenceState::Paused, crate::core::domain::SessionRole::PrimaryBot)
+            .await;
+    }
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "message": format!("Presence stopped for {} chats", cleared_jids.len()),
+            "cleared_chats": cleared_jids,
+        })),
+    )
+}

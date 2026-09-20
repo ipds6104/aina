@@ -62,5 +62,6 @@ pub struct WebhookServerState {
     pub sim_jobs: Arc<RwLock<HashMap<String, SimulationJob>>>,
     pub chat_queues: Arc<tokio::sync::Mutex<HashMap<String, tokio::sync::mpsc::UnboundedSender<IncomingMessage>>>>,
     pub active_tasks: Arc<tokio::sync::Mutex<HashMap<String, ActiveTaskInfo>>>,
+    pub presence_tracker: Arc<crate::core::domain::PresenceTracker>,
     pub workspace_dir: PathBuf,
 }

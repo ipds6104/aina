@@ -58,6 +58,7 @@ async fn main() -> anyhow::Result<()> {
         config.whatsmeow.companion_base_url.clone(),
         config.whatsmeow.companion_api_key.clone(),
     ));
+    let presence_tracker = Arc::new(crate::core::domain::PresenceTracker::new());
     let whatsapp = Arc::new(WhatsmeowHttpAdapter::with_companion_gateway(
         &config.whatsmeow.base_url,
         &config.whatsmeow.api_key,
@@ -67,7 +68,7 @@ async fn main() -> anyhow::Result<()> {
         config.whatsmeow.companion_session_id.clone(),
         config.whatsmeow.companion_base_url.clone(),
         config.whatsmeow.companion_api_key.clone(),
-    ));
+    ).with_presence_tracker(Arc::clone(&presence_tracker)));
 
     let persona_engine = Arc::new(PersonaEngine::new(
         persona_text,
@@ -146,6 +147,7 @@ async fn main() -> anyhow::Result<()> {
         sim_jobs: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         chat_queues: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
         active_tasks: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
+        presence_tracker: Arc::clone(&presence_tracker),
         workspace_dir: std::path::PathBuf::from(&config.agent.workspace_dir),
     });
     let app = create_router(state);

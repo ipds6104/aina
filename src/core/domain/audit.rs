@@ -164,6 +164,134 @@ pub struct SystemDiagnostics {
     pub timestamp_epoch: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActiveTypingStatus {
+    pub chat_jid: String,
+    pub session_role: String,
+    pub started_at_epoch: i64,
+    pub last_beat_epoch: i64,
+    pub duration_seconds: i64,
+    pub heartbeat_count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PresenceAuditRecord {
+    pub timestamp_epoch: i64,
+    pub chat_jid: String,
+    pub state: String, // "composing" or "paused"
+    pub session_role: String,
+    pub trigger: String, // e.g. "gateway_send", "heartbeat", "task_completed", "guard_drop", "manual_stop"
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PresenceAuditSnapshot {
+    pub active_typing_count: usize,
+    pub active_typing: Vec<ActiveTypingStatus>,
+    pub recent_events: Vec<PresenceAuditRecord>,
+}
+
+#[derive(Debug)]
+pub struct PresenceTracker {
+    active: tokio::sync::RwLock<std::collections::HashMap<String, ActiveTypingStatus>>,
+    history: tokio::sync::RwLock<std::collections::VecDeque<PresenceAuditRecord>>,
+    max_history: usize,
+}
+
+impl Default for PresenceTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PresenceTracker {
+    pub fn new() -> Self {
+        Self::with_capacity(100)
+    }
+
+    pub fn with_capacity(max_history: usize) -> Self {
+        Self {
+            active: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+            history: tokio::sync::RwLock::new(std::collections::VecDeque::with_capacity(max_history)),
+            max_history,
+        }
+    }
+
+    pub async fn record(&self, chat_jid: &str, state: &str, session_role: &str, trigger: &str) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+
+        if state == "composing" {
+            let mut active = self.active.write().await;
+            let entry = active.entry(chat_jid.to_string()).or_insert_with(|| ActiveTypingStatus {
+                chat_jid: chat_jid.to_string(),
+                session_role: session_role.to_string(),
+                started_at_epoch: now,
+                last_beat_epoch: now,
+                duration_seconds: 0,
+                heartbeat_count: 0,
+            });
+            entry.last_beat_epoch = now;
+            entry.duration_seconds = (now - entry.started_at_epoch).max(0);
+            entry.heartbeat_count += 1;
+        } else {
+            let mut active = self.active.write().await;
+            active.remove(chat_jid);
+        }
+
+        let mut history = self.history.write().await;
+        if history.len() >= self.max_history {
+            history.pop_front();
+        }
+        history.push_back(PresenceAuditRecord {
+            timestamp_epoch: now,
+            chat_jid: chat_jid.to_string(),
+            state: state.to_string(),
+            session_role: session_role.to_string(),
+            trigger: trigger.to_string(),
+        });
+    }
+
+    pub async fn snapshot(&self) -> PresenceAuditSnapshot {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+
+        let active_map = self.active.read().await;
+        let mut active_list: Vec<ActiveTypingStatus> = active_map.values().cloned().collect();
+        for item in &mut active_list {
+            item.duration_seconds = (now - item.started_at_epoch).max(0);
+        }
+        active_list.sort_by(|a, b| b.started_at_epoch.cmp(&a.started_at_epoch));
+
+        let history = self.history.read().await;
+        let recent_events: Vec<PresenceAuditRecord> = history.iter().rev().cloned().collect();
+
+        PresenceAuditSnapshot {
+            active_typing_count: active_list.len(),
+            active_typing: active_list,
+            recent_events,
+        }
+    }
+
+    pub async fn clear_active(&self, chat_jid: Option<&str>) -> Vec<String> {
+        let mut active = self.active.write().await;
+        if let Some(jid) = chat_jid {
+            if active.remove(jid).is_some() {
+                vec![jid.to_string()]
+            } else {
+                vec![]
+            }
+        } else {
+            let jids: Vec<String> = active.keys().cloned().collect();
+            active.clear();
+            jids
+        }
+    }
+}
+
 pub struct AuditEngine;
 
 impl AuditEngine {
@@ -655,5 +783,33 @@ mod tests {
         // In linux /proc/self/statm, memory should be non-zero
         assert!(rss > 0);
         assert!(virt >= rss);
+    }
+
+    #[tokio::test]
+    async fn test_presence_tracker_lifecycle() {
+        let tracker = PresenceTracker::new();
+
+        // 1. Record composing
+        tracker.record("user1@s.whatsapp.net", "composing", "PrimaryBot", "start").await;
+        tracker.record("user1@s.whatsapp.net", "composing", "PrimaryBot", "heartbeat").await;
+
+        let snap = tracker.snapshot().await;
+        assert_eq!(snap.active_typing_count, 1);
+        assert_eq!(snap.active_typing[0].chat_jid, "user1@s.whatsapp.net");
+        assert_eq!(snap.active_typing[0].heartbeat_count, 2);
+        assert_eq!(snap.recent_events.len(), 2);
+
+        // 2. Record paused
+        tracker.record("user1@s.whatsapp.net", "paused", "PrimaryBot", "completed").await;
+        let snap2 = tracker.snapshot().await;
+        assert_eq!(snap2.active_typing_count, 0);
+        assert_eq!(snap2.recent_events.len(), 3);
+        assert_eq!(snap2.recent_events[0].state, "paused");
+
+        // 3. Clear active
+        tracker.record("user2@s.whatsapp.net", "composing", "PrimaryBot", "start").await;
+        let cleared = tracker.clear_active(Some("user2@s.whatsapp.net")).await;
+        assert_eq!(cleared, vec!["user2@s.whatsapp.net"]);
+        assert_eq!(tracker.snapshot().await.active_typing_count, 0);
     }
 }
