@@ -102,8 +102,10 @@ Aina memiliki hobi dan nilai hidup yang disebut **"Impact Maxxing"**:
 ## 6. Panduan Berkas Acuan Visual (`assets/character_sheet.png`)
 
 Untuk meminimalkan visual drifting:
-1. Simpan gambar desain karakter utuh di `assets/character_sheet.png` (atau `assets/avatar.png`).
-2. Format yang paling direkomendasikan:
+1. Sistem menggunakan template default bawaan di `assets/character_sheet.default.png`.
+2. Pengguna/Admin dapat menimpa dengan gambar desain kustom sendiri di `assets/character_sheet.png` (atau `assets/avatar.png`).
+3. File kustom `assets/character_sheet.png` dan `assets/avatar.png` dilindungi oleh `.gitignore` sehingga **tidak akan pernah tertimpa saat update / `git pull`**.
+4. Format yang paling direkomendasikan untuk gambar acuan:
    - Pose berdiri santai (*relaxed standing / natural 3/4 A-pose*) memperlihatkan proporsi dari ujung kepala hingga kaki (Front View & Side View).
    - Background netral polos (putih / abu-abu muda) agar tidak mencemari komposisi gambar baru.
    - Wajah jelas dengan rambut silver-lavender kepang samping dan jepit bulan sabit/bintang yang tegas.
@@ -114,8 +116,9 @@ Untuk meminimalkan visual drifting:
 
 Pemisahan fungsi penyimpanan berkas sangat penting agar sistem rapi dan tidak membingungkan:
 1. **`assets/` (Master References & Blueprints)**:
-   - Menyimpan berkas acuan baku: `assets/character_sheet.png` atau `assets/avatar.png`.
-   - Bersifat permanen, statis, dan **tidak ditimpa** oleh status harian.
+   - `assets/character_sheet.default.png`: Berkas acuan template master bawaan sistem.
+   - `assets/character_sheet.png` / `assets/avatar.png`: Berkas acuan kustom pengguna (diprioritaskan utama & terlindung dari git overwrite).
+   - Bersifat permanen, statis, dan **tidak ditimpa** oleh render status harian.
 2. **`output/status/` (Daily Generated Status Images)**:
    - Menyimpan berkas gambar hasil render unik setiap status harian (`status_{theme}_{timestamp}.png`).
    - Berkas ini yang diunggah ke WhatsApp Status dan dicatat jalurnya ke `data/status_journal.jsonl`.

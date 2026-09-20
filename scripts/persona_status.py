@@ -99,7 +99,16 @@ def get_today_entries(entries, dt=None):
     return [e for e in entries if e.get("date") == today_str]
 
 def get_avatar_reference_path():
-    for name in ["character_sheet.png", "avatar.png", "character_sheet.jpg", "avatar.jpg"]:
+    # Prioritas: File kustom user (character_sheet / avatar) > Fallback default repo (character_sheet.default.png)
+    candidates = [
+        "character_sheet.png",
+        "avatar.png",
+        "character_sheet.jpg",
+        "avatar.jpg",
+        "character_sheet.default.png",
+        "character_sheet.default.jpg",
+    ]
+    for name in candidates:
         p = os.path.join(ASSETS_DIR, name)
         if os.path.exists(p):
             return p

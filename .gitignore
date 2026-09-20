@@ -39,3 +39,9 @@
 *google_token*.json
 config/client_secrets.json
 data/google_token.json
+
+# User custom character sheets & avatars (prevent git overwrite on updates)
+/assets/character_sheet.png
+/assets/avatar.png
+/assets/character_sheet.jpg
+/assets/avatar.jpg

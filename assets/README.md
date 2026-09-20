@@ -4,10 +4,11 @@
 
 ---
 
-## 1. Lokasi Berkas yang Didukung
-Simpan berkas gambar acuan Anda di salah satu path berikut:
-- **`assets/character_sheet.png`** (Direkomendasikan: gambar postur tubuh utuh)
-- **`assets/avatar.png`** (Alternatif: ilustrasi karakter standar)
+## 1. Lokasi Berkas yang Didukung & Mekanisme Fallback
+Sistem memeriksa berkas acuan dengan urutan prioritas berikut:
+1. **`assets/character_sheet.png`** (Kustom Pengguna: prioritas tertinggi, diabaikan oleh `.gitignore` sehingga tidak akan pernah tertimpa saat update / `git pull`).
+2. **`assets/avatar.png`** (Kustom Pengguna: foto profil kustom alternatif).
+3. **`assets/character_sheet.default.png`** (Bawaan Template Repo: berkas master acuan bawaan jika pengguna belum menaruh berkas kustom sendiri).
 
 ---
 
@@ -25,9 +26,10 @@ Berdasarkan riset karakteristik model difusi dan VLM multimodal (Gemini / Imagen
 ---
 
 ## 3. Jangkar Visual Tanda Tangan (*Signature Anchors*)
-Pastikan gambar acuan menampilkan 2–3 elemen khas yang juga didefinisikan dalam teks di [`config/character.md`](file:///root/projects/aina/config/character.md):
-1. **Gaya & Warna Rambut**: Rambut bob sebahu cokelat espresso dengan poni lembut.
-2. **Aksesoris Tanda Tangan**: Jepit rambut geometris perak di sisi kiri kepala.
-3. **Setelan Busana Utama**: Kemeja putih berbalut kardigan krem lembut (*cream cardigan*).
+Pastikan gambar acuan menampilkan elemen khas yang juga didefinisikan dalam teks di [`config/character.md`](file:///root/projects/aina/config/character.md):
+1. **Gaya & Warna Rambut**: Rambut panjang bergelombang warna *silver-lavender* lembut dengan kepang samping khas (*signature side braid*).
+2. **Mata & Wajah**: Mata biru malam berbintang (*starry deep blue eyes*), ekspresi ramah dan hangat.
+3. **Aksesoris Tanda Tangan**: Jepit rambut bulan sabit & bintang bercahaya (*crescent moon and glowing star hair clip*) di sisi kiri kepala.
+4. **Setelan Busana Utama**: Menyesuaikan konteks aktivitas (lihat Wardrobe Matrix di `config/character.md`) dengan sentuhan palet celestial/lembut yang senada.
 
 Kombinasi antara gambar acuan ini dan prompt teks di [`config/character.md`](file:///root/projects/aina/config/character.md) saling mengunci (*mutual reinforcement*), menghasilkan konsistensi visual yang stabil di berbagai latar belakang cerita Makoto Shinkai.
