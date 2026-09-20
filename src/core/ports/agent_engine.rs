@@ -5,8 +5,25 @@ use serde::{Deserialize, Serialize};
 pub struct AccountPoolStatus {
     pub id: usize,
     pub label: String,
+    pub email: Option<String>,
     pub is_cooldown: bool,
     pub cooldown_remaining_secs: u64,
+}
+
+impl AccountPoolStatus {
+    pub fn masked_email(&self) -> Option<String> {
+        self.email.as_ref().map(|email| {
+            if let Some((user, domain)) = email.split_once('@') {
+                if user.len() <= 3 {
+                    format!("{}***@{}", user, domain)
+                } else {
+                    format!("{}***@{}", &user[..3], domain)
+                }
+            } else {
+                email.to_string()
+            }
+        })
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -47,6 +64,17 @@ pub trait AgentEnginePort: Send + Sync {
 
     /// Saves and validates an OAuth token for the agent.
     async fn save_auth_token(&self, token_content: &str) -> anyhow::Result<()>;
+
+    /// Removes an account from the pool by its ID.
+    async fn remove_account(&self, account_id: usize) -> anyhow::Result<bool> {
+        let _ = account_id;
+        Ok(false)
+    }
+
+    /// Clears all accounts from the pool.
+    async fn clear_account_pool(&self) -> anyhow::Result<usize> {
+        Ok(0)
+    }
 
     /// Returns the live status of the Antigravity account pool.
     async fn get_account_pool_status(&self) -> Vec<AccountPoolStatus> {

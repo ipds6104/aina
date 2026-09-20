@@ -18,7 +18,7 @@ pub use ui::*;
 
 use axum::{
     extract::DefaultBodyLimit,
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
 use std::sync::Arc;
@@ -34,6 +34,8 @@ pub fn create_router(state: Arc<WebhookServerState>) -> Router {
         .route("/api/model", post(api_set_model_handler))
         .route("/api/setup", post(api_setup_handler))
         .route("/api/auth/accounts", get(api_get_accounts_handler))
+        .route("/api/auth/accounts/clear", post(api_clear_accounts_handler))
+        .route("/api/auth/accounts/{id}", delete(api_remove_account_handler))
         .route("/api/auth/token", post(api_add_token_handler))
         .route("/api/auth/verify", post(api_verify_admin_handler))
         .route("/api/simulate", post(simulate_handler))
@@ -889,6 +891,26 @@ mod tests {
         assert_eq!(sched_diag_resp.status(), StatusCode::OK);
         let sdiag_data: serde_json::Value = sched_diag_resp.json().await.unwrap();
         assert_eq!(sdiag_data["success"], true);
+
+        // 8. Test /api/auth/accounts deletion & clear
+        let del_resp = client
+            .delete(format!("http://{}/api/auth/accounts/99", aina_addr))
+            .header("X-Admin-Key", "SETUP_SECRET_777")
+            .send()
+            .await
+            .unwrap();
+        // ID 99 doesn't exist in MockAgentEngine -> 404
+        assert_eq!(del_resp.status(), StatusCode::NOT_FOUND);
+
+        let clear_resp = client
+            .post(format!("http://{}/api/auth/accounts/clear", aina_addr))
+            .header("X-Admin-Key", "SETUP_SECRET_777")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(clear_resp.status(), StatusCode::OK);
+        let clear_data: serde_json::Value = clear_resp.json().await.unwrap();
+        assert_eq!(clear_data["success"], true);
 
         let _ = tokio::fs::remove_dir_all(&temp_dir).await;
     }

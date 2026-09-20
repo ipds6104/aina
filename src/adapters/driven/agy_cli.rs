@@ -1,6 +1,6 @@
 use crate::core::ports::{AgentEnginePort, AgentResponse};
 use async_trait::async_trait;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::process::Command;
@@ -94,11 +94,60 @@ pub fn get_available_models() -> Vec<(&'static str, &'static str)> {
     ]
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoredAccountToken {
+    pub id: usize,
+    pub label: String,
+    pub email: Option<String>,
+    pub token_json: String,
+}
+
+pub fn extract_email_from_token(token_json: &str) -> Option<String> {
+    if let Ok(val) = serde_json::from_str::<serde_json::Value>(token_json) {
+        if let Some(email) = val.get("email").and_then(|e| e.as_str()) {
+            return Some(email.to_string());
+        }
+        if let Some(id_token) = val.get("id_token").and_then(|t| t.as_str()) {
+            let parts: Vec<&str> = id_token.split('.').collect();
+            if parts.len() >= 2 {
+                use base64::Engine;
+                let mut b64 = parts[1].to_string();
+                while b64.len() % 4 != 0 {
+                    b64.push('=');
+                }
+                if let Ok(decoded_bytes) = base64::engine::general_purpose::STANDARD.decode(&b64)
+                    .or_else(|_| base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(parts[1]))
+                {
+                    if let Ok(jwt_json) = serde_json::from_slice::<serde_json::Value>(&decoded_bytes) {
+                        if let Some(email) = jwt_json.get("email").and_then(|e| e.as_str()) {
+                            return Some(email.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+pub fn mask_email(email: &str) -> String {
+    if let Some((user, domain)) = email.split_once('@') {
+        if user.len() <= 3 {
+            format!("{}***@{}", user, domain)
+        } else {
+            format!("{}***@{}", &user[..3], domain)
+        }
+    } else {
+        email.to_string()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct AccountToken {
     #[allow(dead_code)]
     pub id: usize,
     pub label: String,
+    pub email: Option<String>,
     pub token_json: String,
     pub cooldown_until: Arc<RwLock<Option<std::time::Instant>>>,
 }
@@ -168,26 +217,73 @@ impl AntigravityCliAdapter {
         }
     }
 
+    fn get_persistent_pool_path() -> PathBuf {
+        PathBuf::from("data/token_pool.json")
+    }
+
+    async fn persist_token_pool(pool: &[AccountToken]) -> anyhow::Result<()> {
+        let path = Self::get_persistent_pool_path();
+        if let Some(parent) = path.parent() {
+            let _ = tokio::fs::create_dir_all(parent).await;
+        }
+        let stored: Vec<StoredAccountToken> = pool
+            .iter()
+            .map(|a| StoredAccountToken {
+                id: a.id,
+                label: a.label.clone(),
+                email: a.email.clone(),
+                token_json: a.token_json.clone(),
+            })
+            .collect();
+        let json = serde_json::to_string_pretty(&stored)?;
+        tokio::fs::write(&path, json).await?;
+        Ok(())
+    }
+
     fn load_initial_token_pool() -> Vec<AccountToken> {
         let mut pool = Vec::new();
 
+        // 0. Check data/token_pool.json (Persistent Volume - survives container restart/reboot)
+        let pool_path = Self::get_persistent_pool_path();
+        if pool_path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&pool_path) {
+                if let Ok(stored) = serde_json::from_str::<Vec<StoredAccountToken>>(&content) {
+                    for acc in stored {
+                        if !acc.token_json.trim().is_empty() {
+                            pool.push(AccountToken {
+                                id: acc.id,
+                                label: acc.label,
+                                email: acc.email,
+                                token_json: acc.token_json,
+                                cooldown_until: Arc::new(RwLock::new(None)),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
         // 1. Check AINA_OAUTH_TOKENS (JSON array of token strings or objects)
-        if let Ok(val) = std::env::var("AINA_OAUTH_TOKENS") {
-            let trimmed = val.trim();
-            if let Ok(parsed_arr) = serde_json::from_str::<Vec<serde_json::Value>>(trimmed) {
-                for (idx, item) in parsed_arr.into_iter().enumerate() {
-                    let token_str = if item.is_string() {
-                        item.as_str().unwrap().to_string()
-                    } else {
-                        item.to_string()
-                    };
-                    if !token_str.trim().is_empty() {
-                        pool.push(AccountToken {
-                            id: idx + 1,
-                            label: format!("Account-{}", idx + 1),
-                            token_json: token_str,
-                            cooldown_until: Arc::new(RwLock::new(None)),
-                        });
+        if pool.is_empty() {
+            if let Ok(val) = std::env::var("AINA_OAUTH_TOKENS") {
+                let trimmed = val.trim();
+                if let Ok(parsed_arr) = serde_json::from_str::<Vec<serde_json::Value>>(trimmed) {
+                    for (idx, item) in parsed_arr.into_iter().enumerate() {
+                        let token_str = if item.is_string() {
+                            item.as_str().unwrap().to_string()
+                        } else {
+                            item.to_string()
+                        };
+                        if !token_str.trim().is_empty() {
+                            let email = extract_email_from_token(&token_str);
+                            pool.push(AccountToken {
+                                id: idx + 1,
+                                label: format!("Account-{}", idx + 1),
+                                email,
+                                token_json: token_str,
+                                cooldown_until: Arc::new(RwLock::new(None)),
+                            });
+                        }
                     }
                 }
             }
@@ -199,9 +295,11 @@ impl AntigravityCliAdapter {
                 if let Ok(val) = std::env::var(format!("AINA_OAUTH_TOKEN_{}", i)) {
                     let trimmed = val.trim().to_string();
                     if !trimmed.is_empty() {
+                        let email = extract_email_from_token(&trimmed);
                         pool.push(AccountToken {
                             id: i,
                             label: format!("Account-{}", i),
+                            email,
                             token_json: trimmed,
                             cooldown_until: Arc::new(RwLock::new(None)),
                         });
@@ -215,9 +313,11 @@ impl AntigravityCliAdapter {
             if let Ok(val) = std::env::var("AINA_OAUTH_TOKEN").or_else(|_| std::env::var("ANTIGRAVITY_OAUTH_TOKEN")) {
                 let trimmed = val.trim().to_string();
                 if !trimmed.is_empty() {
+                    let email = extract_email_from_token(&trimmed);
                     pool.push(AccountToken {
                         id: 1,
                         label: "Account-Primary".to_string(),
+                        email,
                         token_json: trimmed,
                         cooldown_until: Arc::new(RwLock::new(None)),
                     });
@@ -228,14 +328,24 @@ impl AntigravityCliAdapter {
         // 4. Fallback to existing token file on disk if available
         if pool.is_empty() {
             let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
-            let default_path = PathBuf::from(home).join(".gemini/antigravity-cli/antigravity-oauth-token");
-            if default_path.exists() {
-                if let Ok(content) = std::fs::read_to_string(&default_path) {
+            let default_path = PathBuf::from(&home).join(".gemini/antigravity-cli/antigravity-oauth-token");
+            let auth_json_path = PathBuf::from(&home).join(".gemini/antigravity-cli/auth.json");
+            let target_path = if default_path.exists() {
+                Some(default_path)
+            } else if auth_json_path.exists() {
+                Some(auth_json_path)
+            } else {
+                None
+            };
+            if let Some(path) = target_path {
+                if let Ok(content) = std::fs::read_to_string(&path) {
                     let trimmed = content.trim().to_string();
                     if !trimmed.is_empty() {
+                        let email = extract_email_from_token(&trimmed);
                         pool.push(AccountToken {
                             id: 1,
                             label: "Account-Default".to_string(),
+                            email,
                             token_json: trimmed,
                             cooldown_until: Arc::new(RwLock::new(None)),
                         });
@@ -581,20 +691,53 @@ impl AgentEnginePort for AntigravityCliAdapter {
             let _ = tokio::fs::set_permissions(&path, perms).await;
         }
 
-        // Synchronize in-memory token pool
-        {
+        let new_email = extract_email_from_token(trimmed);
+
+        // Synchronize in-memory token pool with smart deduplication
+        let pool_snapshot = {
             let mut pool = self.token_pool.write().await;
-            if let Some(existing) = pool.iter_mut().find(|a| a.token_json == trimmed) {
-                *existing.cooldown_until.write().await = None;
-            } else {
+            let mut merged = false;
+
+            // Check if account with same email already exists in pool
+            if let Some(ref email) = new_email {
+                if let Some(existing) = pool.iter_mut().find(|a| a.email.as_ref() == Some(email)) {
+                    existing.token_json = trimmed.to_string();
+                    *existing.cooldown_until.write().await = None;
+                    info!("Account {} ({}) updated in pool with refreshed token", existing.label, email);
+                    merged = true;
+                }
+            }
+
+            // Fallback check: same token_json
+            if !merged {
+                if let Some(existing) = pool.iter_mut().find(|a| a.token_json == trimmed) {
+                    *existing.cooldown_until.write().await = None;
+                    if existing.email.is_none() {
+                        existing.email = new_email.clone();
+                    }
+                    info!("Account {} refreshed in pool", existing.label);
+                    merged = true;
+                }
+            }
+
+            if !merged {
                 let next_id = pool.len() + 1;
                 pool.push(AccountToken {
                     id: next_id,
                     label: format!("Account-{}", next_id),
+                    email: new_email.clone(),
                     token_json: trimmed.to_string(),
                     cooldown_until: Arc::new(RwLock::new(None)),
                 });
+                info!("New account added to pool: Account-{} (email: {:?})", next_id, new_email);
             }
+
+            pool.clone()
+        };
+
+        // Persist token pool to data/token_pool.json so it survives container restart / power outage
+        if let Err(e) = Self::persist_token_pool(&pool_snapshot).await {
+            warn!("Failed to persist token pool to data/token_pool.json: {}", e);
         }
 
         info!("Auth token saved to {:?}, verifying with quick test...", path);
@@ -610,6 +753,52 @@ impl AgentEnginePort for AntigravityCliAdapter {
                 Err(anyhow::anyhow!("Token saved, but verification failed: {}", e))
             }
         }
+    }
+
+    async fn remove_account(&self, account_id: usize) -> anyhow::Result<bool> {
+        let (removed, pool_snapshot) = {
+            let mut pool = self.token_pool.write().await;
+            let initial_len = pool.len();
+            pool.retain(|a| a.id != account_id);
+            let removed = pool.len() < initial_len;
+            if removed {
+                // Re-index remaining accounts
+                for (idx, acc) in pool.iter_mut().enumerate() {
+                    acc.id = idx + 1;
+                    if acc.label.starts_with("Account-") && acc.label != "Account-Default" && acc.label != "Account-Primary" {
+                        acc.label = format!("Account-{}", idx + 1);
+                    }
+                }
+            }
+            (removed, pool.clone())
+        };
+
+        if removed {
+            if let Err(e) = Self::persist_token_pool(&pool_snapshot).await {
+                warn!("Failed to update persistent token pool after removal: {}", e);
+            }
+            info!("Removed account #{} from pool. Remaining: {}", account_id, pool_snapshot.len());
+        }
+
+        Ok(removed)
+    }
+
+    async fn clear_account_pool(&self) -> anyhow::Result<usize> {
+        let (count, pool_snapshot) = {
+            let mut pool = self.token_pool.write().await;
+            let count = pool.len().saturating_sub(1);
+            if pool.len() > 1 {
+                pool.truncate(1);
+            }
+            (count, pool.clone())
+        };
+
+        if let Err(e) = Self::persist_token_pool(&pool_snapshot).await {
+            warn!("Failed to update persistent token pool after clearing: {}", e);
+        }
+        info!("Cleared {} secondary accounts from pool", count);
+
+        Ok(count)
     }
 
     async fn get_account_pool_status(&self) -> Vec<crate::core::ports::AccountPoolStatus> {
@@ -630,6 +819,7 @@ impl AgentEnginePort for AntigravityCliAdapter {
             res.push(crate::core::ports::AccountPoolStatus {
                 id: acc.id,
                 label: acc.label.clone(),
+                email: acc.email.clone(),
                 is_cooldown,
                 cooldown_remaining_secs: remaining,
             });
@@ -839,24 +1029,28 @@ Tangkapan layar tersebut diambil langsung menggunakan browser headless bawaan pa
             AccountToken {
                 id: 1,
                 label: "Account-1".to_string(),
+                email: None,
                 token_json: "tok1".to_string(),
                 cooldown_until: Arc::new(RwLock::new(None)),
             },
             AccountToken {
                 id: 2,
                 label: "Account-2".to_string(),
+                email: None,
                 token_json: "tok2".to_string(),
                 cooldown_until: Arc::new(RwLock::new(None)),
             },
             AccountToken {
                 id: 3,
                 label: "Account-3".to_string(),
+                email: None,
                 token_json: "tok3".to_string(),
                 cooldown_until: Arc::new(RwLock::new(None)),
             },
             AccountToken {
                 id: 4,
                 label: "Account-4".to_string(),
+                email: None,
                 token_json: "tok4".to_string(),
                 cooldown_until: Arc::new(RwLock::new(None)),
             },
@@ -900,5 +1094,83 @@ Tangkapan layar tersebut diambil langsung menggunakan browser headless bawaan pa
             break;
         }
         assert_eq!(candidate.unwrap().label, "Account-3");
+    }
+
+    #[test]
+    fn test_mask_email() {
+        assert_eq!(mask_email("ihzathegodslayer@gmail.com"), "ihz***@gmail.com");
+        assert_eq!(mask_email("ab@gmail.com"), "ab***@gmail.com");
+        assert_eq!(mask_email("user@domain.co.id"), "use***@domain.co.id");
+        assert_eq!(mask_email("plainstring"), "plainstring");
+    }
+
+    #[test]
+    fn test_extract_email_from_jwt_payload() {
+        use base64::Engine;
+        let payload_json = r#"{"email":"testuser@example.com"}"#;
+        let b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(payload_json);
+        let fake_jwt = format!("eyJhbGciOiJSUzI1NiJ9.{}.fakesig", b64);
+        let token_json = format!(r#"{{"token":"abc","id_token":"{}"}}"#, fake_jwt);
+
+        let email = extract_email_from_token(&token_json);
+        assert_eq!(email, Some("testuser@example.com".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_pool_remove_and_clear() {
+        let adapter = AntigravityCliAdapter::new(
+            "/bin/true",
+            "gemini-2.5-flash",
+            "/tmp",
+            60,
+            "http://localhost:8080",
+            "secret",
+        );
+
+        {
+            let mut pool = adapter.token_pool.write().await;
+            pool.clear();
+            pool.push(AccountToken {
+                id: 1,
+                label: "Account-Default".to_string(),
+                email: Some("default@gmail.com".to_string()),
+                token_json: "tok1".to_string(),
+                cooldown_until: Arc::new(RwLock::new(None)),
+            });
+            pool.push(AccountToken {
+                id: 2,
+                label: "Account-2".to_string(),
+                email: Some("second@gmail.com".to_string()),
+                token_json: "tok2".to_string(),
+                cooldown_until: Arc::new(RwLock::new(None)),
+            });
+            pool.push(AccountToken {
+                id: 3,
+                label: "Account-3".to_string(),
+                email: Some("third@gmail.com".to_string()),
+                token_json: "tok3".to_string(),
+                cooldown_until: Arc::new(RwLock::new(None)),
+            });
+        }
+
+        // Test remove Account #2
+        let removed = adapter.remove_account(2).await.unwrap();
+        assert!(removed);
+
+        let status = adapter.get_account_pool_status().await;
+        assert_eq!(status.len(), 2);
+        assert_eq!(status[0].id, 1);
+        assert_eq!(status[0].label, "Account-Default");
+        assert_eq!(status[1].id, 2);
+        assert_eq!(status[1].label, "Account-2"); // Reindexed from 3 to 2
+
+        // Test clear (retains primary account)
+        let cleared = adapter.clear_account_pool().await.unwrap();
+        assert_eq!(cleared, 1);
+
+        let status = adapter.get_account_pool_status().await;
+        assert_eq!(status.len(), 1);
+        assert_eq!(status[0].id, 1);
+        assert_eq!(status[0].label, "Account-Default");
     }
 }

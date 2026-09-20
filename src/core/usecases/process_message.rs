@@ -307,7 +307,11 @@ impl ProcessIncomingMessageUseCase {
                             } else {
                                 "🟢 Aktif & Siap".to_string()
                             };
-                            status_lines.push(format!("• *{}*: {}", acc.label, state_str));
+                            let email_str = match acc.masked_email() {
+                                Some(e) => format!(" ({})", e),
+                                None => String::new(),
+                            };
+                            status_lines.push(format!("• *#{} {}*{}: {}", acc.id, acc.label, email_str, state_str));
                         }
                         let list_str = if status_lines.is_empty() {
                             "• _Belum ada akun di pool (menggunakan token file default)_".to_string()
@@ -316,7 +320,7 @@ impl ProcessIncomingMessageUseCase {
                         };
 
                         let reply = format!(
-                            "👥 *Status Pool Akun Antigravity Aina*\n\nTotal Akun Terdaftar: *{}*\n\n{}\n\n💡 *Cara Menambah Akun Cadangan:*\nKirimkan token di DM ini dengan format:\n`/token <oauth_json>`\nAtau buka Dashboard Setup di Web.",
+                            "👥 *Status Pool Akun Antigravity Aina*\n\nTotal Akun Terdaftar: *{}*\n\n{}\n\n💡 *Perintah Kelola Akun:*\n• Tambah: `/token <oauth_json>`\n• Hapus: `/token remove <id>`\n• Kosongkan: `/token clear`\n• Dashboard Web: `/setup`",
                             pool_status.len(),
                             list_str
                         );
@@ -326,6 +330,75 @@ impl ProcessIncomingMessageUseCase {
                             let _ = self.session_store.update_action_audit_result(aid, None, Some(&reply), None, "success", Some(dur), &[]).await;
                         }
                         self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
+                        self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
+                        return Ok(());
+                    }
+
+                    // Account removal / deletion
+                    let is_clear = parts.len() >= 2 && parts[1] == "clear";
+                    if is_clear {
+                        if msg.chat_type != ChatType::DirectMessage {
+                            let reply = "⚠️ *Demi Keamanan:* Perintah pengosongan akun HANYA boleh dikirim melalui Pesan Pribadi (DM) ke Aina.".to_string();
+                            self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
+                            return Ok(());
+                        }
+
+                        match self.agent_engine.clear_account_pool().await {
+                            Ok(count) => {
+                                let reply = format!("🗑️ *Pool Akun Dikosongkan*\n\nSebanyak *{}* akun cadangan telah dihapus dari pool. Aina sekarang kembali menggunakan akun default.", count);
+                                if let Some(aid) = audit_id {
+                                    let dur = start_instant.elapsed().as_secs_f64();
+                                    let _ = self.session_store.update_action_audit_result(aid, None, Some(&reply), None, "success", Some(dur), &[]).await;
+                                }
+                                self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
+                                self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
+                            }
+                            Err(e) => {
+                                let reply = format!("❌ Gagal mengosongkan pool akun: {}", e);
+                                self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
+                            }
+                        }
+                        return Ok(());
+                    }
+
+                    let is_remove = parts.len() >= 3 && (parts[1] == "remove" || parts[1] == "delete" || parts[1] == "rm" || parts[1] == "del");
+                    if is_remove {
+                        if msg.chat_type != ChatType::DirectMessage {
+                            let reply = "⚠️ *Demi Keamanan:* Perintah penghapusan akun HANYA boleh dikirim melalui Pesan Pribadi (DM) ke Aina.".to_string();
+                            self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
+                            return Ok(());
+                        }
+
+                        if let Ok(id) = parts[2].parse::<usize>() {
+                            match self.agent_engine.remove_account(id).await {
+                                Ok(true) => {
+                                    let pool = self.agent_engine.get_account_pool_status().await;
+                                    let reply = format!("🗑️ *Akun #{} Berhasil Dihapus*\n\nSisa akun aktif di pool: *{}* akun.", id, pool.len());
+                                    if let Some(aid) = audit_id {
+                                        let dur = start_instant.elapsed().as_secs_f64();
+                                        let _ = self.session_store.update_action_audit_result(aid, None, Some(&reply), None, "success", Some(dur), &[]).await;
+                                    }
+                                    self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
+                                    self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
+                                }
+                                Ok(false) => {
+                                    let reply = format!("⚠️ Akun dengan ID #{} tidak ditemukan di pool. Ketik `/token status` untuk melihat ID yang valid.", id);
+                                    self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
+                                }
+                                Err(e) => {
+                                    let reply = format!("❌ Gagal menghapus akun #{}: {}", id, e);
+                                    self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
+                                }
+                            }
+                        } else {
+                            let reply = format!("⚠️ Format ID tidak valid: '{}'. Contoh: `/token remove 2`", parts[2]);
+                            self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
+                        }
+                        return Ok(());
+                    }
+
+                    if parts.len() >= 2 && (parts[1] == "remove" || parts[1] == "delete" || parts[1] == "rm" || parts[1] == "del") {
+                        let reply = "⚠️ Harap cantumkan ID akun yang ingin dihapus.\n\nContoh:\n`/token remove 2`\n\nKetik `/token status` untuk melihat daftar akun dan ID-nya.".to_string();
                         self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
                         return Ok(());
                     }

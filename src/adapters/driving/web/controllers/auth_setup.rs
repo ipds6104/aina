@@ -269,3 +269,95 @@ pub async fn api_verify_admin_handler(
         )
     }
 }
+
+pub async fn api_remove_account_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
+    Query(query): Query<std::collections::HashMap<String, String>>,
+    axum::extract::Path(id): axum::extract::Path<usize>,
+) -> impl IntoResponse {
+    let key_candidate = query.get("key")
+        .or_else(|| query.get("api_key"))
+        .map(|s| s.as_str());
+
+    if !is_api_authorized(&headers, key_candidate, &state) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "success": false,
+                "error": "Akses ditolak. Berikan API Key atau Admin Key yang valid."
+            })),
+        );
+    }
+
+    match state.agent_engine.remove_account(id).await {
+        Ok(true) => {
+            let accounts = state.agent_engine.get_account_pool_status().await;
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "success": true,
+                    "message": format!("Akun #{} berhasil dihapus dari pool.", id),
+                    "total_accounts": accounts.len(),
+                    "accounts": accounts,
+                })),
+            )
+        }
+        Ok(false) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "success": false,
+                "error": format!("Akun dengan ID #{} tidak ditemukan di pool.", id),
+            })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "success": false,
+                "error": format!("Gagal menghapus akun: {}", e),
+            })),
+        ),
+    }
+}
+
+pub async fn api_clear_accounts_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
+    Query(query): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let key_candidate = query.get("key")
+        .or_else(|| query.get("api_key"))
+        .map(|s| s.as_str());
+
+    if !is_api_authorized(&headers, key_candidate, &state) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "success": false,
+                "error": "Akses ditolak. Berikan API Key atau Admin Key yang valid."
+            })),
+        );
+    }
+
+    match state.agent_engine.clear_account_pool().await {
+        Ok(count) => {
+            let accounts = state.agent_engine.get_account_pool_status().await;
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "success": true,
+                    "message": format!("Berhasil mengosongkan {} akun sekunder dari pool.", count),
+                    "total_accounts": accounts.len(),
+                    "accounts": accounts,
+                })),
+            )
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "success": false,
+                "error": format!("Gagal mengosongkan pool akun: {}", e),
+            })),
+        ),
+    }
+}
