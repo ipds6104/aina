@@ -488,10 +488,18 @@ impl ProcessIncomingMessageUseCase {
                 {
                     Ok(res) => {
                         heartbeat_handle.abort();
+                        let _ = self
+                            .whatsapp
+                            .send_presence_with_session(&msg.chat_jid, PresenceState::Paused, msg.session_role)
+                            .await;
                         res
                     }
                     Err(e) => {
                         heartbeat_handle.abort();
+                        let _ = self
+                            .whatsapp
+                            .send_presence_with_session(&msg.chat_jid, PresenceState::Paused, msg.session_role)
+                            .await;
                         error!("Agent engine failed to execute for chat {}: {}", msg.chat_jid, e);
                         if let Some(aid) = audit_id {
                             let dur = start_instant.elapsed().as_secs_f64();

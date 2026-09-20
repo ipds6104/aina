@@ -1841,15 +1841,81 @@ async fn dispatch_message_to_queue(state: &Arc<WebhookServerState>, msg: Incomin
                 "Aborted active running task for chat {} due to user kill command: '{}'",
                 msg.chat_jid, msg.text
             );
+
+            // 1a. Immediately dismiss typing presence on WhatsApp
+            let _ = state
+                .usecase
+                .whatsapp()
+                .send_presence_with_session(&msg.chat_jid, crate::core::domain::PresenceState::Paused, msg.session_role)
+                .await;
+
+            // 1b. Mark any in-progress audits for this chat as cancelled in the database
+            let filter = crate::core::domain::ActionAuditFilter {
+                chat_jid: Some(msg.chat_jid.clone()),
+                status: Some("in_progress".to_string()),
+                limit: Some(5),
+                ..Default::default()
+            };
+            if let Ok(in_prog_audits) = state.session_store.query_action_audits(&filter).await {
+                for in_prog in in_prog_audits {
+                    let dur = (now_epoch - in_prog.created_at_epoch).max(0) as f64;
+                    let _ = state.session_store.update_action_audit_result(
+                        in_prog.id,
+                        in_prog.conversation_id.as_deref(),
+                        None,
+                        Some("Dibatalkan oleh pengguna (killed by user)"),
+                        "cancelled",
+                        Some(dur),
+                        &[],
+                    ).await;
+                }
+            }
+
             let reply = "Siaapp Bang Ihza, tugas yang sedang berjalan berhasil Aina hentikan paksa (killed) 👍".to_string();
             let _ = state.session_store.record_message(&msg.chat_jid, &state.bot_jid, &reply, true).await;
+
+            // 1c. Record the cancellation action audit
+            let conv_id = state.session_store.get_conversation_id(&msg.chat_jid).await.ok().flatten();
+            let kill_audit = crate::core::domain::NewWhatsAppActionAudit {
+                message_id: msg.id.clone(),
+                chat_jid: msg.chat_jid.clone(),
+                chat_type: match msg.chat_type {
+                    crate::core::domain::ChatType::Group => "group".to_string(),
+                    crate::core::domain::ChatType::DirectMessage => "direct".to_string(),
+                },
+                sender_jid: msg.sender.jid.clone(),
+                sender_name: msg.sender.name.clone(),
+                decision: "respond".to_string(),
+                decision_reason: "User cancelled active task via control command".to_string(),
+                conversation_id: conv_id,
+                status: "success".to_string(),
+                input_text: msg.text.clone(),
+                has_media: false,
+                media_path: None,
+                response_text: Some(reply.clone()),
+                error_message: None,
+                duration_seconds: Some(0.0),
+                tools_invoked: vec!["task_kill".to_string()],
+                created_at_epoch: now_epoch,
+                completed_at_epoch: Some(now_epoch),
+            };
+            let _ = state.session_store.record_action_audit(&kill_audit).await;
+
             let quote_id = match msg.chat_type {
                 crate::core::domain::ChatType::Group => Some(msg.id.as_str()),
                 crate::core::domain::ChatType::DirectMessage => None,
             };
             let _ = state.usecase.whatsapp().send_text_with_session(&msg.chat_jid, &reply, quote_id, msg.session_role).await;
+            let _ = state.usecase.whatsapp().send_presence_with_session(&msg.chat_jid, crate::core::domain::PresenceState::Paused, msg.session_role).await;
             return;
         } else {
+            // Even if no active task is in memory, ensure presence is paused (clears any lingering typing on client)
+            let _ = state
+                .usecase
+                .whatsapp()
+                .send_presence_with_session(&msg.chat_jid, crate::core::domain::PresenceState::Paused, msg.session_role)
+                .await;
+
             let reply = "Saat ini tidak ada task atau proses yang sedang berjalan kokk Bang Ihza 👍 (Kondisi sistem aman dan idle)".to_string();
             let _ = state.session_store.record_message(&msg.chat_jid, &state.bot_jid, &reply, true).await;
             let quote_id = match msg.chat_type {
@@ -1857,6 +1923,7 @@ async fn dispatch_message_to_queue(state: &Arc<WebhookServerState>, msg: Incomin
                 crate::core::domain::ChatType::DirectMessage => None,
             };
             let _ = state.usecase.whatsapp().send_text_with_session(&msg.chat_jid, &reply, quote_id, msg.session_role).await;
+            let _ = state.usecase.whatsapp().send_presence_with_session(&msg.chat_jid, crate::core::domain::PresenceState::Paused, msg.session_role).await;
             return;
         }
     }
@@ -1895,6 +1962,7 @@ async fn dispatch_message_to_queue(state: &Arc<WebhookServerState>, msg: Incomin
         let state_worker = Arc::clone(&state_ref);
         async move {
             let chat_jid = m.chat_jid.clone();
+            let session_role = m.session_role;
             let text_preview = m.text.clone();
             let started_epoch = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -1920,6 +1988,13 @@ async fn dispatch_message_to_queue(state: &Arc<WebhookServerState>, msg: Incomin
                 let mut active = state_worker.active_tasks.lock().await;
                 active.remove(&chat_jid);
             }
+
+            // Always dismiss typing presence regardless of success, abort, or error
+            let _ = state_worker
+                .usecase
+                .whatsapp()
+                .send_presence_with_session(&chat_jid, crate::core::domain::PresenceState::Paused, session_role)
+                .await;
 
             match result {
                 Ok(inner_res) => inner_res,

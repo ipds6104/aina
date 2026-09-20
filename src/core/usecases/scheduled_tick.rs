@@ -342,6 +342,53 @@ impl ScheduledTickUseCase {
                 continue;
             }
 
+            // Check recent actions for this chat to prevent waking up on superseded or cancelled tasks
+            let chat_filter = crate::core::domain::ActionAuditFilter {
+                chat_jid: Some(audit.chat_jid.clone()),
+                since_epoch: Some(now_epoch.saturating_sub(7200)), // check last 2 hours
+                limit: Some(10),
+                ..Default::default()
+            };
+            let chat_audits = self.session_store.query_action_audits(&chat_filter).await.unwrap_or_default();
+
+            // 1. If there is any newer audit for this chat (id > audit.id or created_at > audit.created_at_epoch),
+            // this audit is superseded and must not be used to resume background tasks.
+            let has_newer = chat_audits.iter().any(|a| a.id > audit.id || a.created_at_epoch > audit.created_at_epoch);
+            if has_newer {
+                debug!(
+                    "Autonomous Watcher: Skipping audit #{} for chat {} because newer interactions exist",
+                    audit.id, audit.chat_jid
+                );
+                continue;
+            }
+
+            // 2. If any recent audit was cancelled by the user, do not auto-wakeup
+            let was_cancelled = chat_audits.iter().any(|a| {
+                a.status == "cancelled"
+                    || a.error_message
+                        .as_deref()
+                        .map(|e| e.contains("Dibatalkan") || e.contains("killed"))
+                        .unwrap_or(false)
+            });
+            if was_cancelled {
+                info!(
+                    "Autonomous Watcher: Skipping audit #{} for chat {} because a task was recently cancelled by user",
+                    audit.id, audit.chat_jid
+                );
+                continue;
+            }
+
+            // 3. If the chat currently has an in_progress task running, do not interfere
+            if let Some(latest) = chat_audits.first() {
+                if latest.status == "in_progress" {
+                    debug!(
+                        "Autonomous Watcher: Skipping audit #{} for chat {} because a task is currently in_progress",
+                        audit.id, audit.chat_jid
+                    );
+                    continue;
+                }
+            }
+
             // Load transcript for this conversation
             let (steps, _) = crate::core::domain::AuditEngine::load_transcript_for_conversation(&brain_path, conv_id);
             if steps.is_empty() {
@@ -409,10 +456,10 @@ impl ScheduledTickUseCase {
                 1. Periksa output dan status tugas yang baru saja selesai.\n\
                 2. Evaluasi Rangkaian Permintaan Pengguna: Apakah seluruh permintaan pengguna di atas sudah tuntas 100% (misal: generate data, crosscheck, komparasi, dan upload)?\n\
                 3. Jika masih ada tahapan lanjutan yang HARUS dijalankan (misal: perlu upload ke Google Drive atau perlu komparasi data):\n\
-                   - Lanjutkan eksekusi tahapan berikutnya sekarang (jalankan perintah/tool yang diperlukan).\n\
-                   - Berikan kabar progres singkat ke pengguna jika perintah berikutnya membutuhkan waktu.\n\
+                    - Lanjutkan eksekusi tahapan berikutnya sekarang (jalankan perintah/tool yang diperlukan).\n\
+                    - Berikan kabar progres singkat ke pengguna jika perintah berikutnya membutuhkan waktu.\n\
                 4. Jika seluruh rangkaian pekerjaan sudah SELESAI 100%:\n\
-                   - Susun laporan rekapitulasi final yang lengkap, terstruktur, ramah, dan siap dibaca pengguna di WhatsApp (sertakan link Drive/Sheets jika ada).\n\
+                    - Susun laporan rekapitulasi final yang lengkap, terstruktur, ramah, dan siap dibaca pengguna di WhatsApp (sertakan link Drive/Sheets jika ada).\n\
                 5. Jika tugas ternyata masih berjalan di server, berikan kabar progres singkat.",
                 audit.input_text
             );
@@ -433,6 +480,8 @@ impl ScheduledTickUseCase {
                         } else {
                             let _ = self.session_store.record_message(&audit.chat_jid, "bot", clean, true).await;
                         }
+
+                        let _ = self.whatsapp.send_presence_with_session(&audit.chat_jid, crate::core::domain::PresenceState::Paused, SessionRole::PrimaryBot).await;
 
                         let audit_entry = crate::core::domain::NewWhatsAppActionAudit {
                             message_id: format!("auto-wakeup-{}", now_epoch),
