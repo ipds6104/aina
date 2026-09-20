@@ -70,19 +70,63 @@ pub fn render_html(is_authenticated: bool, state: &WebhookServerState, current_m
                 </div>
 
                 <!-- FORM TAMBAH AKUN CADANGAN (EXPANDABLE) -->
-                <div id="add-account-form" style="display: none; background: rgba(0,0,0,0.2); border: 1px dashed rgba(255,255,255,0.15); border-radius: 8px; padding: 14px; margin-top: 10px;">
+                <div id="add-account-form" style="display: none; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 16px; margin-top: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <h4 style="margin: 0; font-size: 0.95rem; color: #60a5fa;">⚡ Tambah Akun Google via OAuth Cepat</h4>
+                        <button type="button" class="btn-outline" style="font-size: 0.78rem; padding: 2px 8px; cursor: pointer;" onclick="toggleAddAccountForm()">Tutup</button>
+                    </div>
+
                     <div style="margin-bottom: 10px;">
                         <label class="form-label" style="font-size: 0.85rem;">Admin Key / WHATSMEOW_API_KEY:</label>
                         <input id="add-token-key" class="form-input" type="password" placeholder="Masukkan WHATSMEOW_API_KEY atau ADMIN_KEY Anda..." style="font-size: 0.85rem; margin-bottom: 4px;" />
-                        <small style="color: #94a3b8; font-size: 0.75rem;">Kunci autentikasi server Anda (contoh: nilai <code>WHATSMEOW_API_KEY</code> dari .env)</small>
                     </div>
-                    <label class="form-label" style="font-size: 0.85rem;">Tempel OAuth Token Akun Baru (JSON dari file antigravity-oauth-token):</label>
-                    <textarea id="add-token-input" class="form-input" style="height: 70px; font-family: monospace; font-size: 0.78rem;" placeholder='{{"token": "..."}}'></textarea>
-                    <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px;">
-                        <button type="button" class="btn-outline" style="font-size: 0.8rem; padding: 4px 12px; cursor: pointer;" onclick="toggleAddAccountForm()">Batal</button>
-                        <button type="button" id="add-token-btn" class="btn" style="font-size: 0.8rem; padding: 4px 14px; cursor: pointer;" onclick="submitAddAccount()">Simpan &amp; Verifikasi</button>
+
+                    <!-- METODE 1: OAUTH CEPAT -->
+                    <div id="oauth-step-1" style="background: rgba(255,255,255,0.03); border: 1px dashed rgba(255,255,255,0.15); border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+                        <p style="font-size: 0.83rem; color: #cbd5e1; margin-bottom: 8px;">
+                            Hubungkan akun Google langsung tanpa perlu menyalin file JSON. Klik tombol di bawah untuk meminta tautan login resmi dari Google:
+                        </p>
+                        <button type="button" id="start-oauth-btn" class="btn" style="background: #2563eb; font-size: 0.82rem; padding: 6px 14px; cursor: pointer;" onclick="startOAuthFlow()">
+                            🚀 Mulai Login Akun Google
+                        </button>
                     </div>
-                    <div id="add-token-alert" style="display: none; font-size: 0.85rem; margin-top: 8px;"></div>
+
+                    <div id="oauth-step-2" style="display: none; background: rgba(37, 99, 235, 0.08); border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 6px; padding: 14px; margin-bottom: 12px;">
+                        <p style="font-size: 0.84rem; color: #93c5fd; margin-bottom: 8px;">
+                            <strong>Langkah Selanjutnya:</strong><br>
+                            1. Buka tautan Google di bawah pada tab baru.<br>
+                            2. Pilih salah satu dari 11 akun Google Anda dan klik <strong>Izinkan (Allow)</strong>.<br>
+                            3. Salin <strong>Kode Otorisasi</strong> singkat yang muncul (contoh: <code>4/0A...</code>), lalu tempel di bawah:
+                        </p>
+                        <div style="margin-bottom: 10px;">
+                            <a id="oauth-link-anchor" href="javascript:void(0)" target="_blank" class="btn" style="background: #3b82f6; color: #fff; text-decoration: none; display: inline-block; padding: 6px 14px; font-size: 0.82rem; border-radius: 4px;">
+                                🔗 Buka Halaman Login Google ↗
+                            </a>
+                        </div>
+                        <label class="form-label" style="font-size: 0.82rem;">Tempel Kode Otorisasi Google di sini:</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input id="oauth-code-input" class="form-input" type="text" placeholder="Tempel kode 4/0A... di sini" style="flex: 1; font-size: 0.82rem; margin-bottom: 0;" />
+                            <button type="button" id="submit-oauth-code-btn" class="btn" style="background: #10b981; font-size: 0.82rem; padding: 6px 14px; cursor: pointer; white-space: nowrap;" onclick="submitOAuthCode()">
+                                ✅ Simpan &amp; Verifikasi
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="oauth-alert" style="display: none; font-size: 0.85rem; margin-top: 8px; margin-bottom: 10px;"></div>
+
+                    <!-- METODE 2: MANUAL JSON ACCORDION -->
+                    <div style="border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 10px; margin-top: 10px;">
+                        <a href="javascript:void(0)" onclick="toggleManualJsonInput()" style="color: #94a3b8; font-size: 0.78rem; text-decoration: none;">
+                            ▸ Atau tempel manual file JSON token (cadangan/opsional)
+                        </a>
+                        <div id="manual-json-container" style="display: none; margin-top: 8px;">
+                            <textarea id="add-token-input" class="form-input" style="height: 60px; font-family: monospace; font-size: 0.78rem;" placeholder='{{"token": "..."}}'></textarea>
+                            <div style="display: flex; justify-content: flex-end; margin-top: 4px;">
+                                <button type="button" id="add-token-btn" class="btn" style="font-size: 0.78rem; padding: 4px 12px; cursor: pointer;" onclick="submitAddAccount()">Simpan Token Manual</button>
+                            </div>
+                            <div id="add-token-alert" style="display: none; font-size: 0.85rem; margin-top: 8px;"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -704,15 +748,159 @@ pub fn render_html(is_authenticated: bool, state: &WebhookServerState, current_m
                         listEl.innerHTML = data.accounts.map(a => {{
                             const badgeColor = a.is_cooldown ? '#f59e0b' : '#10b981';
                             const statusText = a.is_cooldown ? ('Cooldown (' + a.cooldown_remaining_secs + 's)') : '🟢 Aktif';
+                            const emailText = a.email ? (' <span style="color: #94a3b8; font-size: 0.78rem;">(' + a.email + ')</span>') : '';
+                            const deleteBtn = (a.id > 1 || data.accounts.length > 1) ? 
+                                ('<button type="button" onclick="deleteAccount(' + a.id + ')" title="Hapus Akun" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 0 4px; font-size: 0.85rem; line-height: 1;">✕</button>') : '';
                             return '<div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 6px 12px; font-size: 0.85rem; display: flex; align-items: center; gap: 8px;">' +
-                                '<span style="font-weight: 600; color: #f8fafc;">' + a.label + '</span>' +
+                                '<span style="font-weight: 600; color: #f8fafc;">#' + a.id + ' ' + a.label + '</span>' +
+                                emailText +
                                 '<span style="color: ' + badgeColor + '; font-size: 0.8rem;">' + statusText + '</span>' +
+                                deleteBtn +
                             '</div>';
                         }}).join('');
                     }}
                 }}
             }} catch(e) {{
                 console.warn('Failed to load accounts:', e);
+            }}
+        }}
+
+        let currentOAuthSessionId = null;
+
+        function toggleManualJsonInput() {{
+            const el = document.getElementById('manual-json-container');
+            if (el) {{
+                el.style.display = el.style.display === 'none' ? 'block' : 'none';
+            }}
+        }}
+
+        async function startOAuthFlow() {{
+            const keyInput = document.getElementById('add-token-key');
+            const alertEl = document.getElementById('oauth-alert');
+            const startBtn = document.getElementById('start-oauth-btn');
+
+            let key = (keyInput ? keyInput.value.trim() : '') || localStorage.getItem('aina_admin_key') || '';
+            if (!key) {{
+                alertEl.innerText = 'Harap masukkan Admin Key atau WHATSMEOW_API_KEY terlebih dahulu di kolom atas.';
+                alertEl.style.color = '#ef4444';
+                alertEl.style.display = 'block';
+                return;
+            }}
+
+            startBtn.disabled = true;
+            startBtn.innerText = 'Menyiapkan URL Google...';
+            alertEl.style.display = 'none';
+
+            try {{
+                const res = await fetch('/api/auth/oauth/init?key=' + encodeURIComponent(key), {{
+                    method: 'POST'
+                }});
+                const data = await res.json();
+                if (res.ok && data.success && data.auth_url) {{
+                    currentOAuthSessionId = data.session_id;
+                    const anchor = document.getElementById('oauth-link-anchor');
+                    if (anchor) anchor.href = data.auth_url;
+
+                    document.getElementById('oauth-step-2').style.display = 'block';
+                    document.getElementById('oauth-code-input').value = '';
+
+                    window.open(data.auth_url, '_blank');
+
+                    alertEl.innerHTML = 'ℹ️ Tab login Google telah dibuka. Pilih salah satu akun Anda, klik <strong>Izinkan</strong>, lalu salin kode yang muncul ke kotak di atas.';
+                    alertEl.style.color = '#38bdf8';
+                    alertEl.style.display = 'block';
+                }} else {{
+                    alertEl.innerText = '❌ ' + (data.error || 'Gagal memulai sesi login.');
+                    alertEl.style.color = '#ef4444';
+                    alertEl.style.display = 'block';
+                }}
+            }} catch(e) {{
+                alertEl.innerText = '❌ Error: ' + e;
+                alertEl.style.color = '#ef4444';
+                alertEl.style.display = 'block';
+            }} finally {{
+                startBtn.disabled = false;
+                startBtn.innerText = '🚀 Mulai Ulang / Akun Lain';
+            }}
+        }}
+
+        async function submitOAuthCode() {{
+            const codeInput = document.getElementById('oauth-code-input');
+            const keyInput = document.getElementById('add-token-key');
+            const alertEl = document.getElementById('oauth-alert');
+            const submitBtn = document.getElementById('submit-oauth-code-btn');
+
+            let key = (keyInput ? keyInput.value.trim() : '') || localStorage.getItem('aina_admin_key') || '';
+            const code = codeInput.value.trim();
+
+            if (!code) {{
+                alertEl.innerText = 'Harap tempelkan kode otorisasi dari Google terlebih dahulu.';
+                alertEl.style.color = '#ef4444';
+                alertEl.style.display = 'block';
+                return;
+            }}
+
+            if (!currentOAuthSessionId) {{
+                alertEl.innerText = 'Sesi login belum dimulai. Klik "Mulai Login Akun Google" terlebih dahulu.';
+                alertEl.style.color = '#ef4444';
+                alertEl.style.display = 'block';
+                return;
+            }}
+
+            submitBtn.disabled = true;
+            submitBtn.innerText = 'Memverifikasi ke Google...';
+            alertEl.style.display = 'none';
+
+            try {{
+                const res = await fetch('/api/auth/oauth/exchange?key=' + encodeURIComponent(key), {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{
+                        session_id: currentOAuthSessionId,
+                        code: code,
+                        setup_code: key
+                    }})
+                }});
+                const data = await res.json();
+                if (res.ok && data.success) {{
+                    localStorage.setItem('aina_admin_key', key);
+                    alertEl.innerHTML = '🎉 <strong>' + data.message + '</strong><br><small>Akun siap digunakan! Anda bisa langsung klik tombol di atas lagi untuk menambahkan akun berikutnya.</small>';
+                    alertEl.style.color = '#10b981';
+                    alertEl.style.display = 'block';
+                    codeInput.value = '';
+                    currentOAuthSessionId = null;
+                    document.getElementById('oauth-step-2').style.display = 'none';
+                    loadAccountPool();
+                }} else {{
+                    alertEl.innerText = '❌ ' + (data.error || 'Kode otorisasi tidak valid.');
+                    alertEl.style.color = '#ef4444';
+                    alertEl.style.display = 'block';
+                }}
+            }} catch(e) {{
+                alertEl.innerText = '❌ Error: ' + e;
+                alertEl.style.color = '#ef4444';
+                alertEl.style.display = 'block';
+            }} finally {{
+                submitBtn.disabled = false;
+                submitBtn.innerText = '✅ Simpan & Verifikasi';
+            }}
+        }}
+
+        async function deleteAccount(id) {{
+            if (!confirm('Yakin ingin menghapus Akun #' + id + ' dari pool?')) return;
+            const key = localStorage.getItem('aina_admin_key') || '';
+            try {{
+                const res = await fetch('/api/auth/accounts/' + id + '?key=' + encodeURIComponent(key), {{
+                    method: 'DELETE'
+                }});
+                const data = await res.json();
+                if (res.ok && data.success) {{
+                    loadAccountPool();
+                }} else {{
+                    alert('Gagal menghapus: ' + (data.error || 'Unknown error'));
+                }}
+            }} catch(e) {{
+                alert('Gagal menghapus akun: ' + e);
             }}
         }}
 

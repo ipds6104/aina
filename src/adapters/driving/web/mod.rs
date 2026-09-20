@@ -37,6 +37,8 @@ pub fn create_router(state: Arc<WebhookServerState>) -> Router {
         .route("/api/auth/accounts/clear", post(api_clear_accounts_handler))
         .route("/api/auth/accounts/{id}", delete(api_remove_account_handler))
         .route("/api/auth/token", post(api_add_token_handler))
+        .route("/api/auth/oauth/init", post(api_oauth_init_handler))
+        .route("/api/auth/oauth/exchange", post(api_oauth_exchange_handler))
         .route("/api/auth/verify", post(api_verify_admin_handler))
         .route("/api/simulate", post(simulate_handler))
         .route("/api/simulate/reset", post(simulate_reset_handler))

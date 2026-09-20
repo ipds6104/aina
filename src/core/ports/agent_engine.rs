@@ -80,4 +80,17 @@ pub trait AgentEnginePort: Send + Sync {
     async fn get_account_pool_status(&self) -> Vec<AccountPoolStatus> {
         vec![]
     }
+
+    /// Initiates an interactive Google OAuth session for adding an account.
+    /// Returns (session_id, auth_url).
+    async fn init_oauth_session(&self) -> anyhow::Result<(String, String)> {
+        anyhow::bail!("OAuth interactive session not supported by this engine")
+    }
+
+    /// Completes the OAuth session by supplying the authorization code pasted by the user.
+    /// Returns the detected email or account label.
+    async fn exchange_oauth_code(&self, session_id: &str, code: &str) -> anyhow::Result<String> {
+        let _ = (session_id, code);
+        anyhow::bail!("OAuth interactive session not supported by this engine")
+    }
 }

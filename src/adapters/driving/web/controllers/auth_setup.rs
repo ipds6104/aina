@@ -361,3 +361,93 @@ pub async fn api_clear_accounts_handler(
         ),
     }
 }
+
+#[derive(Debug, Deserialize)]
+pub struct OAuthExchangeRequest {
+    pub session_id: String,
+    pub code: String,
+    pub setup_code: Option<String>,
+}
+
+pub async fn api_oauth_init_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
+    Query(query): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let key_candidate = query.get("key")
+        .or_else(|| query.get("api_key"))
+        .map(|s| s.as_str());
+
+    if !is_api_authorized(&headers, key_candidate, &state) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "success": false,
+                "error": "Akses ditolak. Berikan API Key atau Admin Key yang valid."
+            })),
+        );
+    }
+
+    match state.agent_engine.init_oauth_session().await {
+        Ok((session_id, auth_url)) => (
+            StatusCode::OK,
+            Json(json!({
+                "success": true,
+                "session_id": session_id,
+                "auth_url": auth_url,
+            })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "success": false,
+                "error": format!("Gagal memulai sesi login Google: {}", e),
+            })),
+        ),
+    }
+}
+
+pub async fn api_oauth_exchange_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
+    Query(query): Query<std::collections::HashMap<String, String>>,
+    Json(payload): Json<OAuthExchangeRequest>,
+) -> impl IntoResponse {
+    let key_candidate = query.get("key")
+        .or_else(|| query.get("api_key"))
+        .map(|s| s.as_str())
+        .or(payload.setup_code.as_deref());
+
+    if !is_api_authorized(&headers, key_candidate, &state) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "success": false,
+                "error": "Akses ditolak. Berikan API Key atau Admin Key yang valid."
+            })),
+        );
+    }
+
+    match state.agent_engine.exchange_oauth_code(&payload.session_id, &payload.code).await {
+        Ok(email) => {
+            let accounts = state.agent_engine.get_account_pool_status().await;
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "success": true,
+                    "message": format!("Akun {} berhasil dihubungkan dan ditambahkan ke pool!", email),
+                    "email": email,
+                    "total_accounts": accounts.len(),
+                    "accounts": accounts,
+                })),
+            )
+        }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "error": format!("{}", e),
+            })),
+        ),
+    }
+}

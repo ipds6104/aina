@@ -826,6 +826,110 @@ impl AgentEnginePort for AntigravityCliAdapter {
         }
         res
     }
+
+    async fn init_oauth_session(&self) -> anyhow::Result<(String, String)> {
+        let session_id = format!(
+            "{}_{:08x}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0),
+            rand::random::<u32>()
+        );
+        let base_dir = format!("/tmp/aina_oauth_{}", session_id);
+        let _ = tokio::fs::create_dir_all(&base_dir).await;
+
+        let script_candidates = [
+            PathBuf::from("scripts/oauth_helper.py"),
+            PathBuf::from("/root/projects/aina/scripts/oauth_helper.py"),
+            PathBuf::from("/app/scripts/oauth_helper.py"),
+        ];
+        let script_path = script_candidates
+            .into_iter()
+            .find(|p| p.exists())
+            .unwrap_or_else(|| PathBuf::from("scripts/oauth_helper.py"));
+
+        let bin_path = self.resolve_binary();
+
+        let mut cmd = tokio::process::Command::new("python3");
+        cmd.arg(&script_path)
+            .arg(&session_id)
+            .env("AGY_BINARY_PATH", bin_path.to_string_lossy().to_string());
+
+        let mut child = cmd.spawn()?;
+        tokio::spawn(async move {
+            let _ = child.wait().await;
+        });
+
+        let url_file = format!("{}/auth_url.txt", base_dir);
+        let status_file = format!("{}/status.txt", base_dir);
+        let start = std::time::Instant::now();
+        loop {
+            if let Ok(url) = tokio::fs::read_to_string(&url_file).await {
+                let trimmed = url.trim().to_string();
+                if !trimmed.is_empty() {
+                    return Ok((session_id, trimmed));
+                }
+            }
+            if let Ok(status) = tokio::fs::read_to_string(&status_file).await {
+                if status.trim() == "FAILED" {
+                    let err = tokio::fs::read_to_string(format!("{}/error.txt", base_dir))
+                        .await
+                        .unwrap_or_else(|_| "Gagal menghasilkan URL OAuth".to_string());
+                    let _ = tokio::fs::remove_dir_all(&base_dir).await;
+                    anyhow::bail!("Gagal memulai sesi login Google: {}", err);
+                }
+            }
+            if start.elapsed().as_secs() > 10 {
+                let _ = tokio::fs::remove_dir_all(&base_dir).await;
+                anyhow::bail!("Timeout menunggu URL login Google dari CLI Antigravity");
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+        }
+    }
+
+    async fn exchange_oauth_code(&self, session_id: &str, code: &str) -> anyhow::Result<String> {
+        let base_dir = format!("/tmp/aina_oauth_{}", session_id);
+        if !tokio::fs::try_exists(&base_dir).await.unwrap_or(false) {
+            anyhow::bail!("Sesi login '{}' tidak ditemukan atau telah kadaluarsa. Silakan mulai ulang.", session_id);
+        }
+
+        let code_file = format!("{}/code.txt", base_dir);
+        tokio::fs::write(&code_file, code.trim()).await?;
+
+        let status_file = format!("{}/status.txt", base_dir);
+        let token_file = format!("{}/token.json", base_dir);
+        let error_file = format!("{}/error.txt", base_dir);
+
+        let start = std::time::Instant::now();
+        loop {
+            if let Ok(status) = tokio::fs::read_to_string(&status_file).await {
+                let s = status.trim();
+                if s == "SUCCESS" {
+                    let token_content = tokio::fs::read_to_string(&token_file).await?;
+                    let _ = tokio::fs::remove_dir_all(&base_dir).await;
+
+                    self.save_auth_token(&token_content).await?;
+                    let email = extract_email_from_token(&token_content)
+                        .unwrap_or_else(|| "Akun Baru".to_string());
+                    return Ok(email);
+                } else if s == "FAILED" || s == "TIMEOUT" {
+                    let err = tokio::fs::read_to_string(&error_file)
+                        .await
+                        .unwrap_or_else(|_| "Verifikasi kode otorisasi gagal".to_string());
+                    let _ = tokio::fs::remove_dir_all(&base_dir).await;
+                    anyhow::bail!("Gagal menukar kode otorisasi: {}", err);
+                }
+            }
+
+            if start.elapsed().as_secs() > 20 {
+                let _ = tokio::fs::remove_dir_all(&base_dir).await;
+                anyhow::bail!("Timeout saat memverifikasi kode otorisasi ke Google");
+            }
+
+            tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+        }
+    }
 }
 
 /// Sanitizes Antigravity CLI agent output by stripping out intermediate tool-waiting
