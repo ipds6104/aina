@@ -268,22 +268,49 @@ def select_activity_with_novelty(recent_entries, slot, weekend):
 
     options = activities.get(slot, activities["sore"])
 
-    # NOVELTY & BOREDOM ENGINE:
-    # Periksa 5 aktivitas terakhir di journal
+    # NOVELTY & BOREDOM ENGINE (HYBRID ARCHITECTURE):
+    # 1. Deterministic Layer: Periksa riwayat 5 aktivitas terakhir
     recent_themes = [e.get("theme") for e in recent_entries[-5:] if e.get("theme")]
+    last_theme = recent_themes[-1] if recent_themes else None
 
-    # Urutkan berdasarkan yang paling jarang / belum pernah dilakukan baru-baru ini
+    # Novelty twists: Detail tak terduga yang membuat momen terasa hidup dan organik
+    novelty_twists = [
+        {"desc": "Melihat seekor kucing oranye ramah yang duduk tenang di tepi jalan menyapa pejalan kaki.", "tag": "kucing_oranye"},
+        {"desc": "Aroma roti manis mentega yang baru matang dari toko kue kecil di sudut jalan.", "tag": "aroma_roti"},
+        {"desc": "Menemukan pantulan pelangi tipis di genangan air jernih setelah gerimis reda.", "tag": "pelangi_gerimis"},
+        {"desc": "Hembusan angin sejuk menerbangkan beberapa helai daun keemasan di atas bangku taman.", "tag": "daun_keemasan"},
+        {"desc": "Penjual bunga sepeda melintas dengan keranjang krisan dan lili beraneka warna.", "tag": "sepeda_bunga"},
+        {"desc": "Menemukan pembatas buku berilustrasi awan di dalam buku catatan lama yang terselip.", "tag": "pembatas_buku"},
+    ]
+
+    # Beri penalti: Tema yang sama dengan kemarin diberi penalti keras (+10) agar tidak duplikat
     scored_options = []
     for opt in options:
-        penalty = recent_themes.count(opt["theme"])
+        count = recent_themes.count(opt["theme"])
+        penalty = count * 2
+        if opt["theme"] == last_theme:
+            penalty += 10  # Hard barrier: hindari berturut-turut
         scored_options.append((penalty, opt))
 
-    # Sort: penalty terendah di depan
     scored_options.sort(key=lambda x: x[0])
     lowest_penalty = scored_options[0][0]
     best_candidates = [opt for pen, opt in scored_options if pen == lowest_penalty]
+    chosen = random.choice(best_candidates).copy()
 
-    chosen = random.choice(best_candidates)
+    # 2. Non-Deterministic / Creative Layer: Penalaran Rasa Bosan & Novelty
+    twist = random.choice(novelty_twists)
+    chosen["novelty_twist"] = twist["desc"]
+
+    # Susun penalaran rasa bosan Aina (Boredom Reflection)
+    if recent_themes:
+        last_str = ", ".join(recent_themes[-3:])
+        reflection = f"Beberapa hari terakhir aku sudah sering melakukan aktivitas seputar ({last_str}). Rasanya hari ini butuh suasana yang lebih segar dan berbeda. Momen '{chosen['theme']}' dengan {twist['desc'].lower()} terasa sangat menyegarkan dan pas untuk dibagikan."
+    else:
+        reflection = f"Momen '{chosen['theme']}' terasa sangat tenang dan pas untuk dinikmati hari ini, apalagi dengan {twist['desc'].lower()}."
+
+    chosen["boredom_reflection"] = reflection
+    # Masukkan twist ke dalam scene deskripsi untuk prompt gambar
+    chosen["scene"] = f"{chosen['scene']} Elemen kejutan tak terduga: {twist['desc']}"
     return chosen
 
 def build_makoto_shinkai_prompt(activity, weekend):
@@ -393,7 +420,9 @@ def main():
         prompt = build_makoto_shinkai_prompt(chosen, weekend)
         avatar_ref = get_avatar_reference_path()
         print(f"✨ Rekomendasi Status [{slot.upper()} - {'WEEKEND' if weekend else 'WEEKDAY'}]:")
-        print(f"• Tema: {chosen['theme']}")
+        print(f"• Tema              : {chosen['theme']}")
+        print(f"• Refleksi Kebosanan: {chosen['boredom_reflection']}")
+        print(f"• Elemen Kejutan    : {chosen['novelty_twist']}")
         print(f"• Caption:\n  \"{chosen['caption']}\"")
         print(f"\n🎨 Prompt Makoto Shinkai:\n{prompt}")
         if avatar_ref:
@@ -417,6 +446,9 @@ def main():
         prompt = build_makoto_shinkai_prompt(chosen, weekend)
         avatar_ref = get_avatar_reference_path()
 
+        print(f"💭 Refleksi Aina : {chosen['boredom_reflection']}")
+        print(f"✨ Kejutan Spontan: {chosen['novelty_twist']}")
+
         success, img_path = execute_generate_and_post(chosen, prompt, avatar_ref, dry_run=args.dry_run)
         if success:
             entry = {
@@ -426,6 +458,8 @@ def main():
                 "slot": slot,
                 "is_weekend": weekend,
                 "theme": chosen["theme"],
+                "boredom_reflection": chosen["boredom_reflection"],
+                "novelty_twist": chosen["novelty_twist"],
                 "caption": chosen["caption"],
                 "image_path": img_path
             }
@@ -441,9 +475,13 @@ def main():
             for i, e in enumerate(journal[-limit:], 1):
                 mode = "Weekend" if e.get("is_weekend") else "Weekday"
                 print(f"{i}. [{e.get('date')} {e.get('time_str')}] Slot: {e.get('slot')} ({mode})")
-                print(f"   Tema   : {e.get('theme')}")
-                print(f"   Caption: \"{e.get('caption')}\"")
-                print(f"   Gambar : {e.get('image_path')}\n")
+                print(f"   Tema     : {e.get('theme')}")
+                if e.get("boredom_reflection"):
+                    print(f"   Refleksi : {e.get('boredom_reflection')}")
+                if e.get("novelty_twist"):
+                    print(f"   Kejutan  : {e.get('novelty_twist')}")
+                print(f"   Caption  : \"{e.get('caption')}\"")
+                print(f"   Gambar   : {e.get('image_path')}\n")
 
 if __name__ == "__main__":
     main()
