@@ -92,11 +92,16 @@ pub fn render_html(is_authenticated: bool, state: &WebhookServerState, current_m
                     </div>
 
                     <div id="oauth-step-2" style="display: none; background: rgba(37, 99, 235, 0.08); border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 6px; padding: 14px; margin-bottom: 12px;">
-                        <p style="font-size: 0.84rem; color: #93c5fd; margin-bottom: 8px;">
-                            <strong>Langkah Selanjutnya:</strong><br>
-                            1. Buka tautan Google di bawah pada tab baru.<br>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="font-size: 0.84rem; font-weight: 600; color: #93c5fd;">Langkah Selanjutnya:</span>
+                            <span id="oauth-timer-badge" style="font-size: 0.78rem; color: #fbbf24; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 4px; padding: 2px 8px;">
+                                ⏱️ Sisa Waktu: <strong id="oauth-countdown">60</strong>s
+                            </span>
+                        </div>
+                        <p style="font-size: 0.83rem; color: #cbd5e1; margin-bottom: 10px; line-height: 1.5;">
+                            1. Klik tombol biru di bawah untuk membuka halaman login Google.<br>
                             2. Pilih salah satu dari 11 akun Google Anda dan klik <strong>Izinkan (Allow)</strong>.<br>
-                            3. Salin <strong>Kode Otorisasi</strong> singkat yang muncul (contoh: <code>4/0A...</code>), lalu tempel di bawah:
+                            3. Pada halaman Google yang terbuka, klik tombol <strong>'Copy to Clipboard'</strong> di tengah layar (jangan menyalin teks URL dari bilah alamat browser), lalu tempel kodenya di bawah:
                         </p>
                         <div style="margin-bottom: 10px;">
                             <a id="oauth-link-anchor" href="javascript:void(0)" target="_blank" class="btn" style="background: #3b82f6; color: #fff; text-decoration: none; display: inline-block; padding: 6px 14px; font-size: 0.82rem; border-radius: 4px;">
@@ -766,6 +771,25 @@ pub fn render_html(is_authenticated: bool, state: &WebhookServerState, current_m
         }}
 
         let currentOAuthSessionId = null;
+        let oauthCountdownInterval = null;
+
+        function sanitizeOAuthCode(val) {{
+            let s = (val || '').trim();
+            try {{
+                s = decodeURIComponent(s);
+            }} catch(e) {{}}
+            if (s.indexOf('code=') !== -1) {{
+                s = s.split('code=')[1];
+            }}
+            const delimiters = ['&', '+http', ' http', 'userinfo.', 'rinfo.', '.profile', '+', ' '];
+            for (let i = 0; i < delimiters.length; i++) {{
+                const d = delimiters[i];
+                if (s.indexOf(d) !== -1) {{
+                    s = s.split(d)[0];
+                }}
+            }}
+            return s.trim();
+        }}
 
         function toggleManualJsonInput() {{
             const el = document.getElementById('manual-json-container');
@@ -804,6 +828,39 @@ pub fn render_html(is_authenticated: bool, state: &WebhookServerState, current_m
                     document.getElementById('oauth-step-2').style.display = 'block';
                     document.getElementById('oauth-code-input').value = '';
 
+                    // 60-second countdown for Google CLI
+                    if (oauthCountdownInterval) clearInterval(oauthCountdownInterval);
+                    let remaining = 60;
+                    const countdownEl = document.getElementById('oauth-countdown');
+                    const badgeEl = document.getElementById('oauth-timer-badge');
+                    const submitBtn = document.getElementById('submit-oauth-code-btn');
+                    if (countdownEl) countdownEl.innerText = remaining;
+                    if (badgeEl) {{
+                        badgeEl.style.color = '#fbbf24';
+                        badgeEl.style.background = 'rgba(245, 158, 11, 0.15)';
+                        badgeEl.innerHTML = '⏱️ Sisa Waktu: <strong id="oauth-countdown">' + remaining + '</strong>s';
+                    }}
+                    if (submitBtn) submitBtn.disabled = false;
+
+                    oauthCountdownInterval = setInterval(() => {{
+                        remaining--;
+                        const cEl = document.getElementById('oauth-countdown');
+                        if (cEl) cEl.innerText = remaining;
+                        if (remaining <= 0) {{
+                            clearInterval(oauthCountdownInterval);
+                            oauthCountdownInterval = null;
+                            if (badgeEl) {{
+                                badgeEl.style.color = '#ef4444';
+                                badgeEl.style.background = 'rgba(239, 68, 68, 0.15)';
+                                badgeEl.innerHTML = '⚠️ Sesi Kadaluarsa (60s)';
+                            }}
+                            if (submitBtn) submitBtn.disabled = true;
+                            alertEl.innerHTML = '⚠️ <strong>Sesi login Google telah melewati batas waktu 60 detik.</strong> Silakan klik tombol <strong>"🚀 Mulai Ulang / Akun Lain"</strong> untuk meminta tautan baru.';
+                            alertEl.style.color = '#ef4444';
+                            alertEl.style.display = 'block';
+                        }}
+                    }}, 1000);
+
                     window.open(data.auth_url, '_blank');
 
                     alertEl.innerHTML = 'ℹ️ Tab login Google telah dibuka. Pilih salah satu akun Anda, klik <strong>Izinkan</strong>, lalu salin kode yang muncul ke kotak di atas.';
@@ -831,7 +888,9 @@ pub fn render_html(is_authenticated: bool, state: &WebhookServerState, current_m
             const submitBtn = document.getElementById('submit-oauth-code-btn');
 
             let key = (keyInput ? keyInput.value.trim() : '') || localStorage.getItem('aina_admin_key') || '';
-            const code = codeInput.value.trim();
+            const rawCode = codeInput.value.trim();
+            const code = sanitizeOAuthCode(rawCode);
+            codeInput.value = code;
 
             if (!code) {{
                 alertEl.innerText = 'Harap tempelkan kode otorisasi dari Google terlebih dahulu.';
@@ -863,6 +922,10 @@ pub fn render_html(is_authenticated: bool, state: &WebhookServerState, current_m
                 }});
                 const data = await res.json();
                 if (res.ok && data.success) {{
+                    if (oauthCountdownInterval) {{
+                        clearInterval(oauthCountdownInterval);
+                        oauthCountdownInterval = null;
+                    }}
                     localStorage.setItem('aina_admin_key', key);
                     alertEl.innerHTML = '🎉 <strong>' + data.message + '</strong><br><small>Akun siap digunakan! Anda bisa langsung klik tombol di atas lagi untuk menambahkan akun berikutnya.</small>';
                     alertEl.style.color = '#10b981';

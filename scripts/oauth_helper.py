@@ -12,7 +12,12 @@ def main():
         sys.exit(1)
 
     session_id = sys.argv[1]
-    base_dir = f"/tmp/aina_oauth_{session_id}"
+    if os.path.isdir("/app/data"):
+        base_dir = os.path.abspath(f"/app/data/oauth_sessions/{session_id}")
+    elif os.path.isdir("data") or os.path.exists("Cargo.toml"):
+        base_dir = os.path.abspath(f"data/oauth_sessions/{session_id}")
+    else:
+        base_dir = f"/tmp/aina_oauth_{session_id}"
     os.makedirs(base_dir, exist_ok=True)
 
     agy_binary = os.environ.get("AGY_BINARY_PATH", "/root/.local/bin/agy")
@@ -70,7 +75,7 @@ def main():
     code_file = os.path.join(base_dir, "code.txt")
     code_start = time.time()
     code = None
-    while time.time() - code_start < 300:
+    while time.time() - code_start < 600:
         if os.path.exists(code_file):
             try:
                 with open(code_file, "r") as f:
@@ -79,14 +84,39 @@ def main():
                     break
             except Exception:
                 pass
+
+        if proc.poll() is not None:
+            with open(os.path.join(base_dir, "status.txt"), "w") as f:
+                f.write("TIMEOUT\n")
+            with open(os.path.join(base_dir, "error.txt"), "w") as f:
+                f.write("Sesi otorisasi telah kadaluarsa (batas waktu 60 detik dari Google CLI). Silakan klik 'Mulai Ulang / Akun Lain' untuk membuat sesi baru.\n")
+            os.close(master)
+            sys.exit(1)
+
         time.sleep(0.1)
 
     if not code:
         with open(os.path.join(base_dir, "status.txt"), "w") as f:
-            f.write("TIMEOUT")
+            f.write("TIMEOUT\n")
+        with open(os.path.join(base_dir, "error.txt"), "w") as f:
+            f.write("Batas waktu menunggu input kode otorisasi tercapai.\n")
         os.close(master)
         proc.terminate()
         sys.exit(1)
+
+    # Sanitize authorization code (strip any accidentally pasted URL query params or garbage)
+    code = code.strip()
+    import urllib.parse
+    try:
+        code = urllib.parse.unquote(code).strip()
+    except Exception:
+        pass
+    if "code=" in code:
+        code = code.split("code=")[1]
+    for delim in ["&", "+http", " http", "userinfo.", "rinfo.", ".profile", "+", " "]:
+        if delim in code:
+            code = code.split(delim)[0]
+    code = code.strip()
 
     # 3. Write authorization code to PTY master
     os.write(master, (code + "\n").encode("utf-8"))
