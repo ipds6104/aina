@@ -1,7 +1,9 @@
 use crate::core::domain::{KnowledgeEngine, PersonaEngine, ScheduleParser, ScheduledTaskType, SessionRole};
 use crate::core::ports::{AgentEnginePort, SessionStorePort, WhatsAppPort};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
 pub struct ScheduledTickUseCase {
@@ -11,6 +13,7 @@ pub struct ScheduledTickUseCase {
     persona_engine: Option<Arc<PersonaEngine>>,
     workspace_dir: Option<PathBuf>,
     timezone_offset_hours: i32,
+    last_self_triggered: Arc<RwLock<HashMap<String, i64>>>,
 }
 
 impl ScheduledTickUseCase {
@@ -29,6 +32,7 @@ impl ScheduledTickUseCase {
             persona_engine,
             workspace_dir,
             timezone_offset_hours,
+            last_self_triggered: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -242,6 +246,170 @@ impl ScheduledTickUseCase {
                     } else {
                         warn!("Cannot execute AgentAction task #{}: AgentEngine is not configured", task.id);
                     }
+                }
+            }
+        }
+
+        // 3. Autonomous Background Task Watcher & Self-Trigger
+        // Detects if any active conversation has a background task that finished without a follow-up model response
+        if let Some(ref agent) = self.agent_engine {
+            if let Err(e) = self.check_and_trigger_completed_background_tasks(agent.as_ref(), now_epoch).await {
+                error!("Error in autonomous background task watcher: {}", e);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Periodically inspects active conversations with running background tasks.
+    /// If a background task has finished but Aina previously exited early (turn-ending),
+    /// this autonomously wakes up Aina to deliver the final results to WhatsApp.
+    async fn check_and_trigger_completed_background_tasks(
+        &self,
+        agent: &dyn AgentEnginePort,
+        now_epoch: i64,
+    ) -> anyhow::Result<()> {
+        let brain_path = crate::core::domain::AuditEngine::default_brain_path();
+        if !brain_path.is_dir() {
+            return Ok(());
+        }
+
+        // Query recent action audits (within last 3 hours) that responded and have a conversation
+        let filter = crate::core::domain::ActionAuditFilter {
+            since_epoch: Some(now_epoch.saturating_sub(10800)),
+            decision: Some("respond".to_string()),
+            status: Some("success".to_string()),
+            limit: Some(10),
+            ..Default::default()
+        };
+
+        let recent_audits = self.session_store.query_action_audits(&filter).await.unwrap_or_default();
+        if recent_audits.is_empty() {
+            return Ok(());
+        }
+
+        for audit in recent_audits {
+            let conv_id = match audit.conversation_id.as_deref() {
+                Some(id) if !id.trim().is_empty() => id,
+                _ => continue,
+            };
+
+            // Must have passed at least 60 seconds since the audit was created
+            if now_epoch - audit.created_at_epoch < 60 {
+                continue;
+            }
+
+            // Check if this conversation was already self-triggered recently (cooldown: 180s)
+            {
+                let triggered = self.last_self_triggered.read().await;
+                if let Some(&last_time) = triggered.get(conv_id) {
+                    if now_epoch - last_time < 180 {
+                        continue;
+                    }
+                }
+            }
+
+            // Load transcript for this conversation
+            let (steps, _) = crate::core::domain::AuditEngine::load_transcript_for_conversation(&brain_path, conv_id);
+            if steps.is_empty() {
+                continue;
+            }
+
+            // Find if there is any running background task step (status == "RUNNING")
+            let running_step_idx = steps.iter().rposition(|s| s.status.as_deref() == Some("RUNNING"));
+            let running_idx = match running_step_idx {
+                Some(idx) => idx,
+                None => continue,
+            };
+
+            // Check if there has been any user message OR subsequent resolution after the running step
+            let steps_after = &steps[running_idx + 1..];
+
+            // If the user already messaged after this step, don't interfere
+            let has_user_input_after = steps_after.iter().any(|s| {
+                s.step_type.as_deref() == Some("USER_INPUT")
+                    || s.source.as_deref() == Some("USER_EXPLICIT")
+            });
+            if has_user_input_after {
+                continue;
+            }
+
+            // If there are already 2 or more PLANNER_RESPONSE after the running step,
+            // Aina already replied with the resolution
+            let planner_responses_after = steps_after
+                .iter()
+                .filter(|s| s.step_type.as_deref() == Some("PLANNER_RESPONSE"))
+                .count();
+            if planner_responses_after > 1 {
+                continue;
+            }
+
+            info!(
+                "Autonomous Watcher: Found unhandled background task in conversation {} (Action #{} for {}). Triggering auto-wakeup...",
+                conv_id, audit.id, audit.chat_jid
+            );
+
+            // Record trigger timestamp to prevent duplicate bursts
+            {
+                let mut triggered = self.last_self_triggered.write().await;
+                triggered.insert(conv_id.to_string(), now_epoch);
+            }
+
+            let prompt = format!(
+                "🔔 [SISTEM AINA - AUTO WAKE UP / TASK RESOLUTION]\n\
+                Konteks: Pada giliran sebelumnya, sebuah perintah latar belakang (background task) telah diluncurkan untuk memproses permintaan pengguna: \"{}\".\n\n\
+                Instruksi untuk Aina:\n\
+                1. Periksa status dan output dari tugas latar belakang yang telah selesai dijalankan.\n\
+                2. Jika tugas telah selesai (berhasil maupun gagal):\n\
+                   - Rangkum hasilnya secara jelas, terstruktur, dan ramah untuk pengguna.\n\
+                   - Jika ada berkas, tautan Google Drive/Sheets, atau hasil komparasi data, sertakan dalam pesan.\n\
+                   - Sampaikan kesimpulan akhir ini secara langsung (pesan ini akan otomatis dikirim ke WhatsApp pengguna).\n\
+                3. Jika tugas masih berjalan di server, berikan pembaruan progres singkat (misal: 'Sedang tahap finalisasi...').",
+                audit.input_text
+            );
+
+            let start_inst = std::time::Instant::now();
+            match agent.execute(Some(conv_id), &prompt).await {
+                Ok(res) => {
+                    let dur = start_inst.elapsed().as_secs_f64();
+                    let clean = res.response_text.trim();
+                    if !clean.is_empty() {
+                        info!(
+                            "Autonomous Watcher: Self-trigger executed for conv {} in {:.2}s. Delivering to WhatsApp {}.",
+                            conv_id, dur, audit.chat_jid
+                        );
+
+                        if let Err(e) = self.whatsapp.send_text_with_session(&audit.chat_jid, clean, None, SessionRole::PrimaryBot).await {
+                            error!("Autonomous Watcher: Failed to send self-trigger response to WhatsApp: {}", e);
+                        } else {
+                            let _ = self.session_store.record_message(&audit.chat_jid, "bot", clean, true).await;
+                        }
+
+                        let audit_entry = crate::core::domain::NewWhatsAppActionAudit {
+                            message_id: format!("auto-wakeup-{}", now_epoch),
+                            chat_jid: audit.chat_jid.clone(),
+                            chat_type: audit.chat_type.clone(),
+                            sender_jid: audit.sender_jid.clone(),
+                            sender_name: audit.sender_name.clone(),
+                            decision: "respond".to_string(),
+                            decision_reason: "Autonomous background task completion wake-up".to_string(),
+                            conversation_id: Some(conv_id.to_string()),
+                            status: "success".to_string(),
+                            input_text: format!("[Auto Wakeup for: {}]", audit.input_text),
+                            has_media: false,
+                            media_path: None,
+                            response_text: Some(clean.to_string()),
+                            error_message: None,
+                            duration_seconds: Some(dur),
+                            tools_invoked: vec!["autonomous_task_watcher".to_string()],
+                            created_at_epoch: now_epoch,
+                            completed_at_epoch: Some(now_epoch + dur as i64),
+                        };
+                        let _ = self.session_store.record_action_audit(&audit_entry).await;
+                    }
+                }
+                Err(e) => {
+                    warn!("Autonomous Watcher: Self-trigger execution failed for conv {}: {}", conv_id, e);
                 }
             }
         }
