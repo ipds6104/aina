@@ -303,7 +303,7 @@ impl ProcessIncomingMessageUseCase {
                         let mut status_lines = Vec::new();
                         for acc in &pool_status {
                             let state_str = if acc.is_cooldown {
-                                format!("⏳ Cooldown (sisa {}s)", acc.cooldown_remaining_secs)
+                                format!("⏳ Cooldown (sisa {})", acc.formatted_cooldown())
                             } else {
                                 "🟢 Aktif & Siap".to_string()
                             };

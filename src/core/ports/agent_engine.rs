@@ -24,6 +24,29 @@ impl AccountPoolStatus {
             }
         })
     }
+
+    pub fn formatted_cooldown(&self) -> String {
+        let secs = self.cooldown_remaining_secs;
+        if secs >= 3600 {
+            let h = secs / 3600;
+            let m = (secs % 3600) / 60;
+            if m > 0 {
+                format!("{}h {}m", h, m)
+            } else {
+                format!("{}h", h)
+            }
+        } else if secs >= 60 {
+            let m = secs / 60;
+            let s = secs % 60;
+            if s > 0 {
+                format!("{}m {}s", m, s)
+            } else {
+                format!("{}m", m)
+            }
+        } else {
+            format!("{}s", secs)
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

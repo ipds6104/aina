@@ -142,6 +142,47 @@ pub fn mask_email(email: &str) -> String {
     }
 }
 
+/// Intelligently parses Google quota exhaustion and rate limit errors
+/// to determine an accurate cooldown period (e.g. extracts "Resets in 65h1m18s" or assigns default buckets).
+pub fn extract_quota_cooldown_duration(err: &str) -> Duration {
+    let lower = err.to_lowercase();
+    if let Some(pos) = lower.find("resets in ") {
+        let rest = &lower[pos + "resets in ".len()..];
+        let token = rest.split_whitespace().next().unwrap_or("").trim_end_matches('.');
+        let mut total_secs = 0u64;
+        let mut num = 0u64;
+        for ch in token.chars() {
+            if ch.is_ascii_digit() {
+                num = num * 10 + (ch as u64 - '0' as u64);
+            } else if ch == 'h' {
+                total_secs += num * 3600;
+                num = 0;
+            } else if ch == 'm' {
+                total_secs += num * 60;
+                num = 0;
+            } else if ch == 's' {
+                total_secs += num;
+                num = 0;
+            }
+        }
+        if total_secs > 0 {
+            // Cap at 72 hours for safety, minimum 60s
+            return Duration::from_secs(total_secs.clamp(60, 72 * 3600));
+        }
+    }
+
+    // Daily/subscription quota exhausted without explicit duration
+    if lower.contains("individual quota reached")
+        || lower.contains("please upgrade your subscription")
+        || lower.contains("exceeded your current quota")
+    {
+        return Duration::from_secs(4 * 3600); // 4 hours
+    }
+
+    // Transient rate limit (RPM/TPM / 503)
+    Duration::from_secs(300) // 5 minutes
+}
+
 #[derive(Debug, Clone)]
 pub struct AccountToken {
     #[allow(dead_code)]
@@ -568,10 +609,11 @@ impl AgentEnginePort for AntigravityCliAdapter {
             if !output.status.success() {
                 if is_quota && pool.len() > 1 && attempt + 1 < max_attempts {
                     if let Some(ref acc) = active_acc {
-                        *acc.cooldown_until.write().await = Some(std::time::Instant::now() + std::time::Duration::from_secs(300));
+                        let cooldown_dur = extract_quota_cooldown_duration(&combined_lower);
+                        *acc.cooldown_until.write().await = Some(std::time::Instant::now() + cooldown_dur);
                         warn!(
-                            "Account {} hit quota limit. Cooling down for 5m. Failing over (attempt {}/{})...",
-                            acc.label, attempt + 1, max_attempts
+                            "Account {} hit quota limit. Cooling down for {:?}. Failing over (attempt {}/{})...",
+                            acc.label, cooldown_dur, attempt + 1, max_attempts
                         );
                         continue;
                     }
@@ -1276,5 +1318,28 @@ Tangkapan layar tersebut diambil langsung menggunakan browser headless bawaan pa
         assert_eq!(status.len(), 1);
         assert_eq!(status[0].id, 1);
         assert_eq!(status[0].label, "Account-Default");
+    }
+
+    #[test]
+    fn test_extract_quota_cooldown_duration() {
+        // 1. Explicit resets in 65h1m18s
+        let err1 = "RESOURCE_EXHAUSTED (code 429): Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 65h1m18s.";
+        let dur1 = extract_quota_cooldown_duration(err1);
+        assert_eq!(dur1.as_secs(), 65 * 3600 + 1 * 60 + 18);
+
+        // 2. Explicit resets in 2h30m
+        let err2 = "Quota exceeded. Resets in 2h30m.";
+        let dur2 = extract_quota_cooldown_duration(err2);
+        assert_eq!(dur2.as_secs(), 2 * 3600 + 30 * 60);
+
+        // 3. Subscription/daily limit without explicit time
+        let err3 = "Individual quota reached. Please upgrade your subscription.";
+        let dur3 = extract_quota_cooldown_duration(err3);
+        assert_eq!(dur3.as_secs(), 4 * 3600);
+
+        // 4. Transient rate limit
+        let err4 = "Error: 429 Too Many Requests: Rate limit exceeded.";
+        let dur4 = extract_quota_cooldown_duration(err4);
+        assert_eq!(dur4.as_secs(), 300);
     }
 }
