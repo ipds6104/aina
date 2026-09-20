@@ -1401,7 +1401,16 @@ async fn webhook_handler(
             }
         }
 
-        if media_bytes.is_none() {
+        let is_heavy_media = msg.media_type.as_deref() == Some("audio")
+            || msg.media_type.as_deref() == Some("video")
+            || msg.media_type.as_deref() == Some("ptt")
+            || mime_type.starts_with("audio/")
+            || mime_type.starts_with("video/");
+
+        if is_heavy_media {
+            info!("Skipping media download for heavy media type (audio/video): mime='{}', type='{:?}'", effective_mime, media_type_opt);
+            msg.has_media = false;
+        } else if media_bytes.is_none() {
             // CLAIM-CHECK PATTERN:
             // If media_base64 is absent or omitted, retrieve media stream on-demand
             // using the download_url claim check ticket or fallback to media id.
@@ -1739,6 +1748,268 @@ pub fn resolve_media_extension(
     }
 }
 
+/// Parses a vCard string into a clean, human-readable and AI-friendly summary format.
+fn parse_vcard_summary(vcard: &str, display_name_fallback: Option<&str>) -> String {
+    let mut fn_name = String::new();
+    let mut phones = Vec::new();
+    let mut emails = Vec::new();
+    let mut org = String::new();
+    let mut title = String::new();
+    let mut notes = Vec::new();
+
+    for line in vcard.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let upper = trimmed.to_uppercase();
+        if upper.starts_with("FN:") || upper.starts_with("FN;") {
+            if let Some((_, val)) = trimmed.split_once(':') {
+                fn_name = val.trim().to_string();
+            }
+        } else if upper.starts_with("TEL:") || upper.starts_with("TEL;") {
+            if let Some((params, val)) = trimmed.split_once(':') {
+                let clean_phone = val.trim();
+                let waid = params
+                    .split(';')
+                    .find(|p| p.to_uppercase().starts_with("WAID="))
+                    .and_then(|p| p.split_once('='))
+                    .map(|(_, id)| id.trim())
+                    .unwrap_or("");
+                if !waid.is_empty() {
+                    phones.push(format!("{} (WA ID: {})", clean_phone, waid));
+                } else {
+                    phones.push(clean_phone.to_string());
+                }
+            }
+        } else if upper.starts_with("EMAIL:") || upper.starts_with("EMAIL;") {
+            if let Some((_, val)) = trimmed.split_once(':') {
+                emails.push(val.trim().to_string());
+            }
+        } else if upper.starts_with("ORG:") || upper.starts_with("ORG;") {
+            if let Some((_, val)) = trimmed.split_once(':') {
+                org = val.trim().replace(';', " - ");
+            }
+        } else if upper.starts_with("TITLE:") || upper.starts_with("TITLE;") {
+            if let Some((_, val)) = trimmed.split_once(':') {
+                title = val.trim().to_string();
+            }
+        } else if upper.starts_with("NOTE:") || upper.starts_with("NOTE;") {
+            if let Some((_, val)) = trimmed.split_once(':') {
+                notes.push(val.trim().to_string());
+            }
+        }
+    }
+
+    let name = if !fn_name.is_empty() {
+        fn_name
+    } else {
+        display_name_fallback.unwrap_or("Tanpa Nama").to_string()
+    };
+
+    let mut out = format!("📇 [Kartu Kontak WhatsApp Dibagikan]\n• Nama: {}", name);
+    if !phones.is_empty() {
+        out.push_str(&format!("\n• Nomor Telepon / WA: {}", phones.join(", ")));
+    }
+    if !org.is_empty() {
+        out.push_str(&format!("\n• Organisasi / Instansi: {}", org));
+    }
+    if !title.is_empty() {
+        out.push_str(&format!("\n• Jabatan: {}", title));
+    }
+    if !emails.is_empty() {
+        out.push_str(&format!("\n• Email: {}", emails.join(", ")));
+    }
+    if !notes.is_empty() {
+        out.push_str(&format!("\n• Catatan: {}", notes.join("; ")));
+    }
+
+    out.push_str("\n\n--- vCard Mentah ---\n");
+    out.push_str(vcard.trim());
+    out
+}
+
+/// Formats a WhatsApp location payload into human and AI readable structure with Google Maps link.
+fn format_location_message(loc_obj: &serde_json::Map<String, Value>) -> String {
+    let lat = loc_obj.get("degreesLatitude").or_else(|| loc_obj.get("latitude")).and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let lng = loc_obj.get("degreesLongitude").or_else(|| loc_obj.get("longitude")).and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let name = loc_obj.get("name").and_then(|v| v.as_str()).unwrap_or("");
+    let address = loc_obj.get("address").and_then(|v| v.as_str()).unwrap_or("");
+    let comment = loc_obj.get("comment").or_else(|| loc_obj.get("caption")).and_then(|v| v.as_str()).unwrap_or("");
+
+    let mut out = "📍 [Lokasi WhatsApp Dibagikan]".to_string();
+    if !name.is_empty() {
+        out.push_str(&format!("\n• Nama Tempat: {}", name));
+    }
+    if !address.is_empty() {
+        out.push_str(&format!("\n• Alamat: {}", address));
+    }
+    if lat != 0.0 || lng != 0.0 {
+        out.push_str(&format!("\n• Koordinat: {:.6}, {:.6}", lat, lng));
+        out.push_str(&format!("\n• Google Maps: https://www.google.com/maps?q={:.6},{:.6}", lat, lng));
+    }
+    if !comment.is_empty() {
+        out.push_str(&format!("\n• Keterangan: {}", comment));
+    }
+    out
+}
+
+/// Extracts text and media types across varied WhatsApp message structures
+/// (plain text, contact cards, locations, documents, images) while flagging heavy audio/video.
+fn extract_whatsmeow_content(
+    root: &serde_json::Map<String, Value>,
+    val: &Value,
+) -> (String, Option<String>, bool) {
+    let direct_text = root
+        .get("body")
+        .or_else(|| root.get("text"))
+        .or_else(|| root.get("conversation"))
+        .or_else(|| val.get("body"))
+        .or_else(|| val.get("text"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    let mut media_type = root
+        .get("media_type")
+        .or_else(|| val.get("media_type"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_lowercase());
+
+    let msg_obj = root
+        .get("message")
+        .or_else(|| val.get("message"))
+        .and_then(|m| m.as_object());
+
+    // 1. Check for Contact Message (Single Contact)
+    let contact_obj = msg_obj
+        .and_then(|m| m.get("contactMessage"))
+        .or_else(|| root.get("contactMessage"))
+        .or_else(|| root.get("contact"))
+        .or_else(|| val.get("contact"))
+        .and_then(|c| c.as_object());
+
+    if let Some(c) = contact_obj {
+        let vcard = c.get("vcard").and_then(|v| v.as_str()).unwrap_or("");
+        let disp_name = c.get("displayName").or_else(|| c.get("display_name")).and_then(|v| v.as_str());
+        let summary = parse_vcard_summary(vcard, disp_name);
+        return (summary, Some("contact".to_string()), false);
+    }
+
+    // 2. Check for Contacts Array Message (Multiple Contacts)
+    let contacts_array_obj = msg_obj
+        .and_then(|m| m.get("contactsArrayMessage"))
+        .or_else(|| root.get("contactsArrayMessage"))
+        .or_else(|| root.get("contacts"))
+        .or_else(|| val.get("contacts"))
+        .and_then(|c| c.as_object());
+
+    if let Some(ca) = contacts_array_obj {
+        let contacts_arr = ca.get("contacts").and_then(|v| v.as_array());
+        if let Some(arr) = contacts_arr {
+            let mut parts = Vec::new();
+            for (i, item) in arr.iter().enumerate() {
+                if let Some(c) = item.as_object() {
+                    let vcard = c.get("vcard").and_then(|v| v.as_str()).unwrap_or("");
+                    let disp_name = c.get("displayName").or_else(|| c.get("display_name")).and_then(|v| v.as_str());
+                    parts.push(format!("--- Kontak #{} ---\n{}", i + 1, parse_vcard_summary(vcard, disp_name)));
+                }
+            }
+            let summary = format!("📇 [{} Kontak WhatsApp Dibagikan]\n\n{}", arr.len(), parts.join("\n\n"));
+            return (summary, Some("contact".to_string()), false);
+        }
+    }
+
+    // 3. Check for Location Message
+    let loc_obj = msg_obj
+        .and_then(|m| m.get("locationMessage").or_else(|| m.get("liveLocationMessage")))
+        .or_else(|| root.get("locationMessage"))
+        .or_else(|| root.get("liveLocationMessage"))
+        .or_else(|| root.get("location"))
+        .or_else(|| val.get("location"))
+        .and_then(|l| l.as_object());
+
+    if let Some(loc) = loc_obj {
+        let summary = format_location_message(loc);
+        return (summary, Some("location".to_string()), false);
+    }
+
+    // 4. Check for Extended Text Message
+    if let Some(ext) = msg_obj.and_then(|m| m.get("extendedTextMessage")).and_then(|e| e.as_object()) {
+        if let Some(t) = ext.get("text").and_then(|v| v.as_str()) {
+            return (t.trim().to_string(), media_type, false);
+        }
+    }
+
+    // 5. Check for Document Message
+    if let Some(doc) = msg_obj.and_then(|m| m.get("documentMessage")).and_then(|d| d.as_object()) {
+        media_type = Some("document".to_string());
+        let cap = doc.get("caption").and_then(|v| v.as_str()).unwrap_or("").trim();
+        let fname = doc.get("fileName").or_else(|| doc.get("title")).and_then(|v| v.as_str()).unwrap_or("").trim();
+        let text = if !cap.is_empty() {
+            cap.to_string()
+        } else if !fname.is_empty() {
+            format!("[Dokumen terlampir: {}]", fname)
+        } else {
+            "[Dokumen terlampir]".to_string()
+        };
+        return (text, media_type, false);
+    }
+
+    // 6. Check for Image Message
+    if let Some(img) = msg_obj.and_then(|m| m.get("imageMessage")).and_then(|i| i.as_object()) {
+        media_type = Some("image".to_string());
+        let cap = img.get("caption").and_then(|v| v.as_str()).unwrap_or("").trim();
+        let text = if !cap.is_empty() {
+            cap.to_string()
+        } else {
+            "[Foto / Gambar terlampir]".to_string()
+        };
+        return (text, media_type, false);
+    }
+
+    // 7. Check for Audio / Voice Note Message (Heavy Media: Flagged)
+    let is_audio = msg_obj.and_then(|m| m.get("audioMessage")).is_some()
+        || media_type.as_deref() == Some("audio")
+        || media_type.as_deref() == Some("ptt")
+        || root.get("mime_type").and_then(|v| v.as_str()).map(|s| s.starts_with("audio/")).unwrap_or(false);
+
+    if is_audio {
+        return (
+            "[Pesan Audio/Voice Note diabaikan: Format audio tidak diproses]".to_string(),
+            Some("audio".to_string()),
+            true,
+        );
+    }
+
+    // 8. Check for Video Message (Heavy Media: Flagged)
+    let is_video = msg_obj.and_then(|m| m.get("videoMessage")).is_some()
+        || media_type.as_deref() == Some("video")
+        || root.get("mime_type").and_then(|v| v.as_str()).map(|s| s.starts_with("video/")).unwrap_or(false);
+
+    if is_video {
+        return (
+            "[Pesan Video diabaikan: Format video tidak diproses]".to_string(),
+            Some("video".to_string()),
+            true,
+        );
+    }
+
+    // 9. Fallback to plain message string or direct text
+    let plain_msg = root
+        .get("message")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    let final_text = direct_text
+        .or(plain_msg)
+        .unwrap_or_default();
+
+    (final_text, media_type, false)
+}
+
 fn parse_whatsmeow_message(
     val: &Value,
     query_params: Option<&HashMap<String, String>>,
@@ -1776,14 +2047,7 @@ fn parse_whatsmeow_message(
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
-    let text = root
-        .get("body")
-        .or_else(|| root.get("message"))
-        .or_else(|| root.get("text"))
-        .or_else(|| root.get("conversation"))
-        .and_then(|v| v.as_str())
-        .unwrap_or_default()
-        .to_string();
+    let (text, extracted_media_type, is_audio_or_video) = extract_whatsmeow_content(root, val);
 
     let msg_id = root
         .get("id")
@@ -1865,30 +2129,42 @@ fn parse_whatsmeow_message(
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
-    let has_media = root
-        .get("has_media")
-        .or_else(|| val.get("has_media"))
-        .and_then(|v| v.as_bool())
-        .or_else(|| {
-            if root.get("download_url").is_some()
-                || root.get("media_url").is_some()
-                || val.get("download_url").is_some()
-                || val.get("media_url").is_some()
-                || root.get("media_base64").is_some()
-                || val.get("media_base64").is_some()
-            {
-                Some(true)
-            } else {
-                None
-            }
-        })
-        .unwrap_or(false);
-
-    let media_type = root
+    let raw_media_type = root
         .get("media_type")
         .or_else(|| val.get("media_type"))
         .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+        .map(|s| s.to_string())
+        .or(extracted_media_type);
+
+    let is_heavy_media = is_audio_or_video
+        || raw_media_type.as_deref() == Some("audio")
+        || raw_media_type.as_deref() == Some("video")
+        || raw_media_type.as_deref() == Some("ptt")
+        || root.get("mime_type").and_then(|v| v.as_str()).map(|s| s.starts_with("audio/") || s.starts_with("video/")).unwrap_or(false);
+
+    let has_media = if is_heavy_media {
+        false
+    } else {
+        root.get("has_media")
+            .or_else(|| val.get("has_media"))
+            .and_then(|v| v.as_bool())
+            .or_else(|| {
+                if root.get("download_url").is_some()
+                    || root.get("media_url").is_some()
+                    || val.get("download_url").is_some()
+                    || val.get("media_url").is_some()
+                    || root.get("media_base64").is_some()
+                    || val.get("media_base64").is_some()
+                {
+                    Some(true)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(false)
+    };
+
+    let media_type = raw_media_type;
 
     let is_bot_unassigned = bot_jid
         .map(|b| {
@@ -3599,6 +3875,169 @@ mod tests {
         assert_eq!(msg.has_media, true);
         assert_eq!(msg.media_type, Some("document".to_string()));
         assert_eq!(msg.text, "ini pdfnya");
+    }
+
+    #[test]
+    fn test_parse_whatsmeow_contact_message() {
+        let vcard_content = "BEGIN:VCARD\nVERSION:3.0\nFN:Ihza Karunia\nTEL;type=CELL;waid=628123456789:+62 812-3456-789\nORG:BPS Mempawah\nTITLE:Pranata Komputer\nEMAIL:ihza@example.com\nEND:VCARD";
+        let payload = json!({
+            "id": "MSG_CONTACT_001",
+            "from": "6282234120921@s.whatsapp.net",
+            "message": {
+                "contactMessage": {
+                    "displayName": "Ihza Karunia",
+                    "vcard": vcard_content
+                }
+            }
+        });
+
+        let msg = parse_whatsmeow_message(
+            &payload,
+            None,
+            Some("628123456789@s.whatsapp.net"),
+            None,
+            None,
+        )
+        .expect("Contact message should parse");
+
+        assert_eq!(msg.id, "MSG_CONTACT_001");
+        assert_eq!(msg.media_type, Some("contact".to_string()));
+        assert!(msg.text.contains("📇 [Kartu Kontak WhatsApp Dibagikan]"));
+        assert!(msg.text.contains("Ihza Karunia"));
+        assert!(msg.text.contains("+62 812-3456-789 (WA ID: 628123456789)"));
+        assert!(msg.text.contains("BPS Mempawah"));
+        assert!(msg.text.contains("Pranata Komputer"));
+        assert!(msg.text.contains("ihza@example.com"));
+        assert!(msg.text.contains("BEGIN:VCARD"));
+    }
+
+    #[test]
+    fn test_parse_whatsmeow_contacts_array_message() {
+        let payload = json!({
+            "id": "MSG_CONTACTS_ARRAY_002",
+            "from": "6282234120921@s.whatsapp.net",
+            "message": {
+                "contactsArrayMessage": {
+                    "displayName": "2 Kontak",
+                    "contacts": [
+                        {
+                            "displayName": "Budi Santoso",
+                            "vcard": "BEGIN:VCARD\nVERSION:3.0\nFN:Budi Santoso\nTEL;waid=628111111:+628111111\nORG:Kantor Wilayah\nEND:VCARD"
+                        },
+                        {
+                            "displayName": "Siti Rahma",
+                            "vcard": "BEGIN:VCARD\nVERSION:3.0\nFN:Siti Rahma\nTEL;waid=628222222:+628222222\nEMAIL:siti@example.com\nEND:VCARD"
+                        }
+                    ]
+                }
+            }
+        });
+
+        let msg = parse_whatsmeow_message(
+            &payload,
+            None,
+            Some("628123456789@s.whatsapp.net"),
+            None,
+            None,
+        )
+        .expect("Contacts array message should parse");
+
+        assert_eq!(msg.id, "MSG_CONTACTS_ARRAY_002");
+        assert_eq!(msg.media_type, Some("contact".to_string()));
+        assert!(msg.text.contains("📇 [2 Kontak WhatsApp Dibagikan]"));
+        assert!(msg.text.contains("Kontak #1"));
+        assert!(msg.text.contains("Budi Santoso"));
+        assert!(msg.text.contains("Kontak #2"));
+        assert!(msg.text.contains("Siti Rahma"));
+    }
+
+    #[test]
+    fn test_parse_whatsmeow_location_message() {
+        let payload = json!({
+            "id": "MSG_LOCATION_003",
+            "from": "6282234120921@s.whatsapp.net",
+            "message": {
+                "locationMessage": {
+                    "degreesLatitude": -0.0263,
+                    "degreesLongitude": 109.3425,
+                    "name": "BPS Kabupaten Mempawah",
+                    "address": "Jl. Daeng Menambon, Mempawah, Kalimantan Barat"
+                }
+            }
+        });
+
+        let msg = parse_whatsmeow_message(
+            &payload,
+            None,
+            Some("628123456789@s.whatsapp.net"),
+            None,
+            None,
+        )
+        .expect("Location message should parse");
+
+        assert_eq!(msg.id, "MSG_LOCATION_003");
+        assert_eq!(msg.media_type, Some("location".to_string()));
+        assert!(msg.text.contains("📍 [Lokasi WhatsApp Dibagikan]"));
+        assert!(msg.text.contains("BPS Kabupaten Mempawah"));
+        assert!(msg.text.contains("-0.026300, 109.342500"));
+        assert!(msg.text.contains("https://www.google.com/maps?q=-0.026300,109.342500"));
+    }
+
+    #[test]
+    fn test_parse_whatsmeow_audio_video_heavy_skip() {
+        // 1. Audio message
+        let audio_payload = json!({
+            "id": "MSG_AUDIO_004",
+            "from": "6282234120921@s.whatsapp.net",
+            "message": {
+                "audioMessage": {
+                    "mimetype": "audio/ogg; codecs=opus",
+                    "seconds": 15
+                }
+            },
+            "download_url": "/api/v1/media/audio.ogg",
+            "media_type": "audio"
+        });
+
+        let audio_msg = parse_whatsmeow_message(
+            &audio_payload,
+            None,
+            Some("628123456789@s.whatsapp.net"),
+            None,
+            None,
+        )
+        .expect("Audio message should parse");
+
+        assert_eq!(audio_msg.id, "MSG_AUDIO_004");
+        assert_eq!(audio_msg.has_media, false);
+        assert!(audio_msg.text.contains("[Pesan Audio/Voice Note diabaikan: Format audio tidak diproses]"));
+
+        // 2. Video message
+        let video_payload = json!({
+            "id": "MSG_VIDEO_005",
+            "from": "6282234120921@s.whatsapp.net",
+            "message": {
+                "videoMessage": {
+                    "mimetype": "video/mp4",
+                    "seconds": 45
+                }
+            },
+            "download_url": "/api/v1/media/video.mp4",
+            "media_type": "video"
+        });
+
+        let video_msg = parse_whatsmeow_message(
+            &video_payload,
+            None,
+            Some("628123456789@s.whatsapp.net"),
+            None,
+            None,
+        )
+        .expect("Video message should parse");
+
+        assert_eq!(video_msg.id, "MSG_VIDEO_005");
+        assert_eq!(video_msg.has_media, false);
+        assert!(video_msg.text.contains("[Pesan Video diabaikan: Format video tidak diproses]"));
     }
 
     struct DummySessionStore;

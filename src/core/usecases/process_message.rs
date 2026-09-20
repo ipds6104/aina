@@ -159,6 +159,23 @@ impl ProcessIncomingMessageUseCase {
                 let audit_id = self.session_store.record_action_audit(&audit).await.ok();
                 let start_instant = std::time::Instant::now();
 
+                // Reject heavy audio and video messages immediately without LLM invocation
+                if msg.text.starts_with("[Pesan Audio/Voice Note diabaikan")
+                    || msg.text.starts_with("[Pesan Video diabaikan")
+                {
+                    let reply = "Maaf yaa, untuk saat ini Aina belum dapat memproses pesan audio/voice note atau video karena ukurannya yang berat. Silakan kirimkan dalam bentuk teks, dokumen, gambar, atau kartu kontak yaa! Terima kasih.".to_string();
+                    if let Some(aid) = audit_id {
+                        let dur = start_instant.elapsed().as_secs_f64();
+                        let _ = self
+                            .session_store
+                            .update_action_audit_result(aid, None, Some(&reply), None, "success", Some(dur), &[])
+                            .await;
+                    }
+                    self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
+                    self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
+                    return Ok(());
+                }
+
                 // Check for built-in quick command: /reset, /clear, /new
                 let trimmed_text = msg.text.trim();
                 if trimmed_text.eq_ignore_ascii_case("/reset")
