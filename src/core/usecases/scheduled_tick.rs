@@ -1,5 +1,5 @@
 use crate::core::domain::{KnowledgeEngine, PersonaEngine, ScheduleParser, ScheduledTaskType, SessionRole};
-use crate::core::ports::{AgentEnginePort, SessionStorePort, WhatsAppPort};
+use crate::core::ports::{AgentEnginePort, KnowledgePort, SessionStorePort, WhatsAppPort};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -11,6 +11,7 @@ pub struct ScheduledTickUseCase {
     whatsapp: Arc<dyn WhatsAppPort>,
     agent_engine: Option<Arc<dyn AgentEnginePort>>,
     persona_engine: Option<Arc<PersonaEngine>>,
+    knowledge_port: Arc<dyn KnowledgePort>,
     workspace_dir: Option<PathBuf>,
     timezone_offset_hours: i32,
     last_self_triggered: Arc<RwLock<HashMap<String, (usize, i64)>>>,
@@ -25,11 +26,32 @@ impl ScheduledTickUseCase {
         workspace_dir: Option<PathBuf>,
         timezone_offset_hours: i32,
     ) -> Self {
+        Self::with_knowledge(
+            session_store,
+            whatsapp,
+            agent_engine,
+            persona_engine,
+            Arc::new(KnowledgeEngine::new()),
+            workspace_dir,
+            timezone_offset_hours,
+        )
+    }
+
+    pub fn with_knowledge(
+        session_store: Arc<dyn SessionStorePort>,
+        whatsapp: Arc<dyn WhatsAppPort>,
+        agent_engine: Option<Arc<dyn AgentEnginePort>>,
+        persona_engine: Option<Arc<PersonaEngine>>,
+        knowledge_port: Arc<dyn KnowledgePort>,
+        workspace_dir: Option<PathBuf>,
+        timezone_offset_hours: i32,
+    ) -> Self {
         Self {
             session_store,
             whatsapp,
             agent_engine,
             persona_engine,
+            knowledge_port,
             workspace_dir,
             timezone_offset_hours,
             last_self_triggered: Arc::new(RwLock::new(HashMap::new())),
@@ -42,7 +64,7 @@ impl ScheduledTickUseCase {
         // 1. In-process deterministic Knowledge Base neatness check & auto-heal
         if let Some(ref ws) = self.workspace_dir {
             if ws.join("knowledge").is_dir() {
-                let report = KnowledgeEngine::lint(ws, true);
+                let report = self.knowledge_port.lint(ws, true);
                 if report.auto_healed {
                     info!(
                         "Scheduler auto-healed knowledge base for workspace {:?}",

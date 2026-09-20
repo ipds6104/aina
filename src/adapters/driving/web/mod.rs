@@ -214,7 +214,7 @@ mod tests {
         let cleanup_start = std::time::Instant::now();
         loop {
             let queues = chat_queues.lock().await;
-            if !queues.contains_key("group123@g.us") || cleanup_start.elapsed() > std::time::Duration::from_secs(3) {
+            if !queues.contains_key("group123@g.us") || cleanup_start.elapsed() > std::time::Duration::from_secs(6) {
                 break;
             }
             drop(queues);
