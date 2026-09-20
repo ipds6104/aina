@@ -465,9 +465,15 @@ impl ProcessIncomingMessageUseCase {
                             .send_presence_with_session(&heartbeat_chat_jid, PresenceState::Composing, session_role)
                             .await;
 
-                        // If execution exceeds 16 seconds, send a single reassuring notice with cancel instructions (EXACTLY ONCE)
-                        if elapsed_secs == 16 {
-                            let progress_note = "Sedang Aina proses yaa, mohon ditunggu sebentar... ⏳\n\n_(Ketik *'batal'* atau *'kill'* kapan pun jika ingin menghentikan tugas ini)_".to_string();
+                        // Send in-flight progressive reassurance every 3 minutes (180s, 360s, 540s...)
+                        if elapsed_secs > 0 && elapsed_secs % 180 == 0 {
+                            let minutes = elapsed_secs / 60;
+                            let progress_note = match minutes {
+                                3 => "Masih proses Aina kerjakan yaa, ditunggu sebentar...".to_string(),
+                                6 => "Masih terus Aina proses yaa, tugas ini cukup panjang tapi tetap berjalan lancar...".to_string(),
+                                9 => "Masih intensif Aina proses yaa, sedang menuju tahap akhir...".to_string(),
+                                _ => format!("Masih terus Aina proses yaa (berjalan {} menit), mohon ditunggu sebentar lagi...", minutes),
+                            };
                             let _ = whatsapp
                                 .send_text_with_session(
                                     &heartbeat_chat_jid,
