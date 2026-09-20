@@ -610,6 +610,12 @@ PENGGUNAAN:
                 let total_convs = crate::core::domain::AuditEngine::find_transcripts(&brain_path).len();
                 let workspaces = crate::core::domain::AuditEngine::inspect_workspaces(Path::new(&config.agent.workspace_dir));
 
+                let scheduler = if let Ok(store) = crate::adapters::driven::SqliteSessionStore::new(&db_path) {
+                    store.get_scheduler_diagnostics().await.ok()
+                } else {
+                    None
+                };
+
                 let diag = crate::core::domain::SystemDiagnostics {
                     uptime_seconds: crate::core::domain::get_process_uptime_secs(),
                     memory_rss_bytes: rss,
@@ -623,6 +629,7 @@ PENGGUNAAN:
                     bot_jid: config.whatsmeow.bot_jid.clone(),
                     bot_name: "Aina".to_string(),
                     workspaces,
+                    scheduler,
                     timestamp_epoch: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64,
                 };
 

@@ -154,7 +154,7 @@ impl ScheduledTickUseCase {
                             1. EFISIENSI KUOTA: Lakukan maksimal 1 hingga 2 kali pencarian web (search_web) yang paling esensial. DILARANG KERAS melakukan pencarian berulang-ulang tanpa henti!\n\
                             2. Susun hasil akhir secara rapi, padat, dan ramah ponsel (format WhatsApp: *tebal*, bullet points •).\n\
                             3. {}\
-                            4. ATURAN PENGIRIMAN OTOMATIS: DILARANG KERAS memanggil wa_tool.py, send-text, atau status-send-text di terminal! Cukup susun teks konten akhir pada pesan respons Anda. Sistem backend scheduler Aina yang akan mempublikasikannya secara otomatis ke WhatsApp!\n\
+                            4. ATURAN PENGIRIMAN: Untuk pesan teks biasa, DILARANG memanggil 'wa_tool.py send-text' atau 'status-send-text' di terminal karena teks respons Anda akan dikirim otomatis oleh scheduler backend! Namun, jika tugas ini secara spesifik meminta pengiriman berkas, dokumen, atau GAMBAR/SCREENSHOT, Anda DIPERBOLEHKAN memanggil 'python3 skills/whatsmeow/scripts/wa_tool.py send-media --to {} --file <path_file> --caption <keterangan_singkat>'.\n\
                             5. DILARANG KERAS menyertakan laporan status teknis internal seperti 'Status: Terkirim', 'Pesan berhasil dikirim', 'Status telah diterbitkan', dsb.\n\
                             6. Berikan langsung teks hasil riset atau informasi akhir yang siap dibaca oleh penerima.",
                             task.title,
@@ -165,7 +165,8 @@ impl ScheduledTickUseCase {
                                 "Target adalah Status/Story WhatsApp (24 jam). Buat teks ringkas, memikat, dan nyaman dibaca dalam sekali lihat di story (maksimal 3-5 baris padat).\n"
                             } else {
                                 "Format ramah obrolan chat.\n"
-                            }
+                            },
+                            task.target_jid,
                         );
 
                         match agent.execute(None, &prompt).await {

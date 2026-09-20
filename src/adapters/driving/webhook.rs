@@ -575,6 +575,7 @@ async fn api_audit_diagnostics_handler(
     let total_conversations = crate::core::domain::AuditEngine::find_transcripts(&brain_path).len();
     let active_model = state.agent_engine.get_model().await;
     let workspaces = crate::core::domain::AuditEngine::inspect_workspaces(&state.workspace_dir);
+    let scheduler = state.session_store.get_scheduler_diagnostics().await.ok();
 
     let diagnostics = crate::core::domain::SystemDiagnostics {
         uptime_seconds: crate::core::domain::get_process_uptime_secs(),
@@ -589,6 +590,7 @@ async fn api_audit_diagnostics_handler(
         bot_jid: state.bot_jid.clone(),
         bot_name: state.bot_name.clone(),
         workspaces,
+        scheduler,
         timestamp_epoch: chrono_now_secs(),
     };
 

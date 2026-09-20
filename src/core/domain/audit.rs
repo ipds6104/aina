@@ -159,6 +159,8 @@ pub struct SystemDiagnostics {
     pub bot_jid: String,
     pub bot_name: String,
     pub workspaces: Vec<WorkspaceProvenance>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scheduler: Option<crate::core::domain::SchedulerDiagnostics>,
     pub timestamp_epoch: i64,
 }
 
