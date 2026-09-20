@@ -376,17 +376,33 @@ def main():
     p_check = subparsers.add_parser("check", help="Cek kuota status hari ini, slot waktu, dan keputusan")
     p_check.add_argument("--slot", choices=["pagi", "siang", "sore", "malam"], help="Override slot waktu")
 
+    # inspire (Ruang Imajinasi Mandiri Aina)
+    p_inspire = subparsers.add_parser("inspire", help="Memberikan konteks temporal & riwayat untuk ruang imajinasi Aina")
+    p_inspire.add_argument("--slot", choices=["pagi", "siang", "sore", "malam"], help="Override slot waktu")
+
     # generate
     p_gen = subparsers.add_parser("generate", help="Generate prompt gambar & caption tanpa memposting")
     p_gen.add_argument("--slot", choices=["pagi", "siang", "sore", "malam"], help="Override slot waktu")
     p_gen.add_argument("--weekend", action="store_true", help="Paksa mode weekend")
     p_gen.add_argument("--weekday", action="store_true", help="Paksa mode weekday")
+    p_gen.add_argument("--custom", action="store_true", help="Gunakan adegan hasil imajinasi bebas Aina sendiri")
+    p_gen.add_argument("--theme", help="Nama tema imajinasi")
+    p_gen.add_argument("--scene", help="Deskripsi adegan visual hasil imajinasi Aina")
+    p_gen.add_argument("--caption", help="Teks caption status WhatsApp")
+    p_gen.add_argument("--clothes", help="Pakaian / wardrobe Aina pada momen ini")
+    p_gen.add_argument("--reflection", help="Refleksi rasa bosan / alasan memilih momen ini")
 
     # post
     p_post = subparsers.add_parser("post", help="Eksekusi pembuatan status (jika kuota & peluang terpenuhi)")
     p_post.add_argument("--slot", choices=["pagi", "siang", "sore", "malam"], help="Override slot waktu")
     p_post.add_argument("--force", action="store_true", help="Paksa posting tanpa melihat batasan kuota harian")
     p_post.add_argument("--dry-run", action="store_true", help="Simulasi tanpa generate/upload nyata")
+    p_post.add_argument("--custom", action="store_true", help="Gunakan adegan hasil imajinasi bebas Aina sendiri")
+    p_post.add_argument("--theme", help="Nama tema imajinasi")
+    p_post.add_argument("--scene", help="Deskripsi adegan visual hasil imajinasi Aina")
+    p_post.add_argument("--caption", help="Teks caption status WhatsApp")
+    p_post.add_argument("--clothes", help="Pakaian / wardrobe Aina pada momen ini")
+    p_post.add_argument("--reflection", help="Refleksi rasa bosan / alasan memilih momen ini")
 
     # history
     p_hist = subparsers.add_parser("history", help="Lihat riwayat status yang pernah di-post")
@@ -407,16 +423,55 @@ def main():
         decision, reason = should_post_now(today_entries, slot)
         print("📊 Status Check Aina:")
         print(f"• Waktu Saat Ini : {now.strftime('%A, %d %B %Y %H:%M:%S')} WIB")
-        print(f"• Mode Hari     : {'Weekend (Libur/Alam)' if weekend else 'Weekday (Kerja/Virtual Assistant)'}")
+        print(f"• Mode Hari     : {'Weekend (Libur/Alam)' if weekend else 'Weekday (Remote Work/Virtual Assistant)'}")
         print(f"• Slot Waktu    : {slot.upper()}")
         print(f"• Status Hari Ini: {len(today_entries)} / 2 maksimal (Target: min 1)")
         print(f"• Keputusan     : {'✅ POSTING' if decision else '⏸️ SKIP'}")
         print(f"• Alasan        : {reason}")
 
+    elif args.command == "inspire":
+        slot = args.slot or get_time_slot(now)
+        weekend = is_weekend(now)
+        decision, reason = should_post_now(today_entries, slot)
+        recent_themes = [e.get("theme") for e in journal[-5:] if e.get("theme")]
+        avatar_ref = get_avatar_reference_path()
+
+        print("✨ [RUANG IMAJINASI MANDIRI AINA]")
+        print(f"• Waktu Sekarang   : {now.strftime('%A, %d %B %Y %H:%M:%S')} WIB")
+        print(f"• Slot Waktu       : {slot.upper()} ({'Weekend / Libur & Alam' if weekend else 'Weekday / Remote Work & WFH'})")
+        print(f"• Status Hari Ini  : {len(today_entries)}/2 status (Evaluasi: {'✅ Wajib/Boleh Posting' if decision else '⏸️ Istirahat'})")
+        print(f"• Catatan Keputusan: {reason}")
+        print(f"• 5 Tema Terakhir  : {recent_themes if recent_themes else '(Belum ada riwayat status)'}")
+        print(f"• Avatar Acuan     : {avatar_ref or 'Mengandalkan prompt anchors teks'}")
+        print("\n💡 Panduan untuk Aina (LLM Creative Imagination):")
+        print("1. Kamu memiliki kebebasan penuh membayangkan adegan apa pun yang kamu inginkan!")
+        print("2. Jadikan 5 tema terakhir sebagai acuan untuk mencari suasana baru (novelty) agar harimu tidak monoton.")
+        print("3. Tetap jaga jangkar visualmu (rambut bob dark espresso sebahu, jepit perak geometris di kiri, gaya Makoto Shinkai).")
+        print("4. Buat prompt visual yang kaya detail sensorik dan rangkai caption hangat 'Impact Maxxing'.")
+        print("\n🚀 Cara Memposting Hasil Imajinasi Sendiri:")
+        print("python3 scripts/persona_status.py post --custom \\")
+        print("  --theme \"<nama_tema>\" \\")
+        print("  --scene \"<deskripsi_adegan_dan_suasana>\" \\")
+        print("  --caption \"<caption_hangat_impact_maxxing>\" \\")
+        print("  --clothes \"<pakaian_pilihanmu>\" \\")
+        print("  --reflection \"<alasan_memilih_momen_ini>\"")
+
     elif args.command == "generate":
         slot = args.slot or get_time_slot(now)
         weekend = True if args.weekend else (False if args.weekday else is_weekend(now))
-        chosen = select_activity_with_novelty(journal, slot, weekend)
+
+        if getattr(args, "custom", False) and getattr(args, "scene", None) and getattr(args, "caption", None):
+            chosen = {
+                "theme": args.theme or f"imajinasi_{slot}",
+                "scene": args.scene,
+                "caption": args.caption,
+                "anchor_clothes": getattr(args, "clothes", None) or ("casual cozy knit cardigan, comfortable home attire" if not weekend else "light cotton pastel top, canvas tote bag"),
+                "boredom_reflection": getattr(args, "reflection", None) or f"Aina secara mandiri membayangkan adegan '{args.theme or 'bebas'}' untuk menghadirkan nuansa baru.",
+                "novelty_twist": "Imajinasi orisinal Aina",
+            }
+        else:
+            chosen = select_activity_with_novelty(journal, slot, weekend)
+
         prompt = build_makoto_shinkai_prompt(chosen, weekend)
         avatar_ref = get_avatar_reference_path()
         print(f"✨ Rekomendasi Status [{slot.upper()} - {'WEEKEND' if weekend else 'WEEKDAY'}]:")
@@ -442,7 +497,18 @@ def main():
             print("🛑 Melewati pembuatan status untuk slot waktu ini.")
             sys.exit(0)
 
-        chosen = select_activity_with_novelty(journal, slot, weekend)
+        if getattr(args, "custom", False) and getattr(args, "scene", None) and getattr(args, "caption", None):
+            chosen = {
+                "theme": args.theme or f"imajinasi_{slot}",
+                "scene": args.scene,
+                "caption": args.caption,
+                "anchor_clothes": getattr(args, "clothes", None) or ("casual cozy knit cardigan, comfortable home attire" if not weekend else "light cotton pastel top, canvas tote bag"),
+                "boredom_reflection": getattr(args, "reflection", None) or f"Aina secara mandiri membayangkan adegan '{args.theme or 'bebas'}' untuk menghadirkan nuansa baru.",
+                "novelty_twist": "Imajinasi orisinal Aina",
+            }
+        else:
+            chosen = select_activity_with_novelty(journal, slot, weekend)
+
         prompt = build_makoto_shinkai_prompt(chosen, weekend)
         avatar_ref = get_avatar_reference_path()
 
