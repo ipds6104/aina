@@ -116,6 +116,12 @@ pub struct DetailedActionAudit {
     pub transcript_path: Option<String>,
     pub transcript_steps: Vec<TranscriptStepDetail>,
     pub workspace_provenance: Vec<WorkspaceProvenance>,
+    #[serde(default)]
+    pub has_running_tasks: bool,
+    #[serde(default)]
+    pub running_tasks_count: usize,
+    #[serde(default)]
+    pub total_transcript_steps: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

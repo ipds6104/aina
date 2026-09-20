@@ -548,9 +548,10 @@ impl ProcessIncomingMessageUseCase {
                     .send_presence_with_session(&msg.chat_jid, PresenceState::Paused, msg.session_role)
                     .await;
 
+                let actual_duration = start_instant.elapsed().as_secs_f64();
                 info!(
                     "Successfully replied to {} in {:.2}s",
-                    msg.chat_jid, agent_res.duration_seconds
+                    msg.chat_jid, actual_duration
                 );
 
                 let tools_invoked = crate::core::domain::AuditEngine::extract_tools_for_conversation(
@@ -564,7 +565,7 @@ impl ProcessIncomingMessageUseCase {
                         Some(&agent_res.response_text),
                         None,
                         "success",
-                        Some(agent_res.duration_seconds),
+                        Some(actual_duration),
                         &tools_invoked,
                     ).await;
                 }

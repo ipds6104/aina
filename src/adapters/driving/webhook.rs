@@ -412,6 +412,14 @@ async fn api_audit_actions_handler(
 }
 
 #[derive(Debug, Deserialize)]
+struct AuditActionDetailQuery {
+    pub key: Option<String>,
+    pub api_key: Option<String>,
+    pub limit: Option<usize>,
+    pub all: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
 struct AuditAuthOnlyQuery {
     pub key: Option<String>,
     pub api_key: Option<String>,
@@ -421,7 +429,7 @@ async fn api_audit_action_detail_handler(
     State(state): State<Arc<WebhookServerState>>,
     Path(id): Path<String>,
     headers: HeaderMap,
-    Query(query): Query<AuditAuthOnlyQuery>,
+    Query(query): Query<AuditActionDetailQuery>,
 ) -> impl IntoResponse {
     let key_candidate = query.key.as_deref().or(query.api_key.as_deref());
     if !is_api_authorized(&headers, key_candidate, &state) {
@@ -443,10 +451,26 @@ async fn api_audit_action_detail_handler(
     match audit_res {
         Ok(Some(audit)) => {
             let brain_path = crate::core::domain::AuditEngine::default_brain_path();
-            let (transcript_steps, _) = if let Some(ref conv_id) = audit.conversation_id {
+            let (raw_steps, _) = if let Some(ref conv_id) = audit.conversation_id {
                 crate::core::domain::AuditEngine::load_transcript_for_conversation(&brain_path, conv_id)
             } else {
                 (Vec::new(), Vec::new())
+            };
+
+            let total_transcript_steps = raw_steps.len();
+            let running_tasks_count = raw_steps.iter().filter(|s| s.status.as_deref() == Some("RUNNING")).count();
+            let has_running_tasks = running_tasks_count > 0;
+
+            let transcript_steps = if query.all == Some(true) {
+                raw_steps
+            } else {
+                let limit = query.limit.unwrap_or(50).max(1);
+                if raw_steps.len() > limit {
+                    let start = raw_steps.len().saturating_sub(limit);
+                    raw_steps[start..].to_vec()
+                } else {
+                    raw_steps
+                }
             };
 
             let transcript_path = audit.conversation_id.as_deref().and_then(|conv_id| {
@@ -461,6 +485,9 @@ async fn api_audit_action_detail_handler(
                 transcript_path,
                 transcript_steps,
                 workspace_provenance,
+                has_running_tasks,
+                running_tasks_count,
+                total_transcript_steps,
             };
 
             (
