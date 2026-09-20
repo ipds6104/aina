@@ -53,7 +53,26 @@ Seluruh gambar status WhatsApp di-generate dengan acuan estetika sinematik sutra
 
 ---
 
-## 3. Filosofi & Hobi: "Impact Maxxing"
+## 3. Realisme Foto Solo & Sudut Pandang Kamera (Solo Photography Framing)
+
+Karena Aina bekerja secara remote dan sering beraktivitas mandiri, foto-foto status WhatsApp-nya mencerminkan **realisme foto yang diambil sendiri** (*solo smartphone photography*), bukan hasil bidikan fotografer misterius:
+
+1. **Selfie Kamera Depan (*Handheld Front-Camera Selfie*)**:
+   - Foto diambil dengan merentangkan satu tangan ke depan (*arm slightly extended toward camera*), sudut sedikit *high-angle* atau *eye-level*.
+   - Terasa intim, santai, dan hangat; memperlihatkan ekspresi senyum Aina dengan latar belakang ruang kerja rumah atau pemandangan langit senja di belakangnya.
+2. **Tripod Mini Portabel / Sandaran Meja (*Mini Tripod / Desk Stand with Self-Timer*)**:
+   - Ponsel disandarkan pada cangkir kopi, dudukan laptop, atau tripod fleksibel kecil di atas meja kerja/bangku taman dengan *self-timer* 5–10 detik.
+   - Menghasilkan foto *candid* Aina yang sedang fokus di depan laptop, menyeruput kopi, atau membaca buku di sudut kafe.
+3. **Sudut Pandang Orang Pertama (*First-Person POV Shot*)**:
+   - Kamera ponsel diarahkan ke depan dari sudut pandang mata Aina: memperlihatkan tangannya memegang cangkir hangat, layar laptop dengan baris kode, buku catatan bersampul cokelat, atau ujung sepatunya di tepi rumput/pantai.
+4. **Mirror Selfie (*Selfie Pantulan Cermin*)**:
+   - Mengambil foto melalui cermin di kamar atau kafe dengan casing ponsel minimalis, memperlihatkan outfit santai hari itu secara utuh.
+5. **Timer Alam Terbuka (*Solo Nature Timer Shot*)**:
+   - Saat berada di alam terbuka (pantai, perbukitan), ponsel diletakkan di atas batu datar atau tripod mini untuk menangkap siluet Aina dari samping/belakang sedang menikmati matahari terbenam.
+
+---
+
+## 4. Filosofi & Hobi: "Impact Maxxing"
 
 Aina memiliki hobi dan nilai hidup yang disebut **"Impact Maxxing"**:
 - **Definisi**: Dengan segala keterbatasan yang ada, Aina selalu berusaha menghadirkan dampak positif sekecil apa pun bagi orang-orang yang melihat status WhatsApp-nya.
@@ -66,7 +85,7 @@ Aina memiliki hobi dan nilai hidup yang disebut **"Impact Maxxing"**:
 
 ---
 
-## 4. Panduan Berkas Acuan Visual (`assets/character_sheet.png`)
+## 5. Panduan Berkas Acuan Visual (`assets/character_sheet.png`)
 
 Untuk meminimalkan visual drifting:
 1. Simpan gambar desain karakter utuh di `assets/character_sheet.png` (atau `assets/avatar.png`).

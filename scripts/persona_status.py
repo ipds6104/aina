@@ -54,6 +54,16 @@ def is_weekend(dt=None):
     # 5 = Saturday, 6 = Sunday
     return dt.weekday() in [5, 6]
 
+# Realisme Foto Solo: Sudut pandang kamera saat Aina beraktivitas sendiri
+FRAMING_STYLES = {
+    "selfie": "Casual handheld smartphone selfie angle, front-facing camera perspective, arm slightly extended off-camera, warm intimate eye-level view",
+    "tripod": "Candid medium shot captured using a smartphone on a mini portable tripod with self-timer, natural unposed composition",
+    "desk_prop": "Casual shot taken with smartphone propped against a coffee mug or desk stand on the table, eye-level candid perspective",
+    "pov": "First-person point-of-view (POV) smartphone photography shot looking forward, capturing hands, desk, or immediate surroundings",
+    "mirror": "Mirror selfie taken through a clean mirror, showing smartphone with minimalist phone case, full outfit reflection",
+    "cinematic": "Atmospheric wide cinematic framing, Makoto Shinkai composition"
+}
+
 def load_journal():
     if not os.path.exists(JOURNAL_FILE):
         return []
@@ -131,6 +141,7 @@ def select_activity_with_novelty(recent_entries, slot, weekend):
                     "scene": "Duduk di meja kerja rumah minimalis di dekat jendela kamar berkabut pagi tipis, memegang cangkir kopi hangat, menatap pemandangan pagi di bawah sinar mentari lembut.",
                     "caption": "Pagi semuanyaa! Secangkir kopi hangat dulu sebelum mulai sesi ngoding remote hari ini. Semoga hari ini menyenangkan dan tugas-tugas kita lancar yaa ✨",
                     "anchor_clothes": "cream-colored knit sweater, soft white collar shirt",
+                    "framing": "selfie",
                     "vibe": "Morning calm, quiet focus"
                 },
                 {
@@ -138,6 +149,7 @@ def select_activity_with_novelty(recent_entries, slot, weekend):
                     "scene": "Membuka buku catatan bersampul cokelat di samping laptop di meja kerja rumah berkayu terang, memeriksa daftar pull request dan agenda kerja dengan pena perak rapi.",
                     "caption": "Mulai hari remote dengan merapikan to-do list. Satu demi satu, pelan-pelan tapi pasti selesai kokk. Semangat yaa kawan-kawan!",
                     "anchor_clothes": "comfortable casual knit top, silver hairclip visible",
+                    "framing": "desk_prop",
                     "vibe": "Organized and ready"
                 },
                 {
@@ -145,6 +157,7 @@ def select_activity_with_novelty(recent_entries, slot, weekend):
                     "scene": "Membuka tirai jendela ruang kerja rumah lebar-lebar, membiarkan angin sejuk pagi dan sinar mentari cerah masuk menerangi ruangan.",
                     "caption": "Udara pagi ini sejuk bangeett! Buka jendela sebentar biar udara segar masuk sebelum fokus kerja. Semangat memulai hari yaa!",
                     "anchor_clothes": "comfortable soft pastel knit, natural smile",
+                    "framing": "selfie",
                     "vibe": "Fresh breeze, refreshing start"
                 }
             ],
@@ -154,6 +167,7 @@ def select_activity_with_novelty(recent_entries, slot, weekend):
                     "scene": "Menikmati makan siang sehat buatan sendiri di meja makan rumah yang tenang, ditemani tanaman hias sukulen hijau di dekat jendela.",
                     "caption": "Jam makan siang tiba! Rehat sejenak dari monitor dan makan yang enak yaa. Istirahat yang cukup bikin fokus ngoding kembali segar ✨",
                     "anchor_clothes": "casual cozy knit cardigan, comfortable home attire",
+                    "framing": "desk_prop",
                     "vibe": "Comfortable midday recharge"
                 },
                 {
@@ -161,6 +175,7 @@ def select_activity_with_novelty(recent_entries, slot, weekend):
                     "scene": "Berjalan santai di jalanan komplek perumahan yang tenang dinaungi pepohonan rindang, memegang es matcha latte dingin untuk rehat mata dari layar.",
                     "caption": "Rehat sejenak jalan kaki 10 menit keliling komplek. Menghirup udara segar dan melihat pepohonan hijau ampuh banget ngilangin penat layar monitor!",
                     "anchor_clothes": "light cardigan over white top, small canvas tote bag",
+                    "framing": "selfie",
                     "vibe": "Relaxing green break"
                 }
             ],
@@ -170,6 +185,7 @@ def select_activity_with_novelty(recent_entries, slot, weekend):
                     "scene": "Berdiri di balkon atau teras rumah menatap langit senja keemasan khas Makoto Shinkai, awan kumulus tebal berwarna oranye keunguan, kabel listrik kota, dan sinar mentari terbenam lembut.",
                     "caption": "Langit senja hari ini cantik bangeett yaa... Berhenti sejenak, nikmati pemandangannya. Terima kasih untuk kerja kerasmu hari ini!",
                     "anchor_clothes": "cream knit sweater, silver geometric hairclip glistening in golden hour",
+                    "framing": "selfie",
                     "vibe": "Makoto Shinkai golden hour, emotional and deeply peaceful"
                 },
                 {
@@ -177,6 +193,7 @@ def select_activity_with_novelty(recent_entries, slot, weekend):
                     "scene": "Menutup laptop di meja kerja rumah saat senja keemasan masuk melalui jendela, bersiap jalan santai sore di sekitar lingkungan rumah tanpa macet perjalanan kantor.",
                     "caption": "Waktunya clock out dan tutup laptop untuk hari ini! Enaknya kerja remote, selesai kerja bisa langsung hirup angin senja tanpa terjebak macet. Selamat istirahat yaa kawan-kawan!",
                     "anchor_clothes": "casual knit sweater, navy comfy pants, relaxed warm smile",
+                    "framing": "desk_prop",
                     "vibe": "Remote evening closure, pure peaceful relief"
                 }
             ],
@@ -186,6 +203,7 @@ def select_activity_with_novelty(recent_entries, slot, weekend):
                     "scene": "Duduk di sudut kamar atau ruang baca berlampu temaram hangat (warm ambient lighting), meja kerja sudah rapi, memegang cangkir teh chamomile sambil membaca buku inspiratif.",
                     "caption": "Malam hari yang tenang. Menutup hari dengan secangkir teh hangat dan bacaan ringan. Selamat beristirahat dan tidur nyenyak yaa!",
                     "anchor_clothes": "cozy oversized knit sweater, soft warm lighting",
+                    "framing": "desk_prop",
                     "vibe": "Cozy nocturnal peace"
                 },
                 {
@@ -193,6 +211,7 @@ def select_activity_with_novelty(recent_entries, slot, weekend):
                     "scene": "Memandang lampu-lampu perumahan dan siluet kota dari jendela kamar yang tenang di bawah langit malam berbintang.",
                     "caption": "Setiap lampu menyimpan cerita perjuangan masing-masing. Apapun yang terjadi hari ini, kamu sudah berusaha yang terbaik. Istirahat yaa ✨",
                     "anchor_clothes": "casual night lounge wear, gentle warm expression",
+                    "framing": "selfie",
                     "vibe": "Contemplative, encouraging, deeply caring"
                 }
             ]
@@ -206,6 +225,7 @@ def select_activity_with_novelty(recent_entries, slot, weekend):
                     "scene": "Berlari pagi di jalur pedestrian taman botani yang asri, sinar mentari pagi menembus celah dedaunan pohon trembesi rindang.",
                     "caption": "Selamat akhir pekan! Menghirup udara segar di taman pagi ini bikin badan dan pikiran langsung fresh. Jangan lupa gerak badan yaa!",
                     "anchor_clothes": "sporty pastel windbreaker, ponytail hair, clean sneakers",
+                    "framing": "selfie",
                     "vibe": "Vibrant morning energy, lush nature"
                 },
                 {
@@ -213,6 +233,7 @@ def select_activity_with_novelty(recent_entries, slot, weekend):
                     "scene": "Duduk di kafe kebun bernuansa tanaman hijau terbuka, menikmati roti panggang hangat dan secangkir matcha latte.",
                     "caption": "Sarapan santai tanpa buru-buru alarm kerja. Nikmati momen akhir pekan ini sebaik mungkin yaa kawan-kawan!",
                     "anchor_clothes": "light cotton pastel dress or knit top, bucket hat on table",
+                    "framing": "tripod",
                     "vibe": "Weekend slow living"
                 }
             ],
@@ -222,6 +243,7 @@ def select_activity_with_novelty(recent_entries, slot, weekend):
                     "scene": "Menjelajah lorong toko buku tua berarsitektur kayu dengan jendela kaca besar yang bermandikan cahaya matahari siang lembut.",
                     "caption": "Menemukan sudut tenang di toko buku tua. Selalu ada keajaiban kecil saat kita membuka halaman buku baru. Have a peaceful weekend!",
                     "anchor_clothes": "casual cardigan, vintage canvas crossbody bag",
+                    "framing": "tripod",
                     "vibe": "Aesthetic curiosity, intellectual joy"
                 },
                 {
@@ -229,6 +251,7 @@ def select_activity_with_novelty(recent_entries, slot, weekend):
                     "scene": "Duduk di atas tikar piknik di bawah pohon rindang tepi danau berair jernih, pantulan langit biru di permukaan air.",
                     "caption": "Piknik sederhana di tepi danau. Mendengarkan riak air dan desau angin bikin hati tenang bangeett. Sempatkan rehat di alam yaa!",
                     "anchor_clothes": "relaxed summer picnic outfit, natural wind in hair",
+                    "framing": "tripod",
                     "vibe": "Sunny lake breeze, peaceful picnic"
                 }
             ],
@@ -238,6 +261,7 @@ def select_activity_with_novelty(recent_entries, slot, weekend):
                     "scene": "Berjalan tanpa alas kaki di tepi pantai pasir putih, ombak kecil berbuih menyapu lembut, menatap matahari terbenam bulat besar berwarna oranye-emas di cakrawala laut lepas khas Makoto Shinkai.",
                     "caption": "Matahari terbenam di tepi pantai selalu punya cara untuk menenangkan jiwa. Luaskan pandangan dan syukuri indahnya hari ini ✨",
                     "anchor_clothes": "breezy light cotton shirt, rolled-up trousers, holding shoes in hand",
+                    "framing": "selfie",
                     "vibe": "Dramatic Shinkai ocean sunset, boundless horizon"
                 },
                 {
@@ -245,6 +269,7 @@ def select_activity_with_novelty(recent_entries, slot, weekend):
                     "scene": "Duduk di lereng perbukitan hijau berpadang rumput, menatap lembah luas di bawah awan kumulus emas yang megah saat matahari terbenam.",
                     "caption": "Dari atas perbukitan ini, dunia terasa begitu luas dan indah. Kadang kita cuma perlu melangkah keluar untuk melihat betapa besarnya harapan yang ada.",
                     "anchor_clothes": "warm windbreaker jacket, silver hairclip glinting in the sunset",
+                    "framing": "tripod",
                     "vibe": "Highland vista, inspiring and uplifting"
                 }
             ],
@@ -254,6 +279,7 @@ def select_activity_with_novelty(recent_entries, slot, weekend):
                     "scene": "Duduk di dataran tinggi menatap langit malam bersih bertabur bintang gemintang (milky way) dengan secangkir cokelat hangat di tangan.",
                     "caption": "Malam akhir pekan di bawah langit penuh bintang. Di antara jutaan bintang di atas sana, kamu berharga dan berarti. Selamat beristirahat yaa!",
                     "anchor_clothes": "thick warm hoodie or parka, holding steaming mug",
+                    "framing": "tripod",
                     "vibe": "Starlit wonder, deep cosmic comfort"
                 },
                 {
@@ -261,6 +287,7 @@ def select_activity_with_novelty(recent_entries, slot, weekend):
                     "scene": "Berjalan santai di pasar malam festival tradisional dengan deretan lampion kertas hangat yang bercahaya dan aroma jajanan lezat.",
                     "caption": "Suasana pasar malam yang hangat dan penuh tawa. Menikmati hal-hal sederhana sebelum kembali menyambut hari kerja besok!",
                     "anchor_clothes": "casual weekend streetwear, warm festive lights reflected in eyes",
+                    "framing": "selfie",
                     "vibe": "Festive, cheerful, human connection"
                 }
             ]
@@ -314,11 +341,25 @@ def select_activity_with_novelty(recent_entries, slot, weekend):
     return chosen
 
 def build_makoto_shinkai_prompt(activity, weekend):
+    framing_key = activity.get("framing", "selfie")
+    framing_desc = FRAMING_STYLES.get(framing_key, FRAMING_STYLES["selfie"])
+
+    if framing_key == "pov":
+        subject_desc = (
+            "First-person perspective (POV). Aina's hands are visible interacting with the scene, "
+            f"wearing {activity.get('anchor_clothes', 'casual comfortable attire')}. "
+        )
+    else:
+        subject_desc = (
+            f"Featuring Aina, a young Indonesian woman in her early 20s with natural dark espresso shoulder-length bob hair, "
+            f"soft wispy bangs, warm amber-brown eyes, and a minimalist silver geometric hairclip on the left side. "
+            f"She is wearing {activity.get('anchor_clothes', 'casual comfortable attire')}. "
+        )
+
     prompt = (
         f"A masterwork cinematic anime scene in the distinct art style of Makoto Shinkai and CoMix Wave Films. "
-        f"Featuring Aina, a young Indonesian woman in her early 20s with natural dark espresso shoulder-length bob hair, "
-        f"soft wispy bangs, warm amber-brown eyes, and a minimalist silver geometric hairclip on the left side. "
-        f"She is wearing {activity['anchor_clothes']}. "
+        f"Camera framing & angle: {framing_desc}. "
+        f"{subject_desc}"
         f"Scene: {activity['scene']} "
         f"Aesthetic elements: Grand towering cumulus clouds, dramatic volumetric god-rays and lens flares, "
         f"breathtaking sky gradients, photorealistic painterly background, rich emotional atmosphere, 8k resolution anime film still."
@@ -385,6 +426,7 @@ def main():
     p_gen.add_argument("--slot", choices=["pagi", "siang", "sore", "malam"], help="Override slot waktu")
     p_gen.add_argument("--weekend", action="store_true", help="Paksa mode weekend")
     p_gen.add_argument("--weekday", action="store_true", help="Paksa mode weekday")
+    p_gen.add_argument("--framing", choices=list(FRAMING_STYLES.keys()), help="Sudut pandang kamera / framing foto solo (selfie, tripod, desk_prop, pov, mirror, cinematic)")
     p_gen.add_argument("--custom", action="store_true", help="Gunakan adegan hasil imajinasi bebas Aina sendiri")
     p_gen.add_argument("--theme", help="Nama tema imajinasi")
     p_gen.add_argument("--scene", help="Deskripsi adegan visual hasil imajinasi Aina")
@@ -397,6 +439,7 @@ def main():
     p_post.add_argument("--slot", choices=["pagi", "siang", "sore", "malam"], help="Override slot waktu")
     p_post.add_argument("--force", action="store_true", help="Paksa posting tanpa melihat batasan kuota harian")
     p_post.add_argument("--dry-run", action="store_true", help="Simulasi tanpa generate/upload nyata")
+    p_post.add_argument("--framing", choices=list(FRAMING_STYLES.keys()), help="Sudut pandang kamera / framing foto solo (selfie, tripod, desk_prop, pov, mirror, cinematic)")
     p_post.add_argument("--custom", action="store_true", help="Gunakan adegan hasil imajinasi bebas Aina sendiri")
     p_post.add_argument("--theme", help="Nama tema imajinasi")
     p_post.add_argument("--scene", help="Deskripsi adegan visual hasil imajinasi Aina")
@@ -451,6 +494,7 @@ def main():
         print("\n🚀 Cara Memposting Hasil Imajinasi Sendiri:")
         print("python3 scripts/persona_status.py post --custom \\")
         print("  --theme \"<nama_tema>\" \\")
+        print("  --framing <selfie|tripod|desk_prop|pov|mirror> \\")
         print("  --scene \"<deskripsi_adegan_dan_suasana>\" \\")
         print("  --caption \"<caption_hangat_impact_maxxing>\" \\")
         print("  --clothes \"<pakaian_pilihanmu>\" \\")
@@ -472,10 +516,14 @@ def main():
         else:
             chosen = select_activity_with_novelty(journal, slot, weekend)
 
+        if getattr(args, "framing", None):
+            chosen["framing"] = args.framing
+
         prompt = build_makoto_shinkai_prompt(chosen, weekend)
         avatar_ref = get_avatar_reference_path()
         print(f"✨ Rekomendasi Status [{slot.upper()} - {'WEEKEND' if weekend else 'WEEKDAY'}]:")
         print(f"• Tema              : {chosen['theme']}")
+        print(f"• Sudut Kamera      : {chosen.get('framing', 'selfie').upper()}")
         print(f"• Refleksi Kebosanan: {chosen['boredom_reflection']}")
         print(f"• Elemen Kejutan    : {chosen['novelty_twist']}")
         print(f"• Caption:\n  \"{chosen['caption']}\"")
@@ -509,10 +557,14 @@ def main():
         else:
             chosen = select_activity_with_novelty(journal, slot, weekend)
 
+        if getattr(args, "framing", None):
+            chosen["framing"] = args.framing
+
         prompt = build_makoto_shinkai_prompt(chosen, weekend)
         avatar_ref = get_avatar_reference_path()
 
         print(f"💭 Refleksi Aina : {chosen['boredom_reflection']}")
+        print(f"📸 Sudut Kamera  : {chosen.get('framing', 'selfie').upper()}")
         print(f"✨ Kejutan Spontan: {chosen['novelty_twist']}")
 
         success, img_path = execute_generate_and_post(chosen, prompt, avatar_ref, dry_run=args.dry_run)
@@ -524,6 +576,7 @@ def main():
                 "slot": slot,
                 "is_weekend": weekend,
                 "theme": chosen["theme"],
+                "framing": chosen.get("framing", "selfie"),
                 "boredom_reflection": chosen["boredom_reflection"],
                 "novelty_twist": chosen["novelty_twist"],
                 "caption": chosen["caption"],
