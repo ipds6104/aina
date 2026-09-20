@@ -13,7 +13,7 @@ pub struct ScheduledTickUseCase {
     persona_engine: Option<Arc<PersonaEngine>>,
     workspace_dir: Option<PathBuf>,
     timezone_offset_hours: i32,
-    last_self_triggered: Arc<RwLock<HashMap<String, i64>>>,
+    last_self_triggered: Arc<RwLock<HashMap<String, (usize, i64)>>>,
 }
 
 impl ScheduledTickUseCase {
@@ -299,16 +299,6 @@ impl ScheduledTickUseCase {
                 continue;
             }
 
-            // Check if this conversation was already self-triggered recently (cooldown: 180s)
-            {
-                let triggered = self.last_self_triggered.read().await;
-                if let Some(&last_time) = triggered.get(conv_id) {
-                    if now_epoch - last_time < 180 {
-                        continue;
-                    }
-                }
-            }
-
             // Load transcript for this conversation
             let (steps, _) = crate::core::domain::AuditEngine::load_transcript_for_conversation(&brain_path, conv_id);
             if steps.is_empty() {
@@ -321,6 +311,19 @@ impl ScheduledTickUseCase {
                 Some(idx) => idx,
                 None => continue,
             };
+
+            // Dynamic Pipeline Cooldown:
+            // If it's a NEW background task in a multi-stage pipeline (running_idx > last_idx),
+            // allow wake-up after only 45s. If it's the SAME task, enforce 180s cooldown.
+            {
+                let triggered = self.last_self_triggered.read().await;
+                if let Some(&(last_idx, last_time)) = triggered.get(conv_id) {
+                    let required_cooldown = if running_idx > last_idx { 45 } else { 180 };
+                    if now_epoch - last_time < required_cooldown {
+                        continue;
+                    }
+                }
+            }
 
             // Check if there has been any user message OR subsequent resolution after the running step
             let steps_after = &steps[running_idx + 1..];
@@ -349,22 +352,25 @@ impl ScheduledTickUseCase {
                 conv_id, audit.id, audit.chat_jid
             );
 
-            // Record trigger timestamp to prevent duplicate bursts
+            // Record trigger timestamp and task index to support multi-stage pipelines
             {
                 let mut triggered = self.last_self_triggered.write().await;
-                triggered.insert(conv_id.to_string(), now_epoch);
+                triggered.insert(conv_id.to_string(), (running_idx, now_epoch));
             }
 
             let prompt = format!(
-                "🔔 [SISTEM AINA - AUTO WAKE UP / TASK RESOLUTION]\n\
-                Konteks: Pada giliran sebelumnya, sebuah perintah latar belakang (background task) telah diluncurkan untuk memproses permintaan pengguna: \"{}\".\n\n\
-                Instruksi untuk Aina:\n\
-                1. Periksa status dan output dari tugas latar belakang yang telah selesai dijalankan.\n\
-                2. Jika tugas telah selesai (berhasil maupun gagal):\n\
-                   - Rangkum hasilnya secara jelas, terstruktur, dan ramah untuk pengguna.\n\
-                   - Jika ada berkas, tautan Google Drive/Sheets, atau hasil komparasi data, sertakan dalam pesan.\n\
-                   - Sampaikan kesimpulan akhir ini secara langsung (pesan ini akan otomatis dikirim ke WhatsApp pengguna).\n\
-                3. Jika tugas masih berjalan di server, berikan pembaruan progres singkat (misal: 'Sedang tahap finalisasi...').",
+                "🔔 [SISTEM AINA - AUTO WAKE UP / PIPELINE RESUMPTION]\n\
+                Permintaan Asli Pengguna: \"{}\"\n\n\
+                Konteks: Tugas latar belakang sebelumnya telah selesai dieksekusi di server.\n\n\
+                Instruksi Evaluasi Pipeline & Tindak Lanjut:\n\
+                1. Periksa output dan status tugas yang baru saja selesai.\n\
+                2. Evaluasi Rangkaian Permintaan Pengguna: Apakah seluruh permintaan pengguna di atas sudah tuntas 100% (misal: generate data, crosscheck, komparasi, dan upload)?\n\
+                3. Jika masih ada tahapan lanjutan yang HARUS dijalankan (misal: perlu upload ke Google Drive atau perlu komparasi data):\n\
+                   - Lanjutkan eksekusi tahapan berikutnya sekarang (jalankan perintah/tool yang diperlukan).\n\
+                   - Berikan kabar progres singkat ke pengguna jika perintah berikutnya membutuhkan waktu.\n\
+                4. Jika seluruh rangkaian pekerjaan sudah SELESAI 100%:\n\
+                   - Susun laporan rekapitulasi final yang lengkap, terstruktur, ramah, dan siap dibaca pengguna di WhatsApp (sertakan link Drive/Sheets jika ada).\n\
+                5. Jika tugas ternyata masih berjalan di server, berikan kabar progres singkat.",
                 audit.input_text
             );
 
