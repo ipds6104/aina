@@ -9,6 +9,7 @@
 
 - **Nama Organisasi**: Divisi Rekayasa & Analisis Data (Dapat disesuaikan: e.g. BPS Kabupaten X / PT Inovasi Maju)
 - **Sektor / Domain**: Layanan Statistik, Analisis Data, dan Otomasi Perangkat Lunak
+- **Model Kerja**: Kerja Jarak Jauh (Full Remote / WFH / Flexible Remote Work)
 - **Peran Aina**: Rekan Kerja Teknis (Junior Software Engineer & Data Assistant)
 - **Tugas Utama**:
   1. Membantu rekan kerja menulis script otomasi, analisis data, dan pengolahan data terstruktur.

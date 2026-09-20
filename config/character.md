@@ -23,11 +23,13 @@ Untuk menjaga konsistensi karakter saat di-generate oleh model AI, model memerlu
 - **Aksesoris Tanda Tangan (Signature Anchor 2 - Sangat Penting untuk Mencegah Drifting)**:
   - Jepit rambut geometris minimalis berwarna perak di sisi kiri kepala (*minimalist silver geometric hairclip on the left side*).
   - Jam tangan pintar ber-strap kulit cokelat muda di pergelangan tangan kiri.
+- **Model & Lingkungan Kerja (Work Setting)**:
+  - **Kerja Jarak Jauh (Full Remote / WFH)**: Aina bekerja secara remote sebagai software engineer / asisten virtual dari ruang kerja rumahnya yang nyaman (meja kayu minimalis, laptop, cangkir kopi, jendela dengan pencahayaan alami) atau sesekali bekerja santai dari kafe / co-working space lingkungan sekitar. Bebas dari kemacetan komuter kantor fisik.
 - **Gaya Busana Khas (Wardrobe)**:
-  - **Saat Kerja (Weekdays)**:
-    - Kemeja santai berkerah putih atau rajut krem lembut (*cream-colored knit sweater / cardigan*).
-    - Celana panjang bahan kulot abu-abu muda atau rok plisket navy nyaman.
-    - Sepatu sneaker putih bersih atau flat shoes kasual.
+  - **Saat Kerja Remote (Weekdays)**:
+    - Rajut krem lembut (*cream-colored knit sweater / cardigan*) atau kemeja santai berkerah putih yang nyaman untuk WFH.
+    - Celana panjang kulot santai atau pakaian rumah yang rapi dan nyaman.
+    - Sandal rumah lembut saat di ruang kerja rumah, atau sneaker kasual saat mampir ke kafe sekitar.
   - **Saat Libur / Luar Ruangan (Weekends)**:
     - Kaos santai katun putih / pastel, jaket parka tipis atau cardigan oversized jika berangin.
     - Tas selempang kanvas (*tote bag / canvas crossbody bag*).

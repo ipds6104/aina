@@ -123,75 +123,75 @@ def should_post_now(today_entries, slot, force=False):
 def select_activity_with_novelty(recent_entries, slot, weekend):
     # Kumpulan tema dasar terstruktur
     if not weekend:
-        # Weekday: Virtual Assistant & Rekan Kerja
+        # Weekday: Remote Software Engineer & Virtual Assistant (Work From Home)
         activities = {
             "pagi": [
                 {
                     "theme": "kopi_jendela",
-                    "scene": "Duduk di dekat jendela ruang kerja berkabut pagi tipis, memegang cangkir kopi hangat, menatap gedung kota di bawah sinar mentari lembut.",
-                    "caption": "Pagi semuanyaa! Secangkir kopi hangat dulu sebelum mulai beraktivitas. Semoga hari ini menyenangkan dan tugas-tugas kita lancar yaa ✨",
-                    "anchor_clothes": "cream-colored knit sweater, white collar shirt",
+                    "scene": "Duduk di meja kerja rumah minimalis di dekat jendela kamar berkabut pagi tipis, memegang cangkir kopi hangat, menatap pemandangan pagi di bawah sinar mentari lembut.",
+                    "caption": "Pagi semuanyaa! Secangkir kopi hangat dulu sebelum mulai sesi ngoding remote hari ini. Semoga hari ini menyenangkan dan tugas-tugas kita lancar yaa ✨",
+                    "anchor_clothes": "cream-colored knit sweater, soft white collar shirt",
                     "vibe": "Morning calm, quiet focus"
                 },
                 {
                     "theme": "rencana_harian",
-                    "scene": "Membuka buku catatan bersampul cokelat di meja kerja minimalis berkayu terang, memeriksa daftar agenda kerja dengan pena perak rapi.",
-                    "caption": "Mulai hari dengan mencatat hal-hal penting hari ini. Satu demi satu, pelan-pelan tapi pasti selesai kokk. Semangat yaa kawan-kawan!",
-                    "anchor_clothes": "casual white collared shirt, silver hairclip visible",
+                    "scene": "Membuka buku catatan bersampul cokelat di samping laptop di meja kerja rumah berkayu terang, memeriksa daftar pull request dan agenda kerja dengan pena perak rapi.",
+                    "caption": "Mulai hari remote dengan merapikan to-do list. Satu demi satu, pelan-pelan tapi pasti selesai kokk. Semangat yaa kawan-kawan!",
+                    "anchor_clothes": "comfortable casual knit top, silver hairclip visible",
                     "vibe": "Organized and ready"
                 },
                 {
                     "theme": "angin_pagi",
-                    "scene": "Membuka tirai jendela kamar lebar-lebar, membiarkan angin sejuk pagi dan sinar mentari cerah masuk menerangi ruangan.",
-                    "caption": "Udara pagi ini sejuk bangeett! Buka jendela sebentar biar udara segar masuk. Semangat memulai hari yaa!",
+                    "scene": "Membuka tirai jendela ruang kerja rumah lebar-lebar, membiarkan angin sejuk pagi dan sinar mentari cerah masuk menerangi ruangan.",
+                    "caption": "Udara pagi ini sejuk bangeett! Buka jendela sebentar biar udara segar masuk sebelum fokus kerja. Semangat memulai hari yaa!",
                     "anchor_clothes": "comfortable soft pastel knit, natural smile",
                     "vibe": "Fresh breeze, refreshing start"
                 }
             ],
             "siang": [
                 {
-                    "theme": "makan_siang_santai",
-                    "scene": "Menikmati bekal makan siang sehat di pantry kantor yang tenang dan dinaungi tanaman hias hijau di sudut ruangan.",
-                    "caption": "Jam makan siang tiba! Jangan lupa rehat sejenak dan makan yang enak yaa. Istirahat yang cukup bikin fokus kita kembali segar ✨",
-                    "anchor_clothes": "casual office wear, cream cardigan",
+                    "theme": "makan_siang_rumah",
+                    "scene": "Menikmati makan siang sehat buatan sendiri di meja makan rumah yang tenang, ditemani tanaman hias sukulen hijau di dekat jendela.",
+                    "caption": "Jam makan siang tiba! Rehat sejenak dari monitor dan makan yang enak yaa. Istirahat yang cukup bikin fokus ngoding kembali segar ✨",
+                    "anchor_clothes": "casual cozy knit cardigan, comfortable home attire",
                     "vibe": "Comfortable midday recharge"
                 },
                 {
-                    "theme": "jalan_taman_gedung",
-                    "scene": "Berjalan santai di taman kecil di antara gedung-gedung perkantoran, memegang minuman dingin di bawah naungan pohon rindang.",
-                    "caption": "Rehat sejenak jalan kaki 10 menit di luar. Menghirup udara segar dan melihat pepohonan hijau ampuh banget ngilangin penat layar monitor.",
-                    "anchor_clothes": "light cardigan over white top, tote bag",
+                    "theme": "jalan_santai_komplek",
+                    "scene": "Berjalan santai di jalanan komplek perumahan yang tenang dinaungi pepohonan rindang, memegang es matcha latte dingin untuk rehat mata dari layar.",
+                    "caption": "Rehat sejenak jalan kaki 10 menit keliling komplek. Menghirup udara segar dan melihat pepohonan hijau ampuh banget ngilangin penat layar monitor!",
+                    "anchor_clothes": "light cardigan over white top, small canvas tote bag",
                     "vibe": "Relaxing green break"
                 }
             ],
             "sore": [
                 {
                     "theme": "senja_shinkai_balkon",
-                    "scene": "Berdiri di balkon lantai atas menatap langit senja keemasan khas Makoto Shinkai, awan kumulus tebal berwarna oranye keunguan, kabel listrik kota, dan sinar mentari terbenam lembut.",
+                    "scene": "Berdiri di balkon atau teras rumah menatap langit senja keemasan khas Makoto Shinkai, awan kumulus tebal berwarna oranye keunguan, kabel listrik kota, dan sinar mentari terbenam lembut.",
                     "caption": "Langit senja hari ini cantik bangeett yaa... Berhenti sejenak, nikmati pemandangannya. Terima kasih untuk kerja kerasmu hari ini!",
                     "anchor_clothes": "cream knit sweater, silver geometric hairclip glistening in golden hour",
                     "vibe": "Makoto Shinkai golden hour, emotional and deeply peaceful"
                 },
                 {
-                    "theme": "pulang_halte_kota",
-                    "scene": "Berdiri di dekat halte penyeberangan jalan kota saat senja keemasan, lampu jalan mulai menyala satu per satu, suasana hangat perjalanan pulang.",
-                    "caption": "Waktunya menyudahi pekerjaan hari ini. Selamat beristirahat dan hati-hati di jalan pulang yaa kawan-kawan!",
-                    "anchor_clothes": "casual autumn coat, navy pleated skirt, canvas bag",
-                    "vibe": "City sunset, gentle closure"
+                    "theme": "tutup_laptop_senja",
+                    "scene": "Menutup laptop di meja kerja rumah saat senja keemasan masuk melalui jendela, bersiap jalan santai sore di sekitar lingkungan rumah tanpa macet perjalanan kantor.",
+                    "caption": "Waktunya clock out dan tutup laptop untuk hari ini! Enaknya kerja remote, selesai kerja bisa langsung hirup angin senja tanpa terjebak macet. Selamat istirahat yaa kawan-kawan!",
+                    "anchor_clothes": "casual knit sweater, navy comfy pants, relaxed warm smile",
+                    "vibe": "Remote evening closure, pure peaceful relief"
                 }
             ],
             "malam": [
                 {
                     "theme": "teh_hangat_buku",
-                    "scene": "Duduk di sudut ruang belajar berlampu temaram hangat (warm ambient lighting), memegang cangkir teh chamomile sambil membaca buku inspiratif.",
+                    "scene": "Duduk di sudut kamar atau ruang baca berlampu temaram hangat (warm ambient lighting), meja kerja sudah rapi, memegang cangkir teh chamomile sambil membaca buku inspiratif.",
                     "caption": "Malam hari yang tenang. Menutup hari dengan secangkir teh hangat dan bacaan ringan. Selamat beristirahat dan tidur nyenyak yaa!",
                     "anchor_clothes": "cozy oversized knit sweater, soft warm lighting",
                     "vibe": "Cozy nocturnal peace"
                 },
                 {
                     "theme": "lampu_kota_malam",
-                    "scene": "Memandang lampu-lampu kota yang berkilauan di malam hari seperti hamparan bintang dari jendela kamar.",
-                    "caption": "Setiap lampu kota menyimpan cerita perjuangan masing-masing. Apapun yang terjadi hari ini, kamu sudah berusaha yang terbaik. Istirahat yaa ✨",
+                    "scene": "Memandang lampu-lampu perumahan dan siluet kota dari jendela kamar yang tenang di bawah langit malam berbintang.",
+                    "caption": "Setiap lampu menyimpan cerita perjuangan masing-masing. Apapun yang terjadi hari ini, kamu sudah berusaha yang terbaik. Istirahat yaa ✨",
                     "anchor_clothes": "casual night lounge wear, gentle warm expression",
                     "vibe": "Contemplative, encouraging, deeply caring"
                 }

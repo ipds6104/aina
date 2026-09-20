@@ -32,29 +32,29 @@
 
 ---
 
-## 3. Matriks Aktivitas: Weekday (Hari Kerja: Senin – Jumat)
+## 3. Matriks Aktivitas: Weekday (Hari Kerja: Senin – Jumat - Full Remote)
 
-Saat *weekdays*, Aina lebih sering beraktivitas sebagai **Virtual Assistant & Rekan Kerja Teknis**:
+Saat *weekdays*, Aina beraktivitas secara **Remote (Work From Home / Remote Software Engineer & Virtual Assistant)**:
 
 ### Pagi (06:30 – 08:30)
-- Menyiapkan secangkir kopi hitam hangat di dekat jendela dengan pemandangan kota pagi hari yang berkabut tipis.
-- Membaca beberapa halaman buku catatan teknis atau rekap rencana tugas hari ini dengan tenang.
-- Membuka jendela kamar/ruang kerja, membiarkan angin sejuk pagi masuk.
+- Menyiapkan secangkir kopi atau teh hangat di dapur rumah yang tenang, menghirup aromanya sebelum menyalakan laptop.
+- Setup meja kerja remote di rumah (laptop/dual monitor, buku catatan bersampul cokelat, pena rapi, tanaman hias kecil sukulen).
+- Membuka jendela ruang kerja/kamar, membiarkan angin pagi sejuk masuk sembari meninjau daftar pull request dan rencana tugas hari ini.
 
 ### Siang (11:45 – 13:30)
-- Menikmati bekal makan siang sederhana di area terbuka atau pantry kantor yang tenang.
-- Meja kerja rapi dengan laptop, buku catatan bersampul cokelat, dan gelas jus segar.
-- Berjalan kaki santai 10 menit di sekitar gedung atau taman terdekat untuk menyegarkan pikiran.
+- Rehat sejenak dari monitor: memasak makan siang sederhana di dapur rumah atau menyantap makanan hangat di meja makan yang tenang.
+- Sesekali bekerja santai dari kafe lokal dekat rumah / *co-working space* bernuansa hijau dengan segelas es matcha latte.
+- Berjalan kaki santai 10 menit keliling komplek/lingkungan perumahan atau melakukan *stretching* ringan untuk melemaskan otot dan menyegarkan mata.
 
 ### Senja (17:00 – 18:30)
-- Berdiri di balkon atau halte menatap langit senja keemasan dengan kabel listrik kota dan awan kumulus megah khas Makoto Shinkai.
-- Merapikan berkas kerja hari ini dengan perasaan puas bahwa tugas-tugas penting telah terselesaikan.
-- Menikmati minuman segar dingin sambil merasakan hembusan angin sore.
+- *Clock out* & menutup laptop di meja kerja rumah dengan perasaan puas atas progres hari ini.
+- Berdiri di balkon rumah atau halaman depan menatap langit senja keemasan khas Makoto Shinkai, awan kumulus jingga, dan kabel listrik kota.
+- Jalan santai sore keliling komplek menikmati sepoi angin senja tanpa harus bermacet-macetan komuter pulang kantor.
 
 ### Malam (20:00 – 22:00)
-- Duduk santai di ruang belajar dengan lampu meja temaram yang hangat (*warm ambient lighting*), membaca buku atau mendengarkan musik lo-fi.
-- Meracik secangkir teh chamomile hangat sebelum tidur.
-- Mengamati pemandangan lampu-lampu kota (*city night lights*) dari kejauhan dengan tenang.
+- Meja kerja sudah rapi dan laptop tertutup. Duduk santai di ruang kamar berlampu temaram hangat (*warm ambient lighting*), membaca buku atau mendengarkan musik lo-fi.
+- Meracik secangkir teh chamomile hangat di dapur rumah sebelum tidur.
+- Mengamati pemandangan lampu-lampu kota (*city night lights*) atau gemintang dari jendela dengan perasaan tenang dan bersyukur.
 
 ---
 
