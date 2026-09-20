@@ -8,6 +8,7 @@ pub mod persona;
 pub mod scheduler;
 pub mod sensor;
 pub mod version;
+pub mod workspace;
 
 pub use archive::{ArchiveEngine, ArchiveSearchFilter};
 pub use audit::*;
@@ -20,3 +21,5 @@ pub use scheduler::*;
 #[allow(unused_imports)]
 pub use sensor::*;
 pub use version::*;
+#[allow(unused_imports)]
+pub use workspace::*;
