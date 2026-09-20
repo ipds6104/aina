@@ -41,6 +41,13 @@ pub struct SimulationJob {
     pub status: SimulationJobStatus,
 }
 
+#[derive(Clone)]
+pub struct ActiveTaskInfo {
+    pub abort_handle: tokio::task::AbortHandle,
+    pub started_at_epoch: i64,
+    pub input_text: String,
+}
+
 pub struct WebhookServerState {
     pub usecase: Arc<ProcessIncomingMessageUseCase>,
     pub agent_engine: Arc<dyn AgentEnginePort>,
@@ -63,6 +70,7 @@ pub struct WebhookServerState {
     pub locale: String,
     pub sim_jobs: Arc<RwLock<HashMap<String, SimulationJob>>>,
     pub chat_queues: Arc<tokio::sync::Mutex<HashMap<String, tokio::sync::mpsc::UnboundedSender<IncomingMessage>>>>,
+    pub active_tasks: Arc<tokio::sync::Mutex<HashMap<String, ActiveTaskInfo>>>,
     pub workspace_dir: PathBuf,
 }
 
@@ -1782,12 +1790,149 @@ async fn webhook_handler(
     (StatusCode::OK, "OK")
 }
 
+pub fn is_kill_or_cancel_command(text: &str) -> bool {
+    let lower = text.trim().to_lowercase();
+    lower == "kill"
+        || lower == "stop"
+        || lower == "batal"
+        || lower == "cancel"
+        || lower == "berhenti"
+        || lower == "kill task"
+        || lower == "stop task"
+        || lower == "batalkan"
+        || lower == "hentikan"
+        || lower.starts_with("/kill")
+        || lower.starts_with("/cancel")
+        || lower.starts_with("/stop")
+        || lower.contains("kill task")
+        || lower.contains("stop task")
+        || lower.contains("batalkan task")
+        || lower.contains("hentikan task")
+}
+
+pub fn is_status_or_inquiry_command(text: &str) -> bool {
+    let lower = text.trim().to_lowercase();
+    lower == "status"
+        || lower == "lagi apa"
+        || lower == "lagi apa?"
+        || lower == "sedang apa"
+        || lower == "sedang apa?"
+        || lower == "apakah ada task"
+        || lower == "apakah ada task?"
+        || lower == "cek task"
+        || lower == "progress"
+        || lower == "/status"
+        || lower.contains("lagi apa")
+        || lower.contains("sedang apa")
+}
+
 async fn dispatch_message_to_queue(state: &Arc<WebhookServerState>, msg: IncomingMessage) {
-    let usecase = Arc::clone(&state.usecase);
+    let now_epoch = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+
+    // 1. Intercept Kill / Cancel / Stop commands IMMEDIATELY (Control Plane Bypass)
+    if is_kill_or_cancel_command(&msg.text) {
+        let mut active = state.active_tasks.lock().await;
+        if let Some(task_info) = active.remove(&msg.chat_jid) {
+            task_info.abort_handle.abort();
+            info!(
+                "Aborted active running task for chat {} due to user kill command: '{}'",
+                msg.chat_jid, msg.text
+            );
+            let reply = "Siaapp Bang Ihza, tugas yang sedang berjalan berhasil Aina hentikan paksa (killed) 👍".to_string();
+            let _ = state.session_store.record_message(&msg.chat_jid, &state.bot_jid, &reply, true).await;
+            let quote_id = match msg.chat_type {
+                crate::core::domain::ChatType::Group => Some(msg.id.as_str()),
+                crate::core::domain::ChatType::DirectMessage => None,
+            };
+            let _ = state.usecase.whatsapp().send_text_with_session(&msg.chat_jid, &reply, quote_id, msg.session_role).await;
+            return;
+        } else {
+            let reply = "Saat ini tidak ada task atau proses yang sedang berjalan kokk Bang Ihza 👍 (Kondisi sistem aman dan idle)".to_string();
+            let _ = state.session_store.record_message(&msg.chat_jid, &state.bot_jid, &reply, true).await;
+            let quote_id = match msg.chat_type {
+                crate::core::domain::ChatType::Group => Some(msg.id.as_str()),
+                crate::core::domain::ChatType::DirectMessage => None,
+            };
+            let _ = state.usecase.whatsapp().send_text_with_session(&msg.chat_jid, &reply, quote_id, msg.session_role).await;
+            return;
+        }
+    }
+
+    // 2. Intercept Status / Inquiry commands if a task is actively running
+    if is_status_or_inquiry_command(&msg.text) {
+        let active = state.active_tasks.lock().await;
+        if let Some(task_info) = active.get(&msg.chat_jid) {
+            let elapsed = (now_epoch - task_info.started_at_epoch).max(0);
+            let preview = if task_info.input_text.len() > 80 {
+                format!("{}...", &task_info.input_text[..80])
+            } else {
+                task_info.input_text.clone()
+            };
+            let reply = format!(
+                "Saat ini Aina sedang memproses tugas:\n_{}_\n\n⏱️ *Durasi berjalan:* {} detik.\n\n💡 _Ketik *'batal'* atau *'kill'* kapan pun jika ingin menghentikan tugas ini._",
+                preview, elapsed
+            );
+            drop(active);
+            let _ = state.session_store.record_message(&msg.chat_jid, &state.bot_jid, &reply, true).await;
+            let quote_id = match msg.chat_type {
+                crate::core::domain::ChatType::Group => Some(msg.id.as_str()),
+                crate::core::domain::ChatType::DirectMessage => None,
+            };
+            let _ = state.usecase.whatsapp().send_text_with_session(&msg.chat_jid, &reply, quote_id, msg.session_role).await;
+            return;
+        }
+    }
+
+    // 3. Normal Message Execution via Queue with Active Task Registration
+    let uc = Arc::clone(&state.usecase);
+    let state_ref = Arc::clone(state);
     // 3500ms (3.5s) debounce window to aggregate rapid consecutive typing bursts (e.g. multi-line thoughts)
     dispatch_incoming_message_to_queue(&state.chat_queues, msg, 300, 3500, move |m| {
-        let uc = Arc::clone(&usecase);
-        async move { uc.execute(m).await }
+        let uc = Arc::clone(&uc);
+        let state_worker = Arc::clone(&state_ref);
+        async move {
+            let chat_jid = m.chat_jid.clone();
+            let text_preview = m.text.clone();
+            let started_epoch = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64;
+
+            let join_handle = tokio::spawn(async move { uc.execute(m).await });
+            {
+                let mut active = state_worker.active_tasks.lock().await;
+                active.insert(
+                    chat_jid.clone(),
+                    ActiveTaskInfo {
+                        abort_handle: join_handle.abort_handle(),
+                        started_at_epoch: started_epoch,
+                        input_text: text_preview,
+                    },
+                );
+            }
+
+            let result = join_handle.await;
+
+            {
+                let mut active = state_worker.active_tasks.lock().await;
+                active.remove(&chat_jid);
+            }
+
+            match result {
+                Ok(inner_res) => inner_res,
+                Err(e) if e.is_cancelled() => {
+                    info!("Task execution for chat {} was cancelled/aborted", chat_jid);
+                    Ok(())
+                }
+                Err(e) => {
+                    error!("Task join error for chat {}: {:?}", chat_jid, e);
+                    Err(e.into())
+                }
+            }
+        }
     })
     .await;
 }
@@ -4403,6 +4548,7 @@ mod tests {
             locale: "id".to_string(),
             sim_jobs: Arc::new(RwLock::new(HashMap::new())),
             chat_queues: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+            active_tasks: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
             workspace_dir: temp_dir.clone(),
         });
 
@@ -4513,6 +4659,7 @@ mod tests {
             locale: "id".to_string(),
             sim_jobs: Arc::new(RwLock::new(HashMap::new())),
             chat_queues: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+            active_tasks: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
             workspace_dir: temp_dir.clone(),
         });
 

@@ -145,6 +145,7 @@ async fn main() -> anyhow::Result<()> {
         locale: config.app.locale.clone(),
         sim_jobs: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         chat_queues: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
+        active_tasks: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
         workspace_dir: std::path::PathBuf::from(&config.agent.workspace_dir),
     });
     let app = create_router(state);

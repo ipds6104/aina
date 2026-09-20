@@ -421,19 +421,21 @@ impl AgentEnginePort for AntigravityCliAdapter {
                 attempt + 1, max_attempts, bin_path, conversation_id, active_model, active_acc.as_ref().map(|a| &a.label), is_unlimited
             );
 
-            // Run process (unlimited or with timeout)
-            let child_future = cmd.output();
-            let output = if is_unlimited {
-                child_future.await?
+            // Run process with safe ceiling (kill_on_drop will terminate child if timeout occurs)
+            let effective_timeout = if is_unlimited {
+                // Interactive safe timeout ceiling (10 minutes max to prevent zombie process hang)
+                Duration::from_secs(600)
             } else {
-                match tokio::time::timeout(self.timeout_duration, child_future).await {
-                    Ok(res) => res?,
-                    Err(_) => {
-                        anyhow::bail!(
-                            "Antigravity CLI execution timed out after {:?}",
-                            self.timeout_duration
-                        );
-                    }
+                self.timeout_duration
+            };
+
+            let output = match tokio::time::timeout(effective_timeout, cmd.output()).await {
+                Ok(res) => res?,
+                Err(_) => {
+                    anyhow::bail!(
+                        "Antigravity CLI execution timed out after {:?}",
+                        effective_timeout
+                    );
                 }
             };
 
