@@ -970,7 +970,7 @@ impl AgentEnginePort for AntigravityCliAdapter {
                 }
             }
 
-            if start.elapsed().as_secs() > 25 {
+            if start.elapsed().as_secs() > 45 {
                 let _ = tokio::fs::remove_dir_all(&base_dir).await;
                 anyhow::bail!("Timeout saat memverifikasi kode otorisasi ke Google");
             }

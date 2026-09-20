@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import fcntl
 import os
 import pty
 import shutil
@@ -121,26 +122,50 @@ def main():
     # 3. Write authorization code to PTY master
     os.write(master, (code + "\n").encode("utf-8"))
 
-    # 4. Wait for agy to complete token exchange
+    # 4. Immediate non-blocking poll for token file (don't wait for agy prompt run!)
+    token_path = os.path.join(base_dir, ".gemini/antigravity-cli/antigravity-oauth-token")
+    flags = fcntl.fcntl(master, fcntl.F_GETFL)
+    fcntl.fcntl(master, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+
     rem = b""
     wait_start = time.time()
-    while time.time() - wait_start < 25:
-        try:
-            chunk = os.read(master, 1024)
-            if not chunk:
-                break
-            rem += chunk
-        except Exception:
+    success = False
+
+    while time.time() - wait_start < 40:
+        # Check if token file has appeared
+        if os.path.exists(token_path) and os.path.getsize(token_path) > 50:
+            success = True
             break
 
-    os.close(master)
-    try:
-        proc.wait(timeout=5)
-    except Exception:
-        proc.terminate()
+        # Drain any non-blocking output from master
+        try:
+            chunk = os.read(master, 1024)
+            if chunk:
+                rem += chunk
+        except (BlockingIOError, OSError):
+            pass
 
-    token_path = os.path.join(base_dir, ".gemini/antigravity-cli/antigravity-oauth-token")
-    if os.path.exists(token_path):
+        # If agy process has already terminated
+        if proc.poll() is not None:
+            time.sleep(0.3)
+            if os.path.exists(token_path) and os.path.getsize(token_path) > 50:
+                success = True
+            break
+
+        time.sleep(0.1)
+
+    try:
+        os.close(master)
+    except Exception:
+        pass
+
+    try:
+        proc.terminate()
+        proc.wait(timeout=2)
+    except Exception:
+        pass
+
+    if success and os.path.exists(token_path):
         with open(token_path, "r") as f:
             tok_content = f.read().strip()
         with open(os.path.join(base_dir, "token.json"), "w") as f:
