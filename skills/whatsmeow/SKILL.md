@@ -103,8 +103,8 @@ When an authorized user requests a chat backup or comprehensive audit log:
 3. Inform the user that the backup has been compiled, provide summary metrics (total messages, date range), and offer to deliver or analyze the file.
 
 ### SOP 5: Dual-Gateway Operations & Companion Account Queries
-Sistem Aina mendukung arsitektur Dual-Gateway (Gateway Bot Utama & Gateway Akun Pribadi Companion Admin / Bang Ihza).
-Gunakan flag `--companion` ketika diminta mengakses informasi atau obrolan grup dari akun pribadi Bang Ihza (misal untuk grup kerja yang akun bot Aina belum dimasukkan ke dalamnya):
+Sistem Aina mendukung arsitektur Dual-Gateway (Gateway Bot Utama & Gateway Akun Pribadi Companion Admin).
+Gunakan flag `--companion` ketika diminta mengakses informasi atau obrolan grup dari akun pribadi Companion Admin (misal untuk grup kerja yang akun bot Aina belum dimasukkan ke dalamnya):
 1. **Melihat daftar grup yang diikuti akun Companion**:
    ```bash
    python3 skills/whatsmeow/scripts/wa_tool.py groups --companion

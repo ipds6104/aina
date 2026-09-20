@@ -325,7 +325,7 @@ def main():
     p_reg.add_argument("--description", help="Deskripsi dataset")
     p_reg.add_argument("--allow-group", "-g", action="append", help="JID grup yang diizinkan (bisa multiple)")
     p_reg.add_argument("--allow-sender", "-s", action="append", help="JID nomor telepon yang diizinkan (bisa multiple)")
-    p_reg.add_argument("--approver", "-a", help="JID penanggung jawab / approver izin (misal: JID Bang Ihza)")
+    p_reg.add_argument("--approver", "-a", help="JID penanggung jawab / approver izin (misal: JID Admin)")
 
     # Check
     p_chk = subparsers.add_parser("check", help="Verifikasi hak akses pemohon")
