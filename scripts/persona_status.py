@@ -26,8 +26,8 @@ WIB = timezone(timedelta(hours=7))
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 JOURNAL_FILE = os.path.join(BASE_DIR, "data", "status_journal.jsonl")
 CHARACTER_FILE = os.path.join(BASE_DIR, "config", "character.md")
-ACTIVITIES_FILE = os.path.join(BASE_DIR, "config", "activities.md")
 ASSETS_DIR = os.path.join(BASE_DIR, "assets")
+DATA_ASSETS_DIR = os.path.join(BASE_DIR, "data", "assets")
 
 def get_current_wib_time():
     return datetime.now(WIB)
@@ -79,7 +79,7 @@ def load_journal():
     entries = []
     with open(JOURNAL_FILE, "r", encoding="utf-8") as f:
         for line in f:
-            line = line.trim() if hasattr(line, "trim") else line.strip()
+            line = line.strip()
             if line:
                 try:
                     entries.append(json.loads(line))
@@ -99,19 +99,32 @@ def get_today_entries(entries, dt=None):
     return [e for e in entries if e.get("date") == today_str]
 
 def get_avatar_reference_path():
-    # Prioritas: File kustom user (character_sheet / avatar) > Fallback default repo (character_sheet.default.png)
+    # Prioritas:
+    # 1. File kustom di persistent volume: data/assets/ (character_sheet / avatar)
+    # 2. File kustom di folder assets/: assets/ (character_sheet / avatar)
+    # 3. Fallback default repo: assets/character_sheet.default.png
     candidates = [
         "character_sheet.png",
         "avatar.png",
         "character_sheet.jpg",
         "avatar.jpg",
-        "character_sheet.default.png",
-        "character_sheet.default.jpg",
     ]
+    # Cek di data/assets/ (persistent volume)
+    for name in candidates:
+        p = os.path.join(DATA_ASSETS_DIR, name)
+        if os.path.exists(p):
+            return p
+    # Cek di assets/
     for name in candidates:
         p = os.path.join(ASSETS_DIR, name)
         if os.path.exists(p):
             return p
+    # Fallback default template
+    for name in ["character_sheet.default.png", "character_sheet.default.jpg"]:
+        for d in [DATA_ASSETS_DIR, ASSETS_DIR]:
+            p = os.path.join(d, name)
+            if os.path.exists(p):
+                return p
     return None
 
 def should_post_now(today_entries, slot, force=False):

@@ -54,13 +54,14 @@ RUN curl -fsSL https://antigravity.google/cli/install.sh | bash && \
 COPY --from=builder /usr/src/aina/target/release/aina /usr/local/bin/aina
 
 # Create application directories
-RUN mkdir -p /app/config /app/data /app/workspaces /app/scripts /root/.gemini/antigravity-cli
+RUN mkdir -p /app/config /app/data /app/workspaces /app/scripts /app/assets /root/.gemini/antigravity-cli
 
-# Copy configuration, workspaces, skills, scripts, and entrypoint
+# Copy configuration, workspaces, skills, scripts, assets, and entrypoint
 COPY config/ /app/config/
 COPY workspaces/ /app/workspaces/
 COPY skills/ /app/skills/
 COPY scripts/ /app/scripts/
+COPY assets/ /app/assets/
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh /app/scripts/*.py 2>/dev/null || true
 

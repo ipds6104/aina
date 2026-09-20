@@ -45,6 +45,7 @@ mkdir -p "${AGENT_WORKSPACE:-/app/workspaces/default}/.agents/skills"
 mkdir -p "${AGENT_WORKSPACE:-/app/workspaces/default}/knowledge"
 mkdir -p "${AGENT_WORKSPACE:-/app/workspaces/default}/scripts"
 mkdir -p "$(dirname "${DATABASE_PATH:-/app/data/aina.db}")"
+mkdir -p /app/data/assets /app/assets
 mkdir -p /root/.gemini/config/skills
 
 # Mount/Sync skills from image to global config and workspace
