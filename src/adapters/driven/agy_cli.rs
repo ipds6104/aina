@@ -936,47 +936,56 @@ impl AgentEnginePort for AntigravityCliAdapter {
         let base_dir = get_oauth_session_dir(session_id);
         if !tokio::fs::try_exists(&base_dir).await.unwrap_or(false) {
             anyhow::bail!(
-                "Sesi login '{}' tidak ditemukan atau telah kadaluarsa (batas waktu 60 detik dari Google CLI). Silakan klik 'Mulai Ulang / Akun Lain'.",
+                "Sesi login '{}' tidak ditemukan atau telah kadaluarsa. Silakan klik 'Mulai Ulang / Akun Lain'.",
                 session_id
             );
         }
 
         let clean_code = sanitize_oauth_code(code);
-        let code_file = base_dir.join("code.txt");
-        tokio::fs::write(&code_file, &clean_code).await?;
 
-        let status_file = base_dir.join("status.txt");
+        let script_candidates = [
+            PathBuf::from("scripts/oauth_helper.py"),
+            PathBuf::from("/root/projects/aina/scripts/oauth_helper.py"),
+            PathBuf::from("/app/scripts/oauth_helper.py"),
+        ];
+        let script_path = script_candidates
+            .into_iter()
+            .find(|p| p.exists())
+            .unwrap_or_else(|| PathBuf::from("scripts/oauth_helper.py"));
+
+        // Direct sub-second PKCE token exchange
+        let mut cmd = tokio::process::Command::new("python3");
+        cmd.arg(&script_path)
+            .arg("exchange")
+            .arg(session_id)
+            .arg(&clean_code);
+
+        let output = cmd.output().await?;
         let token_file = base_dir.join("token.json");
         let error_file = base_dir.join("error.txt");
 
-        let start = std::time::Instant::now();
-        loop {
-            if let Ok(status) = tokio::fs::read_to_string(&status_file).await {
-                let s = status.trim();
-                if s == "SUCCESS" {
-                    let token_content = tokio::fs::read_to_string(&token_file).await?;
-                    let _ = tokio::fs::remove_dir_all(&base_dir).await;
+        if output.status.success() && tokio::fs::try_exists(&token_file).await.unwrap_or(false) {
+            let token_content = tokio::fs::read_to_string(&token_file).await?;
+            let _ = tokio::fs::remove_dir_all(&base_dir).await;
 
-                    self.save_auth_token(&token_content).await?;
-                    let email = extract_email_from_token(&token_content)
-                        .unwrap_or_else(|| "Akun Baru".to_string());
-                    return Ok(email);
-                } else if s == "FAILED" || s == "TIMEOUT" {
-                    let err = tokio::fs::read_to_string(&error_file)
-                        .await
-                        .unwrap_or_else(|_| "Verifikasi kode otorisasi gagal atau sesi kadaluarsa.".to_string());
-                    let _ = tokio::fs::remove_dir_all(&base_dir).await;
-                    anyhow::bail!("{}", err.trim());
-                }
-            }
-
-            if start.elapsed().as_secs() > 45 {
-                let _ = tokio::fs::remove_dir_all(&base_dir).await;
-                anyhow::bail!("Timeout saat memverifikasi kode otorisasi ke Google");
-            }
-
-            tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+            self.save_auth_token(&token_content).await?;
+            let email = extract_email_from_token(&token_content)
+                .unwrap_or_else(|| "Akun Baru".to_string());
+            return Ok(email);
         }
+
+        let err = if let Ok(err_str) = tokio::fs::read_to_string(&error_file).await {
+            err_str
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            if stderr.is_empty() {
+                "Verifikasi kode otorisasi gagal atau ditolak oleh Google.".to_string()
+            } else {
+                stderr
+            }
+        };
+        let _ = tokio::fs::remove_dir_all(&base_dir).await;
+        anyhow::bail!("{}", err.trim());
     }
 }
 

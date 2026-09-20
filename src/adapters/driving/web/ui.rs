@@ -94,8 +94,8 @@ pub fn render_html(is_authenticated: bool, state: &WebhookServerState, current_m
                     <div id="oauth-step-2" style="display: none; background: rgba(37, 99, 235, 0.08); border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 6px; padding: 14px; margin-bottom: 12px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <span style="font-size: 0.84rem; font-weight: 600; color: #93c5fd;">Langkah Selanjutnya:</span>
-                            <span id="oauth-timer-badge" style="font-size: 0.78rem; color: #fbbf24; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 4px; padding: 2px 8px;">
-                                ⏱️ Sisa Waktu: <strong id="oauth-countdown">60</strong>s
+                            <span id="oauth-timer-badge" style="font-size: 0.78rem; color: #10b981; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 4px; padding: 2px 8px;">
+                                ⏱️ Sisa Waktu: <strong id="oauth-countdown">300</strong>s
                             </span>
                         </div>
                         <p style="font-size: 0.83rem; color: #cbd5e1; margin-bottom: 10px; line-height: 1.5;">
@@ -846,17 +846,17 @@ pub fn render_html(is_authenticated: bool, state: &WebhookServerState, current_m
                     document.getElementById('oauth-step-2').style.display = 'block';
                     document.getElementById('oauth-code-input').value = '';
 
-                    // 60-second countdown for Google CLI
+                    // 300-second (5-minute) countdown for user convenience
                     if (oauthCountdownInterval) clearInterval(oauthCountdownInterval);
-                    let remaining = 60;
+                    let remaining = 300;
                     const countdownEl = document.getElementById('oauth-countdown');
                     const badgeEl = document.getElementById('oauth-timer-badge');
                     const submitBtn = document.getElementById('submit-oauth-code-btn');
                     const pasteBtn = document.getElementById('paste-submit-oauth-btn');
                     if (countdownEl) countdownEl.innerText = remaining;
                     if (badgeEl) {{
-                        badgeEl.style.color = '#fbbf24';
-                        badgeEl.style.background = 'rgba(245, 158, 11, 0.15)';
+                        badgeEl.style.color = '#10b981';
+                        badgeEl.style.background = 'rgba(16, 185, 129, 0.15)';
                         badgeEl.innerHTML = '⏱️ Sisa Waktu: <strong id="oauth-countdown">' + remaining + '</strong>s';
                     }}
                     if (submitBtn) submitBtn.disabled = false;
@@ -870,11 +870,10 @@ pub fn render_html(is_authenticated: bool, state: &WebhookServerState, current_m
                             clearInterval(oauthCountdownInterval);
                             oauthCountdownInterval = null;
                             if (badgeEl) {{
-                                badgeEl.style.color = '#ef4444';
-                                badgeEl.style.background = 'rgba(239, 68, 68, 0.15)';
-                                badgeEl.innerHTML = '⏱️ Waktu Hampir Habis (Segera Simpan)';
+                                badgeEl.style.color = '#fbbf24';
+                                badgeEl.style.background = 'rgba(245, 158, 11, 0.15)';
+                                badgeEl.innerHTML = '⏱️ Sesi > 5 Menit (Klik Mulai Ulang jika butuh tautan baru)';
                             }}
-                            // DO NOT DISABLE BUTTONS: allow user to submit if they have the code!
                         }}
                     }}, 1000);
 
