@@ -3,9 +3,10 @@
 Aina Direct Google OAuth 2.0 PKCE Helper
 Menggantikan pemanggilan PTY CLI Antigravity dengan native HTTP PKCE langsung ke Google OAuth.
 Keunggulan:
-- Tanpa batas waktu 60 detik (timeout diperpanjang hingga 10 menit).
+- Tanpa batas waktu 60 detik (timeout sesi diperpanjang hingga 1 jam).
 - Pertukaran token instan (200ms) tanpa memicu prompt AI.
 - Bebas error PTY buffer atau escape ANSI.
+- Mendukung mode interaktif 'exchange' langsung via CLI.
 """
 
 import base64
@@ -63,74 +64,16 @@ def extract_email_from_jwt(id_token: str) -> str:
         pass
     return "unknown_account"
 
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: oauth_helper.py <session_id>", file=sys.stderr)
-        sys.exit(1)
-
-    session_id = sys.argv[1]
+def get_base_dir(session_id: str) -> str:
     if os.path.isdir("/app/data"):
-        base_dir = os.path.abspath(f"/app/data/oauth_sessions/{session_id}")
+        return os.path.abspath(f"/app/data/oauth_sessions/{session_id}")
     elif os.path.isdir("data") or os.path.exists("Cargo.toml"):
-        base_dir = os.path.abspath(f"data/oauth_sessions/{session_id}")
+        return os.path.abspath(f"data/oauth_sessions/{session_id}")
     else:
-        base_dir = f"/tmp/aina_oauth_{session_id}"
-    os.makedirs(base_dir, exist_ok=True)
+        return f"/tmp/aina_oauth_{session_id}"
 
-    # Generate PKCE verifier & challenge
-    verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("utf-8").rstrip("=")
-    digest = hashlib.sha256(verifier.encode("utf-8")).digest()
-    challenge = base64.urlsafe_b64encode(digest).decode("utf-8").rstrip("=")
-    state = base64.urlsafe_b64encode(secrets.token_bytes(16)).decode("utf-8").rstrip("=")
-
-    # Simpan verifier ke file sesi
-    with open(os.path.join(base_dir, "verifier.txt"), "w") as f:
-        f.write(verifier)
-
-    # Bangun URL Google OAuth
-    params = {
-        "access_type": "offline",
-        "client_id": CLIENT_ID,
-        "code_challenge": challenge,
-        "code_challenge_method": "S256",
-        "prompt": "consent",
-        "redirect_uri": REDIRECT_URI,
-        "response_type": "code",
-        "scope": " ".join(SCOPES),
-        "state": state,
-    }
-    url = "https://accounts.google.com/o/oauth2/auth?" + urllib.parse.urlencode(params)
-
-    # Tulis URL untuk dibaca backend / UI
-    with open(os.path.join(base_dir, "auth_url.txt"), "w") as f:
-        f.write(url)
-
-    # Tunggu file code.txt diisi (timeout 600 detik / 10 menit)
-    code_file = os.path.join(base_dir, "code.txt")
-    start_time = time.time()
-    code = None
-
-    while time.time() - start_time < 600:
-        if os.path.exists(code_file):
-            try:
-                with open(code_file, "r") as f:
-                    code = f.read().strip()
-                if code:
-                    break
-            except Exception:
-                pass
-        time.sleep(0.1)
-
-    if not code:
-        with open(os.path.join(base_dir, "status.txt"), "w") as f:
-            f.write("TIMEOUT\n")
-        with open(os.path.join(base_dir, "error.txt"), "w") as f:
-            f.write("Batas waktu menunggu input kode otorisasi (10 menit) tercapai.\n")
-        sys.exit(1)
-
+def do_exchange(base_dir: str, code: str, verifier: str):
     clean_code = sanitize_code(code)
-
-    # Tukar kode otorisasi via HTTP POST ke Google OAuth token endpoint
     post_data = {
         "client_id": CLIENT_ID,
         "client_secret": CLIENT_SECRET,
@@ -174,6 +117,10 @@ def main():
             with open(os.path.join(base_dir, "status.txt"), "w") as f:
                 f.write("SUCCESS\n")
 
+            email = extract_email_from_jwt(data.get("id_token", ""))
+            print(f"SUCCESS:{email}")
+            return True
+
     except urllib.error.HTTPError as e:
         err_body = e.read().decode("utf-8", errors="ignore")
         try:
@@ -185,13 +132,96 @@ def main():
             f.write(f"Google OAuth Error ({e.code}): {desc}\n")
         with open(os.path.join(base_dir, "status.txt"), "w") as f:
             f.write("FAILED\n")
-        sys.exit(1)
+        print(f"FAILED:{desc}", file=sys.stderr)
+        return False
     except Exception as e:
         with open(os.path.join(base_dir, "error.txt"), "w") as f:
             f.write(f"Koneksi gagal: {str(e)}\n")
         with open(os.path.join(base_dir, "status.txt"), "w") as f:
             f.write("FAILED\n")
+        print(f"FAILED:{e}", file=sys.stderr)
+        return False
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: oauth_helper.py <session_id> OR oauth_helper.py exchange <session_id> <code>", file=sys.stderr)
         sys.exit(1)
+
+    if sys.argv[1] == "exchange":
+        if len(sys.argv) < 4:
+            print("Usage: oauth_helper.py exchange <session_id> <code>", file=sys.stderr)
+            sys.exit(1)
+        session_id = sys.argv[2]
+        code = sys.argv[3]
+        base_dir = get_base_dir(session_id)
+        verifier_file = os.path.join(base_dir, "verifier.txt")
+        if not os.path.exists(verifier_file):
+            print(f"Verifier file not found in {base_dir}", file=sys.stderr)
+            sys.exit(1)
+        with open(verifier_file, "r") as f:
+            verifier = f.read().strip()
+        ok = do_exchange(base_dir, code, verifier)
+        sys.exit(0 if ok else 1)
+
+    session_id = sys.argv[1]
+    base_dir = get_base_dir(session_id)
+    os.makedirs(base_dir, exist_ok=True)
+
+    # Generate PKCE verifier & challenge
+    verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("utf-8").rstrip("=")
+    digest = hashlib.sha256(verifier.encode("utf-8")).digest()
+    challenge = base64.urlsafe_b64encode(digest).decode("utf-8").rstrip("=")
+    state = base64.urlsafe_b64encode(secrets.token_bytes(16)).decode("utf-8").rstrip("=")
+
+    # Simpan verifier ke file sesi
+    with open(os.path.join(base_dir, "verifier.txt"), "w") as f:
+        f.write(verifier)
+
+    # Bangun URL Google OAuth
+    params = {
+        "access_type": "offline",
+        "client_id": CLIENT_ID,
+        "code_challenge": challenge,
+        "code_challenge_method": "S256",
+        "prompt": "consent",
+        "redirect_uri": REDIRECT_URI,
+        "response_type": "code",
+        "scope": " ".join(SCOPES),
+        "state": state,
+    }
+    url = "https://accounts.google.com/o/oauth2/auth?" + urllib.parse.urlencode(params)
+
+    # Tulis URL untuk dibaca backend / UI
+    with open(os.path.join(base_dir, "auth_url.txt"), "w") as f:
+        f.write(url)
+    with open(os.path.join(base_dir, "status.txt"), "w") as f:
+        f.write("WAITING\n")
+
+    # Tunggu file code.txt diisi (timeout 3600 detik / 1 jam)
+    code_file = os.path.join(base_dir, "code.txt")
+    start_time = time.time()
+    code = None
+
+    while time.time() - start_time < 3600:
+        if os.path.exists(code_file):
+            try:
+                with open(code_file, "r") as f:
+                    code = f.read().strip()
+                if code:
+                    break
+            except Exception:
+                pass
+        time.sleep(0.1)
+
+    if not code:
+        with open(os.path.join(base_dir, "status.txt"), "w") as f:
+            f.write("TIMEOUT\n")
+        with open(os.path.join(base_dir, "error.txt"), "w") as f:
+            f.write("Batas waktu menunggu input kode otorisasi (1 jam) tercapai.\n")
+        sys.exit(1)
+
+    ok = do_exchange(base_dir, code, verifier)
+    sys.exit(0 if ok else 1)
 
 if __name__ == "__main__":
     main()
