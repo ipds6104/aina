@@ -4515,6 +4515,36 @@ mod tests {
         let trans_data: serde_json::Value = query_resp.json().await.unwrap();
         assert_eq!(trans_data["success"], true);
 
+        // 6. Test /api/persona/diagnostics & /api/persona/journal
+        let persona_diag_resp = client
+            .get(format!("http://{}/api/persona/diagnostics", aina_addr))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(persona_diag_resp.status(), StatusCode::OK);
+        let pdiag_data: serde_json::Value = persona_diag_resp.json().await.unwrap();
+        assert_eq!(pdiag_data["success"], true);
+        assert!(pdiag_data["diagnostics"]["today_quota"].is_object());
+
+        let persona_journal_resp = client
+            .get(format!("http://{}/api/persona/journal?limit=5", aina_addr))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(persona_journal_resp.status(), StatusCode::OK);
+        let pjournal_data: serde_json::Value = persona_journal_resp.json().await.unwrap();
+        assert_eq!(pjournal_data["success"], true);
+
+        // 7. Test /api/schedule/diagnostics
+        let sched_diag_resp = client
+            .get(format!("http://{}/api/schedule/diagnostics", aina_addr))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(sched_diag_resp.status(), StatusCode::OK);
+        let sdiag_data: serde_json::Value = sched_diag_resp.json().await.unwrap();
+        assert_eq!(sdiag_data["success"], true);
+
         let _ = tokio::fs::remove_dir_all(&temp_dir).await;
     }
 }
