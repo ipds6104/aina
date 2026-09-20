@@ -182,6 +182,16 @@ PENGGUNAAN:
                               Options:
                                 --json                  Output format JSON terstruktur
 
+    metacog [diag|capabilities|calibration] Observabilitas Metakognisi & Kalibrasi Self-Awareness
+                              Subcommands:
+                                diag, diagnostics       Representasi diri R, ringkasan Brier score, dan status kalibrasi
+                                capabilities            Daftar kontrak tools, limit memori, batas OS, dan domain
+                                calibration             Statistik kalibrasi probabilistik (Brier Score, reliability diagram)
+                              Options:
+                                --domain <domain>       Filter domain tertentu
+                                --limit <n>             Batas entri prediksi (default: 10)
+                                --json                  Output format JSON terstruktur
+
     help, --help, -h          Tampilkan panduan ini
 "#
         );
@@ -217,6 +227,7 @@ PENGGUNAAN:
             "schedule" | "cron" => Self::handle_schedule(&args[2..]).await,
             "persona" => Self::handle_persona(&args[2..]).await,
             "model" => Self::handle_model(&args[2..]).await,
+            "metacog" | "metacognition" => Self::handle_metacognition(&args[2..]).await,
             _ => {
                 eprintln!("Subcommand tidak dikenal: `{}`. Ketik `aina help`.", cmd);
                 std::process::exit(1);
@@ -1948,5 +1959,142 @@ PENGGUNAAN:
         }
 
         Ok(())
+    }
+
+    async fn handle_metacognition(args: &[String]) -> anyhow::Result<()> {
+        let subcmd = args.first().map(|s| s.as_str()).unwrap_or("diag");
+        let is_json = args.iter().any(|a| a == "--json");
+        let mut domain_filter: Option<String> = None;
+        let mut limit: usize = 10;
+
+        let mut idx = 1;
+        while idx < args.len() {
+            let arg = &args[idx];
+            if arg == "--domain" && idx + 1 < args.len() {
+                domain_filter = Some(args[idx + 1].clone());
+                idx += 2;
+                continue;
+            }
+            if (arg == "--limit" || arg == "-l") && idx + 1 < args.len() {
+                limit = args[idx + 1].parse().unwrap_or(10);
+                idx += 2;
+                continue;
+            }
+            idx += 1;
+        }
+
+        let manifest = crate::core::domain::metacognition::AgentCapabilityManifest::default_manifest();
+        let config_path = std::env::var("AINA_CONFIG").unwrap_or_else(|_| "config/config.yaml".to_string());
+        let config = crate::config::AppConfig::load_from_file_or_default(&config_path);
+        let db_path = std::env::var("DATABASE_PATH").unwrap_or(config.database.path);
+        let store = crate::adapters::driven::SqliteSessionStore::new(&db_path)?;
+
+        match subcmd {
+            "capabilities" | "caps" => {
+                if is_json {
+                    println!("{}", serde_json::to_string_pretty(&manifest)?);
+                } else {
+                    println!("🧠 [MANIFEST KAPABILITAS & KONTRAK AGENT AINA]\n");
+                    println!("• Engine Model        : {} (Konteks: {} tokens, Vision: {}, Video: {})",
+                        manifest.model_profile.model_name,
+                        manifest.model_profile.context_window_tokens,
+                        manifest.model_profile.supports_vision,
+                        manifest.model_profile.supports_video_gen
+                    );
+                    println!("• Lingkungan Eksekusi : {} | Arsitektur: {}", manifest.environment.os_name, manifest.environment.architecture);
+                    println!("• Konteks Container   : {}", manifest.environment.container_context);
+                    println!("• Batas RAM Aman      : <{} MB (Hard Limit: {} MB)", manifest.environment.safe_ram_mb, manifest.environment.hard_limit_ram_mb);
+                    println!("• Domain Didukung     : {}", manifest.supported_domains.join(", "));
+                    println!("• Domain Tidak Support: {}", manifest.unsupported_domains.join(", "));
+                    println!("\n📦 KONTRAK TOOLS RESMI ({} Tools):", manifest.tool_contracts.len());
+                    for (name, tc) in &manifest.tool_contracts {
+                        println!("  - `{}`: {}", name, tc.description);
+                        println!("    • Intensitas: {} | Timeout: {}s | Multimodal: {}", tc.resource_intensity, tc.timeout_seconds, tc.supports_multimodal);
+                        println!("    • Tag: {}", tc.capability_tags.join(", "));
+                        if !tc.forbidden_patterns.is_empty() {
+                            println!("    • Larangan: {}", tc.forbidden_patterns.join(" | "));
+                        }
+                    }
+                    println!("\n🚫 OPERASI TERLARANG SISTEM:");
+                    for op in &manifest.environment.forbidden_operations {
+                        println!("  ✖ {}", op);
+                    }
+                }
+                Ok(())
+            }
+            "calibration" | "calib" => {
+                let stats = store.get_metacognitive_calibration_stats().await?;
+                if is_json {
+                    println!("{}", serde_json::to_string_pretty(&stats)?);
+                } else {
+                    println!("🎯 [KALIBRASI PREDIKSI & BRIER SCORE METAKOGNISI]\n");
+                    println!("• Total Prediksi         : {}", stats.total_predictions);
+                    println!("• Total Prediksi Selesai : {}", stats.resolved_predictions);
+                    println!("• Brier Score Rata-rata  : {:.4} (Makin mendekati 0.0000 makin sempurna)", stats.mean_brier_score);
+                    println!("• Base Rate Sukses       : {:.2}%", stats.base_rate * 100.0);
+                    println!("• Brier Skill Score (BSS): {:.4}", stats.brier_skill_score);
+                    println!("• Status Kalibrasi       : {}\n", stats.calibration_status);
+
+                    println!("📊 RELIABILITY DIAGRAM (5 BUCKETS):");
+                    println!("{:<16} {:<8} {:<16} {:<16}", "Rentang", "Jumlah", "Prediksi Rata2", "Frekuensi Riil");
+                    println!("{:-<60}", "");
+                    for b in &stats.reliability_buckets {
+                        println!("[{:.1} - {:.1}]        {:<8} {:<16.2}% {:<16.2}%",
+                            b.range_start,
+                            b.range_end,
+                            b.count,
+                            b.mean_predicted * 100.0,
+                            b.observed_frequency * 100.0
+                        );
+                    }
+
+                    if !stats.domain_brier_scores.is_empty() {
+                        println!("\n🌐 DOMAIN BRIER SCORES:");
+                        for (dom, brier) in &stats.domain_brier_scores {
+                            println!("  • {}: Brier Score {:.4}", dom, brier);
+                        }
+                    }
+                }
+                Ok(())
+            }
+            "diag" | "diagnostics" | _ => {
+                let stats = store.get_metacognitive_calibration_stats().await?;
+                let recent = store.list_metacognitive_predictions(limit, domain_filter.as_deref()).await?;
+
+                if is_json {
+                    let out = serde_json::json!({
+                        "manifest": manifest,
+                        "calibration": stats,
+                        "recent_predictions": recent,
+                    });
+                    println!("{}", serde_json::to_string_pretty(&out)?);
+                } else {
+                    println!("🧠 [DIAGNOSTIK METAKOGNISI & SELF-AWARENESS AINA]\n");
+                    println!("1. REPRESENTASI DIRI (R):");
+                    println!("   • Engine        : {}", manifest.model_profile.model_name);
+                    println!("   • Lingkungan    : {} ({})", manifest.environment.os_name, manifest.environment.architecture);
+                    println!("   • Status RAM    : Safe <{}MB / Hard {}MB", manifest.environment.safe_ram_mb, manifest.environment.hard_limit_ram_mb);
+                    println!("   • Tools Aktif   : {} tool terdaftar", manifest.tool_contracts.len());
+
+                    println!("\n2. KALIBRASI PROBABILISTIK & BRIER SCORE:");
+                    println!("   • Total Selesai : {}", stats.resolved_predictions);
+                    println!("   • Brier Score   : {:.4}", stats.mean_brier_score);
+                    println!("   • BSS           : {:.4} | Status: {}", stats.brier_skill_score, stats.calibration_status);
+
+                    println!("\n3. PREDIKSI TERAKHIR ({} entri):", recent.len());
+                    for p in &recent {
+                        let status = match (p.actual_outcome, p.resolved_at_epoch) {
+                            (Some(y), _) if y >= 0.5 => "✅ SUCCESS",
+                            (Some(_), _) => "❌ FAILED",
+                            (None, _) => "⏳ PENDING",
+                        };
+                        let dur = p.execution_duration_secs.map(|d| format!("{:.1}s", d)).unwrap_or_else(|| "-".to_string());
+                        let bs = p.brier_score.map(|b| format!("{:.4}", b)).unwrap_or_else(|| "-".to_string());
+                        println!("   • [{}] #{:<4} {} ({}) (P: {:.0}%, Dur: {}, BS: {})", status, p.id, p.prediction_id, p.domain_type.as_str(), p.predicted_probability * 100.0, dur, bs);
+                    }
+                }
+                Ok(())
+            }
+        }
     }
 }

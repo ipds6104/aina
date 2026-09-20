@@ -171,6 +171,31 @@ impl ScheduledTickUseCase {
                             story_delivery_rule,
                         );
 
+                        let pred_id = format!("sched_{}_{}", task.id, now_epoch);
+                        let pred = crate::core::domain::NewMetacognitivePrediction {
+                            prediction_id: pred_id.clone(),
+                            action_audit_id: None,
+                            task_description: format!("Scheduled Task #{}: {}", task.id, task.title),
+                            domain_type: if is_story {
+                                crate::core::domain::TaskDomainType::PersonaStatus
+                            } else {
+                                crate::core::domain::TaskDomainType::ScheduleTask
+                            },
+                            predicted_probability: if is_story { 0.88 } else { 0.92 },
+                            complexity_tier: if is_story {
+                                crate::core::domain::ComplexityTier::Medium
+                            } else {
+                                crate::core::domain::ComplexityTier::Low
+                            },
+                            identified_risks: if is_story {
+                                vec!["Image generation timeout".to_string(), "Whatsmeow gateway reachability".to_string()]
+                            } else {
+                                vec!["Search web rate limits".to_string()]
+                            },
+                            fallback_strategy: Some("Report failure to admin".to_string()),
+                        };
+                        let _ = self.session_store.record_metacognitive_prediction(&pred).await;
+
                         match agent.execute(None, &prompt).await {
                             Ok(res) => {
                                 let duration = start_instant.elapsed().as_secs_f64();
@@ -198,6 +223,14 @@ impl ScheduledTickUseCase {
                                     let _ = self.session_store.update_scheduled_task_result(task.id, status, err_msg, duration).await;
                                     let _ = self.session_store.record_scheduled_task_run(task.id, &task.title, actual_target, status, duration, err_msg, Some(preview)).await;
 
+                                    let actual_outcome = if is_error_output { 0.0 } else { 1.0 };
+                                    let _ = self.session_store.resolve_metacognitive_prediction(
+                                        &pred_id,
+                                        actual_outcome,
+                                        duration,
+                                        if is_error_output { Some("agent_error_or_quota") } else { None },
+                                    ).await;
+
                                     if is_story {
                                         // WhatsApp Story (status@broadcast) is published directly by wa_tool.py status-send-media / persona_status.py.
                                         // We MUST NEVER send the agent's textual response/summary as an additional text story to status@broadcast,
@@ -219,6 +252,12 @@ impl ScheduledTickUseCase {
                                 } else {
                                     let _ = self.session_store.update_scheduled_task_result(task.id, "success", None, duration).await;
                                     let _ = self.session_store.record_scheduled_task_run(task.id, &task.title, &task.target_jid, "success", duration, None, None).await;
+                                    let _ = self.session_store.resolve_metacognitive_prediction(
+                                        &pred_id,
+                                        1.0,
+                                        duration,
+                                        None,
+                                    ).await;
                                 }
                             }
                             Err(e) => {
@@ -227,6 +266,13 @@ impl ScheduledTickUseCase {
                                 error!("Agent failed to execute scheduled task #{}: {}", task.id, e);
                                 let _ = self.session_store.update_scheduled_task_result(task.id, "failed", Some(&err_str), duration).await;
                                 let _ = self.session_store.record_scheduled_task_run(task.id, &task.title, &task.target_jid, "failed", duration, Some(&err_str), None).await;
+
+                                let _ = self.session_store.resolve_metacognitive_prediction(
+                                    &pred_id,
+                                    0.0,
+                                    duration,
+                                    Some(&err_str),
+                                ).await;
 
                                 let err_msg = format!("⚠️ _Gagal menjalankan tugas terjadwal '{}': {}_", task.title, e);
                                 let fallback_target = if is_story {

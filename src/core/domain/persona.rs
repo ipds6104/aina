@@ -351,6 +351,8 @@ impl PersonaEngine {
                 - Balon chat kedua (setelah `<<<SPLIT_CHAT>>>`): Wajib MURNI teks draf yang siap di-forward ke grup/orang lain (diawali langsung dari salam/judul pengumuman hingga salam penutup). DILARANG KERAS menyelipkan kalimat pengantar bot (seperti '*(Format Pesan Khusus Siap Kirim ke Grup PML di Bawah Ini)* 👇') di dalam balon draf kedua, agar pengguna bisa langsung 1-klik Forward atau Copy tanpa perlu repot mengedit atau menghapus teks di HP!\n\
             - PERINGATAN KERAS: Gateway WhatsApp berada di URL di atas ({whatsmeow_url}), BUKAN di http://localhost:3000. DILARANG KERAS berasumsi, mem-probing, atau melakukan curl ke http://localhost:3000.\n\n\
             ---\n\
+            {metacog_context}\n\n\
+            ---\n\
             [Disiplin Berpikir Internal - HANYA UNTUK INTERNAL, JANGAN PERNAH DISEBUTKAN DI CHAT]:\n\
             - Verifikasi Faktual: Selalu verifikasi data teknis dan jaringan sebelum menyimpulkan. Jangan berasumsi sepihak.\n\
             - Kehati-hatian & Konfirmasi Bertahap: Tahan diri dari spekulasi saat informasi belum lengkap. Kamu berhak dan dianjurkan meminta konfirmasi lebih dari sekali (misal: setelah memanggil tool inspeksi dan menemukan beberapa opsi atau konsekuensi baru).\n\
@@ -400,7 +402,8 @@ impl PersonaEngine {
             quoted_context = quoted_context,
             text = msg.text,
             knowledge_context = knowledge_context,
-            platform_format_guidelines = platform_format_guidelines
+            platform_format_guidelines = platform_format_guidelines,
+            metacog_context = crate::core::domain::metacognition::AgentCapabilityManifest::default_manifest().to_prompt_context()
         )
     }
 }

@@ -87,6 +87,9 @@ pub fn create_router(state: Arc<WebhookServerState>) -> Router {
         .route("/api/schedule/diagnostics", get(api_schedule_diagnostics_handler))
         .route("/api/persona/diagnostics", get(api_persona_diagnostics_handler))
         .route("/api/persona/journal", get(api_persona_journal_handler))
+        .route("/api/metacognition/diagnostics", get(api_metacog_diagnostics_handler))
+        .route("/api/metacognition/capabilities", get(api_metacog_capabilities_handler))
+        .route("/api/metacognition/calibration", get(api_metacog_calibration_handler))
         .route("/api/audit/actions", get(api_audit_actions_handler))
         .route("/api/audit/actions/{id}", get(api_audit_action_detail_handler))
         .route("/api/audit/summary", get(api_audit_summary_handler))
@@ -443,6 +446,66 @@ async fn api_persona_journal_handler(
             Json(json!({
                 "success": false,
                 "error": format!("Gagal menjalankan proses python: {}", e),
+            })),
+        ),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct MetacogQuery {
+    pub domain: Option<String>,
+    pub limit: Option<usize>,
+}
+
+async fn api_metacog_diagnostics_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    Query(query): Query<MetacogQuery>,
+) -> impl IntoResponse {
+    let manifest = crate::core::domain::metacognition::AgentCapabilityManifest::default_manifest();
+    let stats = state.session_store.get_metacognitive_calibration_stats().await.ok();
+    let limit = query.limit.unwrap_or(10);
+    let recent = state.session_store.list_metacognitive_predictions(limit, query.domain.as_deref()).await.unwrap_or_default();
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "manifest": manifest,
+            "calibration": stats,
+            "recent_predictions": recent,
+        })),
+    )
+}
+
+async fn api_metacog_capabilities_handler() -> impl IntoResponse {
+    let manifest = crate::core::domain::metacognition::AgentCapabilityManifest::default_manifest();
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "capabilities": manifest,
+        })),
+    )
+}
+
+async fn api_metacog_calibration_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    Query(query): Query<MetacogQuery>,
+) -> impl IntoResponse {
+    match state.session_store.get_metacognitive_calibration_stats().await {
+        Ok(stats) => (
+            StatusCode::OK,
+            Json(json!({
+                "success": true,
+                "domain": query.domain,
+                "calibration": stats,
+            })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "success": false,
+                "error": format!("Gagal memuat statistik kalibrasi metakognisi: {}", e),
             })),
         ),
     }

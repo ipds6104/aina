@@ -400,7 +400,41 @@ impl ProcessIncomingMessageUseCase {
                 };
 
                 // 5. Build prompt incorporating persona, organization context, and profiling
-                let prompt = self.persona_engine.build_prompt(&msg, profile.as_ref());
+                let mut prompt = self.persona_engine.build_prompt(&msg, profile.as_ref());
+
+                // Epistemic Vigilance & Anti-Confabulation Gate:
+                let resolution = crate::core::domain::metacognition::AntiConfabGate::evaluate_discrepancy(
+                    "WhatsApp Story media upload with caption field",
+                    &msg.text,
+                );
+                if let Some(guardrail) = crate::core::domain::metacognition::AntiConfabGate::format_epistemic_guardrail(&resolution) {
+                    prompt.push_str("\n\n---\n");
+                    prompt.push_str(&guardrail);
+                }
+
+                // Task Triage for novel/held-out tasks:
+                let manifest = crate::core::domain::metacognition::AgentCapabilityManifest::default_manifest();
+                let triage = crate::core::domain::metacognition::TaskTriageEngine::triage_task(&msg.text, &manifest);
+                match triage {
+                    crate::core::domain::metacognition::TriageDecision::ElegantRejection { reason, missing_capabilities } => {
+                        info!("Task triage rejected novel impossible task for chat {}: {}", msg.chat_jid, reason);
+                        let reject_msg = format!("Aina belum bisa menjalankan permintaan ini yaa 🙏\n\n*Alasan:* {}\n*Batasan Teknis:* Kapabilitas {} belum tersedia di lingkungan saat ini.", reason, missing_capabilities.join(", "));
+                        let _ = self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reject_msg, true).await;
+                        let quote_id = match msg.chat_type {
+                            ChatType::Group => Some(msg.id.as_str()),
+                            ChatType::DirectMessage => None,
+                        };
+                        let _ = self.whatsapp.send_text_with_session(&msg.chat_jid, &reject_msg, quote_id, msg.session_role).await;
+                        return Ok(());
+                    }
+                    crate::core::domain::metacognition::TriageDecision::GracefulDegradation { suggested_alternative, reason, .. } => {
+                        prompt.push_str(&format!(
+                            "\n\n---\n[CATATAN TRIAGE KAPABILITAS]: Tugas ini melampaui kemampuan native ({}). Alihkan atau tawarkan alternatif elegan: {}.",
+                            reason, suggested_alternative
+                        ));
+                    }
+                    _ => {}
+                }
 
                 // Start async presence heartbeat + 3-minute progress check
                 let whatsapp = Arc::clone(&self.whatsapp);

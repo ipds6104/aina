@@ -3,6 +3,7 @@ pub mod audit;
 pub mod gatekeeper;
 pub mod knowledge;
 pub mod message;
+pub mod metacognition;
 pub mod persona;
 pub mod scheduler;
 pub mod sensor;
@@ -13,6 +14,7 @@ pub use audit::*;
 pub use gatekeeper::Gatekeeper;
 pub use knowledge::KnowledgeEngine;
 pub use message::*;
+pub use metacognition::*;
 pub use persona::PersonaEngine;
 pub use scheduler::*;
 #[allow(unused_imports)]

@@ -116,4 +116,26 @@ pub trait SessionStorePort: Send + Sync {
 
     /// Aggregates an audit summary report across all recorded actions.
     async fn get_action_audit_summary(&self) -> anyhow::Result<crate::core::domain::AuditSummaryReport>;
+
+    /// Records an ex-ante metacognitive prediction before task execution.
+    async fn record_metacognitive_prediction(&self, pred: &crate::core::domain::NewMetacognitivePrediction) -> anyhow::Result<i64>;
+
+    /// Resolves an ex-ante metacognitive prediction with actual ground truth outcome and calculates Brier score.
+    async fn resolve_metacognitive_prediction(
+        &self,
+        prediction_id: &str,
+        actual_outcome: f64,
+        duration_secs: f64,
+        error_detail: Option<&str>,
+    ) -> anyhow::Result<()>;
+
+    /// Lists recent metacognitive predictions, optionally filtered by domain type.
+    async fn list_metacognitive_predictions(
+        &self,
+        limit: usize,
+        domain_filter: Option<&str>,
+    ) -> anyhow::Result<Vec<crate::core::domain::MetacognitivePrediction>>;
+
+    /// Calculates aggregate metacognitive calibration statistics (Brier score, BSS, reliability buckets).
+    async fn get_metacognitive_calibration_stats(&self) -> anyhow::Result<crate::core::domain::MetacognitiveCalibrationStats>;
 }
