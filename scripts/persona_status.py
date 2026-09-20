@@ -498,6 +498,7 @@ def main():
         weekend = is_weekend(now)
         decision, reason = should_post_now(today_entries, slot)
         recent_themes = [e.get("theme") for e in journal[-5:] if e.get("theme")]
+        recent_outfits = [e.get("outfit") or e.get("anchor_clothes", "default") for e in journal[-5:] if e.get("outfit") or e.get("anchor_clothes")]
         avatar_ref = get_avatar_reference_path()
 
         print("✨ [RUANG IMAJINASI MANDIRI AINA]")
@@ -505,13 +506,15 @@ def main():
         print(f"• Slot Waktu       : {slot.upper()} ({'Weekend / Libur & Alam' if weekend else 'Weekday / Remote Work & WFH'})")
         print(f"• Status Hari Ini  : {len(today_entries)}/2 status (Evaluasi: {'✅ Wajib/Boleh Posting' if decision else '⏸️ Istirahat'})")
         print(f"• Catatan Keputusan: {reason}")
-        print(f"• 5 Tema Terakhir  : {recent_themes if recent_themes else '(Belum ada riwayat status)'}")
+        print(f"• 5 Tema Terakhir  : {recent_themes if recent_themes else '(Belum ada riwayat tema)'}")
+        print(f"• 5 Busana Terakhir: {recent_outfits if recent_outfits else '(Belum ada riwayat busana)'}")
         print(f"• Avatar Acuan     : {avatar_ref or 'Mengandalkan prompt anchors teks'}")
         print("\n💡 Panduan untuk Aina (LLM Creative Imagination):")
         print("1. Kamu memiliki kebebasan penuh membayangkan adegan apa pun yang kamu inginkan!")
-        print("2. Jadikan 5 tema terakhir sebagai acuan untuk mencari suasana baru (novelty) agar harimu tidak monoton.")
+        print("2. Jadikan 5 tema & busana terakhir sebagai acuan untuk mencari suasana baru (novelty) agar harimu tidak monoton.")
         print("3. Tetap jaga jangkar visualmu (rambut panjang silver-lavender kepang samping, mata biru berbintang, jepit bulan sabit/bintang, gaya Makoto Shinkai).")
-        print("4. Pilih busana yang cocok dari lemari pakaian dinamis (wfh_cozy, smart_casual, outdoor_nature, night_stargaze, celestial_sig).")
+        print("4. Pilih busana dari 5 preset utama (wfh_cozy, smart_casual, outdoor_nature, night_stargaze, celestial_sig).")
+        print("   * Eksplorasi Busana On-the-Spot: Jika kamu merasa bosan dengan pakaian yang sering dipakai, kamu boleh meracik busana baru sendiri via flag `--clothes \"<busana_baru>\"` (batasi maksimal 1–2 kali per minggu agar tetap terasa spesial dan konsisten).")
         print("5. Buat prompt visual yang kaya detail sensorik dan rangkai caption hangat 'Impact Maxxing'.")
         print("\n🚀 Cara Memposting Hasil Imajinasi Sendiri:")
         print("python3 scripts/persona_status.py post --custom \\")
@@ -521,6 +524,7 @@ def main():
         print("  --scene \"<deskripsi_adegan_dan_suasana>\" \\")
         print("  --caption \"<caption_hangat_impact_maxxing>\" \\")
         print("  --reflection \"<alasan_memilih_momen_ini>\"")
+        print("  # (Opsi tambahan: ganti --outfit dengan --clothes \"<busana_baru_on_the_spot>\" jika ingin kreasi baju baru)")
 
     elif args.command == "generate":
         slot = args.slot or get_time_slot(now)
