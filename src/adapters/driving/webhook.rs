@@ -85,6 +85,8 @@ pub fn create_router(state: Arc<WebhookServerState>) -> Router {
         .route("/api/schedule/tasks", get(api_schedule_tasks_handler))
         .route("/api/schedule/runs", get(api_schedule_runs_handler))
         .route("/api/schedule/diagnostics", get(api_schedule_diagnostics_handler))
+        .route("/api/persona/diagnostics", get(api_persona_diagnostics_handler))
+        .route("/api/persona/journal", get(api_persona_journal_handler))
         .route("/api/audit/actions", get(api_audit_actions_handler))
         .route("/api/audit/actions/{id}", get(api_audit_action_detail_handler))
         .route("/api/audit/summary", get(api_audit_summary_handler))
@@ -293,6 +295,154 @@ async fn api_schedule_diagnostics_handler(
             Json(json!({
                 "success": false,
                 "error": format!("Gagal mengambil metrik diagnostik scheduler: {}", e),
+            })),
+        ),
+    }
+}
+
+async fn api_persona_diagnostics_handler() -> impl IntoResponse {
+    let script_candidates = [
+        PathBuf::from("scripts/persona_status.py"),
+        PathBuf::from("/app/scripts/persona_status.py"),
+        PathBuf::from("/root/projects/aina/scripts/persona_status.py"),
+    ];
+
+    let resolved = script_candidates
+        .into_iter()
+        .find(|p| p.exists())
+        .unwrap_or_else(|| PathBuf::from("scripts/persona_status.py"));
+
+    if !resolved.exists() {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "success": false,
+                "error": "Skrip persona_status.py tidak ditemukan di server",
+            })),
+        );
+    }
+
+    match tokio::process::Command::new("python3")
+        .arg(&resolved)
+        .arg("diag")
+        .arg("--json")
+        .output()
+        .await
+    {
+        Ok(output) if output.status.success() => {
+            let text = String::from_utf8_lossy(&output.stdout);
+            match serde_json::from_str::<serde_json::Value>(&text) {
+                Ok(val) => (
+                    StatusCode::OK,
+                    Json(json!({
+                        "success": true,
+                        "diagnostics": val,
+                    })),
+                ),
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({
+                        "success": false,
+                        "error": format!("Gagal mem-parsing output diagnostik JSON: {}", e),
+                        "raw": text,
+                    })),
+                ),
+            }
+        }
+        Ok(output) => {
+            let err = String::from_utf8_lossy(&output.stderr);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "success": false,
+                    "error": format!("Eksekusi diag gagal: {}", err),
+                })),
+            )
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "success": false,
+                "error": format!("Gagal menjalankan proses python: {}", e),
+            })),
+        ),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct PersonaJournalQuery {
+    limit: Option<usize>,
+}
+
+async fn api_persona_journal_handler(
+    Query(query): Query<PersonaJournalQuery>,
+) -> impl IntoResponse {
+    let limit = query.limit.unwrap_or(20);
+    let script_candidates = [
+        PathBuf::from("scripts/persona_status.py"),
+        PathBuf::from("/app/scripts/persona_status.py"),
+        PathBuf::from("/root/projects/aina/scripts/persona_status.py"),
+    ];
+
+    let resolved = script_candidates
+        .into_iter()
+        .find(|p| p.exists())
+        .unwrap_or_else(|| PathBuf::from("scripts/persona_status.py"));
+
+    if !resolved.exists() {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "success": false,
+                "error": "Skrip persona_status.py tidak ditemukan di server",
+            })),
+        );
+    }
+
+    match tokio::process::Command::new("python3")
+        .arg(&resolved)
+        .arg("history")
+        .arg("--limit")
+        .arg(limit.to_string())
+        .arg("--json")
+        .output()
+        .await
+    {
+        Ok(output) if output.status.success() => {
+            let text = String::from_utf8_lossy(&output.stdout);
+            match serde_json::from_str::<serde_json::Value>(&text) {
+                Ok(val) => (
+                    StatusCode::OK,
+                    Json(json!({
+                        "success": true,
+                        "journal": val,
+                    })),
+                ),
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({
+                        "success": false,
+                        "error": format!("Gagal mem-parsing output journal JSON: {}", e),
+                        "raw": text,
+                    })),
+                ),
+            }
+        }
+        Ok(output) => {
+            let err = String::from_utf8_lossy(&output.stderr);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "success": false,
+                    "error": format!("Eksekusi journal gagal: {}", err),
+                })),
+            )
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "success": false,
+                "error": format!("Gagal menjalankan proses python: {}", e),
             })),
         ),
     }

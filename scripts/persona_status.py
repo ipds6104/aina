@@ -36,16 +36,16 @@ def get_time_slot(dt=None):
     if dt is None:
         dt = get_current_wib_time()
     hour = dt.hour + dt.minute / 60.0
-    if 6.0 <= hour < 10.5:
+    if 6.0 <= hour < 11.0:
         return "pagi"
-    elif 11.5 <= hour < 15.0:
+    elif 11.0 <= hour < 15.5:
         return "siang"
-    elif 16.5 <= hour < 19.5:
+    elif 15.5 <= hour < 19.0:
         return "sore"
-    elif 19.5 <= hour < 23.5:
+    elif 19.0 <= hour < 23.0:
         return "malam"
     else:
-        # Dini hari / malam larut -> istirahat
+        # 23:00 - 06:00: Dini hari / malam larut -> istirahat
         return "tengah_malam"
 
 def is_weekend(dt=None):
@@ -413,6 +413,7 @@ def execute_generate_and_post(activity, prompt, avatar_ref=None, dry_run=False):
     timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
     image_name = f"status_{activity['theme']}_{timestamp_str}.png"
     target_path = os.path.join(output_dir, image_name)
+    start_time = time.time()
 
     print(f"\n🎨 [1/3] Menyiapkan Prompt Gambar Makoto Shinkai:")
     print(f"• Tema: {activity['theme']}")
@@ -425,12 +426,12 @@ def execute_generate_and_post(activity, prompt, avatar_ref=None, dry_run=False):
     print(f"\n📝 [2/3] Caption Status WhatsApp (Impact Maxxing):")
     print(f"  \"{activity['caption']}\"\n")
 
+    duration_secs = time.time() - start_time
     if dry_run:
         print("💡 [DRY-RUN] Melewati pembuatan gambar nyata dan posting WhatsApp.")
-        return True, target_path
+        return True, target_path, "dry_run", None, duration_secs
 
     # Pemanggilan generate_image atau placeholder pembuatan
-    # Jika berjalan di dalam lingkungan Aina dengan wa_tool.py:
     wa_tool = os.path.join(BASE_DIR, "skills", "whatsmeow", "scripts", "wa_tool.py")
     if os.path.exists(target_path):
         import subprocess
@@ -441,14 +442,99 @@ def execute_generate_and_post(activity, prompt, avatar_ref=None, dry_run=False):
             "--caption", activity['caption']
         ]
         res = subprocess.run(cmd, capture_output=True, text=True)
+        duration_secs = time.time() - start_time
         print(res.stdout)
         if res.returncode != 0:
-            print(f"⚠️ Error wa_tool: {res.stderr}")
-            return False, target_path
+            err_msg = res.stderr.strip() or "wa_tool status-send-media returned non-zero exit code"
+            print(f"⚠️ Error wa_tool: {err_msg}")
+            return False, target_path, "failed", err_msg, duration_secs
+        return True, target_path, "published", None, duration_secs
     else:
         print(f"ℹ️ Target gambar akan di-generate via antarmuka agy/generate_image ke: {target_path}")
+        duration_secs = time.time() - start_time
+        return True, target_path, "draft_ready", None, duration_secs
 
-    return True, target_path
+def get_diagnostics():
+    now = get_current_wib_time()
+    journal = load_journal()
+    today_entries = get_today_entries(journal, now)
+    slot = get_time_slot(now)
+    weekend = is_weekend(now)
+    decision, reason = should_post_now(today_entries, slot)
+
+    avatar_ref = get_avatar_reference_path()
+    avatar_exists = avatar_ref is not None and os.path.exists(avatar_ref)
+    avatar_source = "none"
+    if avatar_ref:
+        if "data/assets" in avatar_ref:
+            avatar_source = "persistent_data"
+        elif "character_sheet.default" in avatar_ref:
+            avatar_source = "repo_default_fallback"
+        else:
+            avatar_source = "custom_assets"
+
+    wa_tool_path = os.path.join(BASE_DIR, "skills", "whatsmeow", "scripts", "wa_tool.py")
+    wa_tool_ready = os.path.exists(wa_tool_path)
+
+    total_lifetime = len(journal)
+    published_entries = [e for e in journal if e.get("status") in ["published", "draft_ready", None]]
+    failed_entries = [e for e in journal if e.get("status") == "failed"]
+    today_published = [e for e in today_entries if e.get("status") in ["published", "draft_ready", None]]
+
+    last_entry = journal[-1] if journal else None
+    last_published = published_entries[-1] if published_entries else None
+    last_failure = failed_entries[-1] if failed_entries else None
+
+    recent_themes = [e.get("theme") for e in journal[-5:] if e.get("theme")]
+    recent_outfits = [e.get("outfit") for e in journal[-5:] if e.get("outfit")]
+
+    slot_hours = {
+        "pagi": "06:30 - 10:30 WIB",
+        "siang": "11:30 - 15:00 WIB",
+        "sore": "16:30 - 19:30 WIB",
+        "malam": "19:30 - 23:30 WIB",
+        "tengah_malam": "23:30 - 06:30 WIB (Istirahat)",
+    }
+
+    return {
+        "timestamp": now.isoformat(),
+        "wib_time_str": now.strftime("%A, %d %B %Y %H:%M:%S WIB"),
+        "day_mode": "weekend" if weekend else "weekday",
+        "day_mode_desc": "Weekend (Libur, Alam, & Healing)" if weekend else "Weekday (Remote Software Engineer / WFH)",
+        "current_slot": slot,
+        "slot_window": slot_hours.get(slot, "Unknown"),
+        "today_quota": {
+            "current_attempts": len(today_entries),
+            "published_today": len(today_published),
+            "max": 2,
+            "min_guarantee": 1,
+            "can_post_now": decision,
+            "decision_reason": reason,
+        },
+        "character_sheet": {
+            "resolved_path": avatar_ref,
+            "source": avatar_source,
+            "exists": avatar_exists,
+            "file_size_bytes": os.path.getsize(avatar_ref) if avatar_exists else 0,
+        },
+        "tooling": {
+            "wa_tool_path": wa_tool_path,
+            "wa_tool_ready": wa_tool_ready,
+            "output_dir": os.path.join(BASE_DIR, "output", "status"),
+        },
+        "statistics": {
+            "total_lifetime_entries": total_lifetime,
+            "successful_published": len(published_entries),
+            "failed_attempts": len(failed_entries),
+        },
+        "recent_activity": {
+            "recent_themes": recent_themes,
+            "recent_outfits": recent_outfits,
+            "last_entry": last_entry,
+            "last_published": last_published,
+            "last_failure": last_failure,
+        }
+    }
 
 def main():
     parser = argparse.ArgumentParser(description="Aina Autonomous WhatsApp Status Manager")
@@ -493,6 +579,11 @@ def main():
     # history
     p_hist = subparsers.add_parser("history", help="Lihat riwayat status yang pernah di-post")
     p_hist.add_argument("--limit", type=int, default=10, help="Jumlah entri")
+    p_hist.add_argument("--json", action="store_true", help="Output format JSON terstruktur")
+
+    # diag (Observabilitas)
+    p_diag = subparsers.add_parser("diag", help="Diagnostik & Observabilitas Persona Status Engine")
+    p_diag.add_argument("--json", action="store_true", help="Output format JSON terstruktur")
 
     args = parser.parse_args()
     if not args.command:
@@ -502,6 +593,66 @@ def main():
     journal = load_journal()
     now = get_current_wib_time()
     today_entries = get_today_entries(journal, now)
+
+    if args.command == "diag":
+        diag = get_diagnostics()
+        if getattr(args, "json", False):
+            print(json.dumps(diag, indent=2, ensure_ascii=False))
+            return
+
+        print("🩺 Diagnostik & Observabilitas Persona Status Aina")
+        print("================================================================================")
+        print(f"  Waktu Saat Ini        : {diag['wib_time_str']}")
+        print(f"  Mode Keseharian       : {diag['day_mode_desc']}")
+        print(f"  Slot Waktu Saat Ini   : {diag['current_slot'].upper()} ({diag['slot_window']})")
+        q = diag['today_quota']
+        st_eval = "✅ POSTING" if q['can_post_now'] else "⏸️ SKIP"
+        print(f"  Evaluasi Slot Saat Ini: {st_eval} ({q['decision_reason']})")
+        print("--------------------------------------------------------------------------------")
+        print("📊 Observabilitas Kuota Harian:")
+        print(f"  Status Hari Ini       : {q['current_attempts']} / {q['max']} maksimal (Target min: {q['min_guarantee']})")
+        print(f"  Status Terpublikasi   : {q['published_today']} berhasil")
+        print(f"  Total Entri Seumur    : {diag['statistics']['total_lifetime_entries']} status")
+        print("--------------------------------------------------------------------------------")
+        print("🖼️ Status Character Sheet (Anti-Visual Drift):")
+        cs = diag['character_sheet']
+        cs_st = "✅ Siap" if cs['exists'] else "❌ Tidak Ditemukan"
+        src_map = {
+            "persistent_data": "Persistent Volume (/app/data/assets)",
+            "custom_assets": "Custom Assets (assets/)",
+            "repo_default_fallback": "Repo Default Fallback (character_sheet.default.png)",
+            "none": "Belum Dikonfigurasi"
+        }
+        print(f"  Status Berkas         : {cs_st} ({src_map.get(cs['source'], cs['source'])})")
+        print(f"  Jalur Acuan           : {cs['resolved_path'] or '(Tidak ada)'}")
+        if cs['exists']:
+            print(f"  Ukuran Berkas         : {cs['file_size_bytes'] / 1024:.1f} KB")
+        print("--------------------------------------------------------------------------------")
+        print("🛠️ Kesiapan Perangkat & Tooling:")
+        tool = diag['tooling']
+        wa_st = "✅ Siap" if tool['wa_tool_ready'] else "⚠️ Tidak Ditemukan"
+        print(f"  wa_tool.py            : {wa_st} ({tool['wa_tool_path']})")
+        print(f"  Direktori Output      : {tool['output_dir']}")
+        print("--------------------------------------------------------------------------------")
+        print("📜 Riwayat Aktivitas Terakhir:")
+        rec = diag['recent_activity']
+        if rec['last_published']:
+            lp = rec['last_published']
+            print(f"  Publikasi Terakhir    : [{lp.get('date')} {lp.get('time_str')}] Slot: {lp.get('slot')}")
+            print(f"    Tema / Outfit       : {lp.get('theme')} | {lp.get('outfit', 'default')}")
+            print(f"    Status Eksekusi     : {lp.get('status', 'published').upper()} (Durasi: {lp.get('duration_secs', 0):.2f}s)")
+            print(f"    Caption Preview     : \"{lp.get('caption', '')[:60]}...\"")
+        else:
+            print("  Publikasi Terakhir    : (Belum ada status yang terpublikasi)")
+
+        if rec['last_failure']:
+            lf = rec['last_failure']
+            print(f"  Kegagalan Terakhir    : [{lf.get('date')} {lf.get('time_str')}] Slot: {lf.get('slot')}")
+            print(f"    Error Message       : {lf.get('error_message')}")
+        else:
+            print("  Kegagalan Terakhir    : (Tidak ada kegagalan tercatat)")
+        print("================================================================================")
+        return
 
     if args.command == "check":
         slot = args.slot or get_time_slot(now)
@@ -520,16 +671,16 @@ def main():
         weekend = is_weekend(now)
         decision, reason = should_post_now(today_entries, slot)
         recent_themes = [e.get("theme") for e in journal[-5:] if e.get("theme")]
-        recent_outfits = [e.get("outfit") or e.get("anchor_clothes", "default") for e in journal[-5:] if e.get("outfit") or e.get("anchor_clothes")]
+        recent_outfits = [e.get("outfit") for e in journal[-5:] if e.get("outfit")]
         avatar_ref = get_avatar_reference_path()
 
         print("✨ [RUANG IMAJINASI MANDIRI AINA]")
         print(f"• Waktu Sekarang   : {now.strftime('%A, %d %B %Y %H:%M:%S')} WIB")
-        print(f"• Slot Waktu       : {slot.upper()} ({'Weekend / Libur & Alam' if weekend else 'Weekday / Remote Work & WFH'})")
-        print(f"• Status Hari Ini  : {len(today_entries)}/2 status (Evaluasi: {'✅ Wajib/Boleh Posting' if decision else '⏸️ Istirahat'})")
+        print(f"• Slot Waktu       : {slot.upper()} ({'Weekend / Libur & Alam' if weekend else 'Weekday / Remote Work'})")
+        print(f"• Status Hari Ini  : {len(today_entries)}/2 status (Evaluasi: {'✅ Siap Posting' if decision else '⏸️ Istirahat'})")
         print(f"• Catatan Keputusan: {reason}")
-        print(f"• 5 Tema Terakhir  : {recent_themes if recent_themes else '(Belum ada riwayat tema)'}")
-        print(f"• 5 Busana Terakhir: {recent_outfits if recent_outfits else '(Belum ada riwayat busana)'}")
+        print(f"• 5 Tema Terakhir  : {', '.join(recent_themes) if recent_themes else '(Belum ada riwayat tema)'}")
+        print(f"• 5 Busana Terakhir: {', '.join(recent_outfits) if recent_outfits else '(Belum ada riwayat busana)'}")
         print(f"• Avatar Acuan     : {avatar_ref or 'Mengandalkan prompt anchors teks'}")
         print("\n💡 Panduan untuk Aina (LLM Creative Imagination):")
         print("1. Kamu memiliki kebebasan penuh membayangkan adegan apa pun yang kamu inginkan!")
@@ -546,7 +697,7 @@ def main():
         print("  --scene \"<deskripsi_adegan_dan_suasana>\" \\")
         print("  --caption \"<caption_hangat_impact_maxxing>\" \\")
         print("  --reflection \"<alasan_memilih_momen_ini>\"")
-        print("  # (Opsi tambahan: ganti --outfit dengan --clothes \"<busana_baru_on_the_spot>\" jika ingin kreasi baju baru)")
+        print("  # (Opsi tambahan: ganti --outfit dengan --clothes \"<busana_baru_on_the_spot>\" jika ingin kreasi baju baru)\n")
 
     elif args.command == "generate":
         slot = args.slot or get_time_slot(now)
@@ -573,10 +724,11 @@ def main():
 
         prompt = build_makoto_shinkai_prompt(chosen, weekend)
         avatar_ref = get_avatar_reference_path()
-        print(f"✨ Rekomendasi Status [{slot.upper()} - {'WEEKEND' if weekend else 'WEEKDAY'}]:")
+        print(f"🎬 [DRAF STATUS AINA]")
+        print(f"• Slot: {slot.upper()} | Hari: {'Weekend' if weekend else 'Weekday'}")
         print(f"• Tema              : {chosen['theme']}")
-        print(f"• Sudut Kamera      : {chosen.get('framing', 'selfie').upper()}")
-        print(f"• Busana / Outfit   : {chosen.get('outfit', 'default').upper()}")
+        print(f"• Sudut Kamera      : {chosen.get('framing', 'selfie').upper()} ({FRAMING_STYLES.get(chosen.get('framing', 'selfie'), '')})")
+        print(f"• Busana / Wardrobe : {chosen.get('outfit', 'default').upper()} ({chosen.get('anchor_clothes')})")
         print(f"• Refleksi Kebosanan: {chosen['boredom_reflection']}")
         print(f"• Elemen Kejutan    : {chosen['novelty_twist']}")
         print(f"• Caption:\n  \"{chosen['caption']}\"")
@@ -625,41 +777,63 @@ def main():
         print(f"👗 Busana/Outfit : {chosen.get('outfit', 'default').upper()}")
         print(f"✨ Kejutan Spontan: {chosen['novelty_twist']}")
 
-        success, img_path = execute_generate_and_post(chosen, prompt, avatar_ref, dry_run=args.dry_run)
+        success, img_path, status_label, error_msg, duration_secs = execute_generate_and_post(
+            chosen, prompt, avatar_ref, dry_run=args.dry_run
+        )
+        entry = {
+            "id": f"status_{now.strftime('%Y%m%d_%H%M%S')}_{slot}",
+            "date": now.strftime("%Y-%m-%d"),
+            "timestamp_epoch": int(now.timestamp()),
+            "time_str": now.strftime("%H:%M:%S WIB"),
+            "slot": slot,
+            "is_weekend": weekend,
+            "theme": chosen["theme"],
+            "framing": chosen.get("framing", "selfie"),
+            "outfit": chosen.get("outfit", "wfh_cozy" if not weekend else "outdoor_nature"),
+            "boredom_reflection": chosen.get("boredom_reflection", ""),
+            "novelty_twist": chosen.get("novelty_twist", ""),
+            "caption": chosen["caption"],
+            "image_path": img_path,
+            "image_exists": os.path.exists(img_path),
+            "image_size_bytes": os.path.getsize(img_path) if os.path.exists(img_path) else 0,
+            "avatar_ref": avatar_ref,
+            "status": status_label,
+            "error_message": error_msg,
+            "duration_secs": round(duration_secs, 3),
+        }
+        append_journal(entry)
         if success:
-            entry = {
-                "date": now.strftime("%Y-%m-%d"),
-                "timestamp_epoch": int(now.timestamp()),
-                "time_str": now.strftime("%H:%M:%S WIB"),
-                "slot": slot,
-                "is_weekend": weekend,
-                "theme": chosen["theme"],
-                "framing": chosen.get("framing", "selfie"),
-                "outfit": chosen.get("outfit", "wfh_cozy" if not weekend else "outdoor_nature"),
-                "boredom_reflection": chosen["boredom_reflection"],
-                "novelty_twist": chosen["novelty_twist"],
-                "caption": chosen["caption"],
-                "image_path": img_path
-            }
-            append_journal(entry)
-            print(f"✅ Status berhasil dicatat ke {JOURNAL_FILE}")
+            print(f"✅ Status berhasil dicatat ke {JOURNAL_FILE} (Status: {status_label})")
+        else:
+            print(f"⚠️ Kegagalan dicatat ke {JOURNAL_FILE} (Status: {status_label}, Error: {error_msg})")
 
     elif args.command == "history":
         limit = args.limit
+        if getattr(args, "json", False):
+            print(json.dumps(journal[-limit:], indent=2, ensure_ascii=False))
+            return
+
         print(f"📜 Riwayat Status WhatsApp Aina (Total: {len(journal)} entri):")
         if not journal:
             print("(Belum ada riwayat status yang tercatat)")
         else:
             for i, e in enumerate(journal[-limit:], 1):
                 mode = "Weekend" if e.get("is_weekend") else "Weekday"
-                print(f"{i}. [{e.get('date')} {e.get('time_str')}] Slot: {e.get('slot')} ({mode})")
+                st = e.get("status", "published").upper()
+                st_icon = "✅" if st in ["PUBLISHED", "DRAFT_READY"] else "❌" if st == "FAILED" else "💡"
+                print(f"{i}. [{e.get('date')} {e.get('time_str')}] Slot: {e.get('slot')} ({mode}) {st_icon} {st}")
                 print(f"   Tema     : {e.get('theme')}")
+                if e.get("framing") or e.get("outfit"):
+                    print(f"   Visual   : Framing: {e.get('framing', 'selfie')} | Outfit: {e.get('outfit', 'default')}")
                 if e.get("boredom_reflection"):
                     print(f"   Refleksi : {e.get('boredom_reflection')}")
                 if e.get("novelty_twist"):
                     print(f"   Kejutan  : {e.get('novelty_twist')}")
                 print(f"   Caption  : \"{e.get('caption')}\"")
-                print(f"   Gambar   : {e.get('image_path')}\n")
+                print(f"   Gambar   : {e.get('image_path')}")
+                if e.get("error_message"):
+                    print(f"   Error    : {e.get('error_message')}")
+                print()
 
 if __name__ == "__main__":
     main()

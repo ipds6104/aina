@@ -144,6 +144,23 @@ PENGGUNAAN:
 
     schedule delete <id>      Hapus tugas terjadwal berdasarkan ID
 
+    persona diag              Diagnostik & observabilitas Persona Status Engine
+                              Options:
+                                --json                  Output format JSON terstruktur
+
+    persona journal           Riwayat jurnal publikasi status WhatsApp Aina
+                              Options:
+                                --limit <n>             Jumlah entri yang ditampilkan (default: 10)
+                                --json                  Output format JSON terstruktur
+
+    persona check             Periksa evaluasi slot dan kuota status WhatsApp saat ini
+
+    persona post              Eksekusi pembuatan & publikasi status WhatsApp Aina
+                              Options:
+                                --slot <slot>           Override slot (pagi, siang, sore, malam)
+                                --force                 Bypass kuota/peluang posting
+                                --dry-run               Simulasi tanpa generate/upload
+
     model get                 Tampilkan model AI aktif saat ini
                               Options:
                                 --json                  Output format JSON terstruktur
@@ -198,6 +215,7 @@ PENGGUNAAN:
             "status" => Self::handle_whatsapp(&args[1..]),
             "user" | "profile" => Self::handle_user(&args[2..]),
             "schedule" | "cron" => Self::handle_schedule(&args[2..]).await,
+            "persona" => Self::handle_persona(&args[2..]).await,
             "model" => Self::handle_model(&args[2..]).await,
             _ => {
                 eprintln!("Subcommand tidak dikenal: `{}`. Ketik `aina help`.", cmd);
@@ -1842,5 +1860,93 @@ PENGGUNAAN:
         let mut check_args = vec!["--check".to_string()];
         check_args.extend_from_slice(args);
         Self::handle_version(&check_args).await
+    }
+
+    async fn handle_persona(args: &[String]) -> anyhow::Result<()> {
+        if args.is_empty() || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
+            println!(
+                r#"Manajemen Observabilitas & Status WhatsApp Persona Aina:
+    aina persona diag [--json]           Diagnostik & observabilitas Persona Status Engine
+    aina persona journal [--limit <n>]   Riwayat jurnal publikasi status WhatsApp
+    aina persona check [--slot <slot>]   Periksa kuota & evaluasi posting slot waktu saat ini
+    aina persona post [--slot <slot>]    Eksekusi pembuatan & publikasi status WhatsApp
+    aina persona inspire                 Panduan konteks ruang imajinasi kreatif Aina
+"#
+            );
+            return Ok(());
+        }
+
+        let subcmd = args[0].as_str();
+        let script_candidates = [
+            std::env::current_dir()
+                .unwrap_or_else(|_| PathBuf::from("."))
+                .join("scripts")
+                .join("persona_status.py"),
+            PathBuf::from("/app/scripts/persona_status.py"),
+            PathBuf::from("/root/projects/aina/scripts/persona_status.py"),
+        ];
+
+        let resolved_script = script_candidates
+            .into_iter()
+            .find(|p| p.exists())
+            .unwrap_or_else(|| PathBuf::from("scripts/persona_status.py"));
+
+        if !resolved_script.exists() {
+            anyhow::bail!(
+                "Skrip persona_status.py tidak ditemukan di lingkungan saat ini."
+            );
+        }
+
+        let mut cmd = tokio::process::Command::new("python3");
+        cmd.arg(&resolved_script);
+        match subcmd {
+            "diag" | "diagnostics" => {
+                cmd.arg("diag");
+                for a in &args[1..] {
+                    cmd.arg(a);
+                }
+            }
+            "journal" | "history" | "runs" => {
+                cmd.arg("history");
+                for a in &args[1..] {
+                    cmd.arg(a);
+                }
+            }
+            "check" => {
+                cmd.arg("check");
+                for a in &args[1..] {
+                    cmd.arg(a);
+                }
+            }
+            "inspire" => {
+                cmd.arg("inspire");
+                for a in &args[1..] {
+                    cmd.arg(a);
+                }
+            }
+            "post" => {
+                cmd.arg("post");
+                for a in &args[1..] {
+                    cmd.arg(a);
+                }
+            }
+            "generate" => {
+                cmd.arg("generate");
+                for a in &args[1..] {
+                    cmd.arg(a);
+                }
+            }
+            _ => {
+                eprintln!("Subcommand persona tidak dikenal: `{}`. Ketik `aina persona help`.", subcmd);
+                return Ok(());
+            }
+        }
+
+        let status = cmd.status().await?;
+        if !status.success() {
+            std::process::exit(status.code().unwrap_or(1));
+        }
+
+        Ok(())
     }
 }
