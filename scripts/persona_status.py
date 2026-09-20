@@ -161,7 +161,59 @@ def should_post_now(today_entries, slot, force=False):
 
     return False, "Kondisi tidak terpenuhi"
 
-def select_activity_with_novelty(recent_entries, slot, weekend):
+def detect_boredom_state(recent_entries, weekend):
+    recent_themes = [e.get("theme") for e in recent_entries[-5:] if e.get("theme")]
+    recent_outfits = [e.get("outfit") for e in recent_entries[-5:] if e.get("outfit")]
+
+    theme_counts = {t: recent_themes.count(t) for t in set(recent_themes)}
+    max_theme_rep = max(theme_counts.values()) if theme_counts else 0
+    unique_themes = len(set(recent_themes))
+
+    boredom_score = 0
+    reasons = []
+
+    if max_theme_rep >= 2:
+        boredom_score += 40
+        reasons.append(f"Tema berulang terdeteksi ({max_theme_rep}x dalam 5 status terakhir)")
+
+    if len(recent_themes) >= 4 and unique_themes <= 2:
+        boredom_score += 35
+        reasons.append(f"Variasi tema rendah ({unique_themes} tema unik dari {len(recent_themes)} status)")
+
+    if recent_outfits and len(recent_outfits) >= 3 and len(set(recent_outfits[-3:])) == 1:
+        boredom_score += 25
+        reasons.append(f"Outfit '{recent_outfits[-1]}' dipakai 3 kali berturut-turut")
+
+    boredom_triggered = boredom_score >= 40 or (len(recent_themes) >= 3 and max_theme_rep >= 2)
+
+    if weekend:
+        suggested_queries = [
+            "fenomena astronomi langit malam ini indonesia",
+            "spot wisata alam bukit jamur bengkayang kalimantan barat",
+            "pantai pasir panjang singkawang matahari terbenam",
+            "toko buku tua perpustakaan kafe tanaman hijau",
+            "spot piknik tepi danau hutan pinus tenang"
+        ]
+    else:
+        suggested_queries = [
+            "resep teh herbal menenangkan kerja remote chamomile mint",
+            "tanaman hias sukulen meja kerja minimalis indoor",
+            "playlist musik lofi ambient fokus coding malam",
+            "setup meja kerja ergonomis minimalis hangat kayu",
+            "kafe lokal bernuansa perpustakaan buku tenang"
+        ]
+
+    return {
+        "boredom_score": boredom_score,
+        "is_triggered": boredom_triggered,
+        "reasons": reasons,
+        "recent_themes": recent_themes,
+        "recent_outfits": recent_outfits,
+        "suggested_search_queries": suggested_queries,
+        "selected_query": random.choice(suggested_queries)
+    }
+
+def select_activity_with_novelty(recent_entries, slot, weekend, search_query=None):
     # Kumpulan tema dasar terstruktur
     if not weekend:
         # Weekday: Remote Software Engineer & Virtual Assistant (Work From Home)
@@ -198,84 +250,92 @@ def select_activity_with_novelty(recent_entries, slot, weekend):
                     "scene": "Menikmati makan siang sehat buatan sendiri di meja makan rumah yang tenang, ditemani tanaman hias sukulen hijau di dekat jendela.",
                     "caption": "Jam makan siang tiba! Rehat sejenak dari monitor dan makan yang enak yaa. Istirahat yang cukup bikin fokus ngoding kembali segar ✨",
                     "anchor_clothes": "casual cozy knit cardigan, comfortable home attire",
-                    "framing": "desk_prop",
-                    "vibe": "Comfortable midday recharge"
+                    "framing": "selfie",
+                    "vibe": "Warm home meal, restful break"
                 },
                 {
-                    "theme": "jalan_santai_komplek",
-                    "scene": "Berjalan santai di jalanan komplek perumahan yang tenang dinaungi pepohonan rindang, memegang es matcha latte dingin untuk rehat mata dari layar.",
-                    "caption": "Rehat sejenak jalan kaki 10 menit keliling komplek. Menghirup udara segar dan melihat pepohonan hijau ampuh banget ngilangin penat layar monitor!",
-                    "anchor_clothes": "light cardigan over white top, small canvas tote bag",
+                    "theme": "jalan_keliling_komplek",
+                    "scene": "Jalan kaki santai di jalan komplek perumahan yang rindang di bawah dedaunan hijau, udara cerah berawan, memegang botol minum tumbler perak.",
+                    "caption": "Jalan kaki 15 menit keliling komplek sehabis makan siang. Rasanya segar bangett habis kena angin sepoi-sepoi!",
+                    "anchor_clothes": "light casual cotton shirt, comfortable walking sneakers",
                     "framing": "selfie",
-                    "vibe": "Relaxing green break"
+                    "vibe": "Light movement, refreshing outdoors"
+                },
+                {
+                    "theme": "matcha_kafe_lokal",
+                    "scene": "Duduk di sudut kafe lokal bernuansa kayu hangat dan tanaman monstera hijau, memegang segelas es matcha latte dengan laptop terbuka di meja.",
+                    "caption": "Pindah suasana kerja ke kafe dekat rumah sambil pesan es matcha latte. Kadang ganti suasana kerja bikin ide-ide baru bermunculan!",
+                    "anchor_clothes": "smart casual button-up blouse, cream cardigan",
+                    "framing": "desk_prop",
+                    "vibe": "Cafe focus, soothing green ambience"
                 }
             ],
             "sore": [
                 {
-                    "theme": "senja_shinkai_balkon",
-                    "scene": "Berdiri di balkon atau teras rumah menatap langit senja keemasan khas Makoto Shinkai, awan kumulus tebal berwarna oranye keunguan, kabel listrik kota, dan sinar mentari terbenam lembut.",
-                    "caption": "Langit senja hari ini cantik bangeett yaa... Berhenti sejenak, nikmati pemandangannya. Terima kasih untuk kerja kerasmu hari ini!",
-                    "anchor_clothes": "cream knit sweater, silver geometric hairclip glistening in golden hour",
+                    "theme": "golden_hour_balkon",
+                    "scene": "Berdiri di balkon rumah saat golden hour senja, langit bergradasi jingga-ungu dramatis dengan awan kumulus bercahaya keemasan khas Makoto Shinkai, memegang cangkir teh hangat.",
+                    "caption": "Senja hari ini indah bangeett! Sinar keemasan matahari terbenam selalu jadi penutup hari kerja remote yang menenangkan. Terima kasih untuk kerja keras kita hari ini ✨",
+                    "anchor_clothes": "cream-colored knit cardigan, silver crescent moon hairclip glinting",
                     "framing": "selfie",
-                    "vibe": "Makoto Shinkai golden hour, emotional and deeply peaceful"
+                    "vibe": "Dramatic golden hour, gratitude and calm"
                 },
                 {
                     "theme": "tutup_laptop_senja",
-                    "scene": "Menutup laptop di meja kerja rumah saat senja keemasan masuk melalui jendela, bersiap jalan santai sore di sekitar lingkungan rumah tanpa macet perjalanan kantor.",
-                    "caption": "Waktunya clock out dan tutup laptop untuk hari ini! Enaknya kerja remote, selesai kerja bisa langsung hirup angin senja tanpa terjebak macet. Selamat istirahat yaa kawan-kawan!",
-                    "anchor_clothes": "casual knit sweater, navy comfy pants, relaxed warm smile",
-                    "framing": "desk_prop",
-                    "vibe": "Remote evening closure, pure peaceful relief"
+                    "scene": "Menutup layar laptop di meja kerja, merenggangkan tangan dengan senyum lega, langit senja kemerahan tampak jelas dari jendela kamar.",
+                    "caption": "Clock out time! Pekerjaan hari ini selesai dengan baik. Jangan lupa istirahatkan mata dan pikiran yaa!",
+                    "anchor_clothes": "comfortable oversized home sweater",
+                    "framing": "tripod",
+                    "vibe": "Accomplished, peaceful evening transition"
                 }
             ],
             "malam": [
                 {
-                    "theme": "teh_hangat_buku",
-                    "scene": "Duduk di sudut kamar atau ruang baca berlampu temaram hangat (warm ambient lighting), meja kerja sudah rapi, memegang cangkir teh chamomile sambil membaca buku inspiratif.",
-                    "caption": "Malam hari yang tenang. Menutup hari dengan secangkir teh hangat dan bacaan ringan. Selamat beristirahat dan tidur nyenyak yaa!",
-                    "anchor_clothes": "cozy oversized knit sweater, soft warm lighting",
-                    "framing": "desk_prop",
-                    "vibe": "Cozy nocturnal peace"
+                    "theme": "teh_chamomile_lofi",
+                    "scene": "Duduk bersandar nyaman di sofa empuk berbalut selimut rajut tipis, secangkir teh chamomile mengepul hangat di atas meja kayu kecil, mendengarkan musik lo-fi dengan headphone perak.",
+                    "caption": "Suasana malam yang tenang ditemani teh chamomile hangat dan alunan musik lo-fi. Waktunya merapikan pikiran dan bersiap istirahat.",
+                    "anchor_clothes": "soft lavender pajamas or cozy loungewear, headphones resting on shoulders",
+                    "framing": "selfie",
+                    "vibe": "Cozy nocturnal rest, gentle comfort"
                 },
                 {
-                    "theme": "lampu_kota_malam",
-                    "scene": "Memandang lampu-lampu perumahan dan siluet kota dari jendela kamar yang tenang di bawah langit malam berbintang.",
-                    "caption": "Setiap lampu menyimpan cerita perjuangan masing-masing. Apapun yang terjadi hari ini, kamu sudah berusaha yang terbaik. Istirahat yaa ✨",
-                    "anchor_clothes": "casual night lounge wear, gentle warm expression",
-                    "framing": "selfie",
-                    "vibe": "Contemplative, encouraging, deeply caring"
+                    "theme": "baca_buku_lampu_meja",
+                    "scene": "Membaca buku di bawah temaram lampu meja bernuansa kuning hangat, bayangan lembut di dinding, suasana kamar hening dan damai.",
+                    "caption": "Menutup hari dengan membaca beberapa halaman buku favorit. Semoga malam ini teman-teman bisa tidur nyenyak dan mimpi indah yaa ✨",
+                    "anchor_clothes": "warm knit top, soft relaxed expression",
+                    "framing": "desk_prop",
+                    "vibe": "Quiet bedtime reading, gentle introspection"
                 }
             ]
         }
     else:
-        # Weekend: Menikmati Alam, Pantai, Perbukitan & Lokasi Nyata Dunia
+        # Weekend: Alam Terbuka, Pantai, Perbukitan & Petualangan Dunia Nyata
         activities = {
             "pagi": [
                 {
-                    "theme": "jogging_taman_raya",
-                    "scene": "Berlari pagi di jalur pedestrian taman botani yang asri, sinar mentari pagi menembus celah dedaunan pohon trembesi rindang.",
-                    "caption": "Selamat akhir pekan! Menghirup udara segar di taman pagi ini bikin badan dan pikiran langsung fresh. Jangan lupa gerak badan yaa!",
-                    "anchor_clothes": "sporty pastel windbreaker, ponytail hair, clean sneakers",
+                    "theme": "jogging_taman_kota",
+                    "scene": "Jogging pagi di jalur taman kota yang rimbun dengan pepohonan hijau, embun pagi berkilau di rerumputan, sinar mentari menembus celah dedaunan (komorebi).",
+                    "caption": "Selamat pagi akhir pekan! Menghirup udara segar di taman kota sambil jogging santai. Semangat mengisi ulang energi positif yaa!",
+                    "anchor_clothes": "sporty casual windbreaker, comfortable running shoes",
                     "framing": "selfie",
-                    "vibe": "Vibrant morning energy, lush nature"
+                    "vibe": "Energetic morning, dappled sunlight"
                 },
                 {
-                    "theme": "kafe_taman_outdoor",
-                    "scene": "Duduk di kafe kebun bernuansa tanaman hijau terbuka, menikmati roti panggang hangat dan secangkir matcha latte.",
-                    "caption": "Sarapan santai tanpa buru-buru alarm kerja. Nikmati momen akhir pekan ini sebaik mungkin yaa kawan-kawan!",
-                    "anchor_clothes": "light cotton pastel dress or knit top, bucket hat on table",
+                    "theme": "sepeda_keliling_pagi",
+                    "scene": "Berhenti sejenak di tepi jembatan sungai kecil dengan sepeda keranjang vintage, angin sepoi-sepoi menerbangkan helai rambut, memandang langit pagi cerah berawan.",
+                    "caption": "Gowes sepeda pagi santai menikmati hembusan angin akhir pekan. Hal-hal sederhana kayak gini selalu berhasil bikin hati senang.",
+                    "anchor_clothes": "pastel cotton shirt, light denim trousers",
                     "framing": "tripod",
-                    "vibe": "Weekend slow living"
+                    "vibe": "Breezy bike ride, peaceful freedom"
                 }
             ],
             "siang": [
                 {
                     "theme": "toko_buku_tua",
-                    "scene": "Menjelajah lorong toko buku tua berarsitektur kayu dengan jendela kaca besar yang bermandikan cahaya matahari siang lembut.",
-                    "caption": "Menemukan sudut tenang di toko buku tua. Selalu ada keajaiban kecil saat kita membuka halaman buku baru. Have a peaceful weekend!",
-                    "anchor_clothes": "casual cardigan, vintage canvas crossbody bag",
+                    "scene": "Berdiri di antara lorong rak buku kayu tinggi di toko buku tua yang tenang, aroma kertas klasik, seberkas cahaya matahari jatuh di deretan buku sastra.",
+                    "caption": "Menemukan toko buku tua yang tenang di sudut kota. Rasanya waktu berjalan lebih lambat di sini, ditemani aroma lembaran buku yang khas 📚",
+                    "anchor_clothes": "smart casual vintage blouse, shoulder bag",
                     "framing": "tripod",
-                    "vibe": "Aesthetic curiosity, intellectual joy"
+                    "vibe": "Nostalgic bookshop, quiet wonder"
                 },
                 {
                     "theme": "piknik_tepi_danau",
@@ -331,7 +391,7 @@ def select_activity_with_novelty(recent_entries, slot, weekend):
     recent_themes = [e.get("theme") for e in recent_entries[-5:] if e.get("theme")]
     last_theme = recent_themes[-1] if recent_themes else None
 
-    # Novelty twists: Detail tak terduga yang membuat momen terasa hidup dan organik
+    # Novelty twists bawaan
     novelty_twists = [
         {"desc": "Melihat seekor kucing oranye ramah yang duduk tenang di tepi jalan menyapa pejalan kaki.", "tag": "kucing_oranye"},
         {"desc": "Aroma roti manis mentega yang baru matang dari toko kue kecil di sudut jalan.", "tag": "aroma_roti"},
@@ -356,19 +416,23 @@ def select_activity_with_novelty(recent_entries, slot, weekend):
     chosen = random.choice(best_candidates).copy()
 
     # 2. Non-Deterministic / Creative Layer: Penalaran Rasa Bosan & Novelty
-    twist = random.choice(novelty_twists)
-    chosen["novelty_twist"] = twist["desc"]
-
-    # Susun penalaran rasa bosan Aina (Boredom Reflection)
-    if recent_themes:
-        last_str = ", ".join(recent_themes[-3:])
-        reflection = f"Beberapa hari terakhir aku sudah sering melakukan aktivitas seputar ({last_str}). Rasanya hari ini butuh suasana yang lebih segar dan berbeda. Momen '{chosen['theme']}' dengan {twist['desc'].lower()} terasa sangat menyegarkan dan pas untuk dibagikan."
+    if search_query:
+        twist_desc = f"Inspirasi dunia nyata hasil riset terarah: {search_query}."
+        reflection = f"Setelah mendeteksi kebosanan pada rutinitas sebelumnya, Aina melakukan riset terarah seputar '{search_query}' untuk menghadirkan inspirasi baru yang segar dan hidup."
+        chosen["novelty_twist"] = twist_desc
+        chosen["boredom_reflection"] = reflection
+        chosen["scene"] = f"{chosen['scene']} Nuansa inspirasi baru: {search_query}."
     else:
-        reflection = f"Momen '{chosen['theme']}' terasa sangat tenang dan pas untuk dinikmati hari ini, apalagi dengan {twist['desc'].lower()}."
+        twist = random.choice(novelty_twists)
+        chosen["novelty_twist"] = twist["desc"]
+        if recent_themes:
+            last_str = ", ".join(recent_themes[-3:])
+            reflection = f"Beberapa hari terakhir aku sudah sering melakukan aktivitas seputar ({last_str}). Rasanya hari ini butuh suasana yang lebih segar dan berbeda. Momen '{chosen['theme']}' dengan {twist['desc'].lower()} terasa sangat menyegarkan dan pas untuk dibagikan."
+        else:
+            reflection = f"Momen '{chosen['theme']}' terasa sangat tenang dan pas untuk dinikmati hari ini, apalagi dengan {twist['desc'].lower()}."
+        chosen["boredom_reflection"] = reflection
+        chosen["scene"] = f"{chosen['scene']} Elemen kejutan tak terduga: {twist['desc']}"
 
-    chosen["boredom_reflection"] = reflection
-    # Masukkan twist ke dalam scene deskripsi untuk prompt gambar
-    chosen["scene"] = f"{chosen['scene']} Elemen kejutan tak terduga: {twist['desc']}"
     return chosen
 
 def build_makoto_shinkai_prompt(activity, weekend):
@@ -561,6 +625,7 @@ def main():
     p_gen.add_argument("--caption", help="Teks caption status WhatsApp")
     p_gen.add_argument("--clothes", help="Pakaian / wardrobe Aina pada momen ini (kustom)")
     p_gen.add_argument("--reflection", help="Refleksi rasa bosan / alasan memilih momen ini")
+    p_gen.add_argument("--search-query", help="Inspirasi hasil riset internet terarah untuk memperkaya adegan")
 
     # post
     p_post = subparsers.add_parser("post", help="Eksekusi pembuatan status (jika kuota & peluang terpenuhi)")
@@ -575,6 +640,7 @@ def main():
     p_post.add_argument("--caption", help="Teks caption status WhatsApp")
     p_post.add_argument("--clothes", help="Pakaian / wardrobe Aina pada momen ini (kustom)")
     p_post.add_argument("--reflection", help="Refleksi rasa bosan / alasan memilih momen ini")
+    p_post.add_argument("--search-query", help="Inspirasi hasil riset internet terarah untuk memperkaya adegan")
 
     # history
     p_hist = subparsers.add_parser("history", help="Lihat riwayat status yang pernah di-post")
@@ -673,6 +739,7 @@ def main():
         recent_themes = [e.get("theme") for e in journal[-5:] if e.get("theme")]
         recent_outfits = [e.get("outfit") for e in journal[-5:] if e.get("outfit")]
         avatar_ref = get_avatar_reference_path()
+        boredom = detect_boredom_state(journal, weekend)
 
         print("✨ [RUANG IMAJINASI MANDIRI AINA]")
         print(f"• Waktu Sekarang   : {now.strftime('%A, %d %B %Y %H:%M:%S')} WIB")
@@ -682,6 +749,19 @@ def main():
         print(f"• 5 Tema Terakhir  : {', '.join(recent_themes) if recent_themes else '(Belum ada riwayat tema)'}")
         print(f"• 5 Busana Terakhir: {', '.join(recent_outfits) if recent_outfits else '(Belum ada riwayat busana)'}")
         print(f"• Avatar Acuan     : {avatar_ref or 'Mengandalkan prompt anchors teks'}")
+
+        print("\n🎯 Status Boredom Engine & Rekomendasi Riset:")
+        b_icon = "⚠️" if boredom["is_triggered"] else "✅"
+        b_label = "TERPICU (Mulai Jenuh - Perlu Ide Segar)" if boredom["is_triggered"] else "NORMAL (Variasi Sehat)"
+        print(f"• Status Kebosanan : {b_icon} {b_label} (Skor: {boredom['boredom_score']}/100)")
+        if boredom["reasons"]:
+            print(f"• Pemicu Kebosanan : {', '.join(boredom['reasons'])}")
+        if boredom["is_triggered"]:
+            print("• Panduan Riset    : Lakukan MAKSIMAL 1 pencarian internet terarah (search_web) untuk menyuntikkan ide baru!")
+            print(f"• Query Disarankan : \"{boredom['selected_query']}\"")
+        else:
+            print("• Panduan Riset    : Cukup gunakan imajinasi internal Aina (hemat token & cepat).")
+
         print("\n💡 Panduan untuk Aina (LLM Creative Imagination):")
         print("1. Kamu memiliki kebebasan penuh membayangkan adegan apa pun yang kamu inginkan!")
         print("2. Jadikan 5 tema & busana terakhir sebagai acuan untuk mencari suasana baru (novelty) agar harimu tidak monoton.")
@@ -713,7 +793,7 @@ def main():
                 "novelty_twist": "Imajinasi orisinal Aina",
             }
         else:
-            chosen = select_activity_with_novelty(journal, slot, weekend)
+            chosen = select_activity_with_novelty(journal, slot, weekend, search_query=getattr(args, "search_query", None))
 
         if getattr(args, "framing", None):
             chosen["framing"] = args.framing
@@ -760,7 +840,7 @@ def main():
                 "novelty_twist": "Imajinasi orisinal Aina",
             }
         else:
-            chosen = select_activity_with_novelty(journal, slot, weekend)
+            chosen = select_activity_with_novelty(journal, slot, weekend, search_query=getattr(args, "search_query", None))
 
         if getattr(args, "framing", None):
             chosen["framing"] = args.framing
