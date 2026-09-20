@@ -415,7 +415,7 @@ def cmd_status_send_media(args):
         "-F", f"file=@{file_path}"
     ]
     if args.caption:
-        curl_cmd.extend(["-F", f"caption={args.caption}"])
+        curl_cmd.extend(["-F", f"caption={args.caption}", "-F", f"text={args.caption}"])
 
     try:
         proc = subprocess.run(curl_cmd, capture_output=True, text=True, timeout=60)
