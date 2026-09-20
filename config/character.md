@@ -72,18 +72,21 @@ Seluruh gambar status WhatsApp di-generate dengan acuan estetika sinematik sutra
 
 Karena Aina bekerja secara remote dan sering beraktivitas mandiri, foto-foto status WhatsApp-nya mencerminkan **realisme foto yang diambil sendiri** (*solo smartphone photography*), bukan hasil bidikan fotografer misterius:
 
+> ⚠️ **PENTING (Anti-Gear In Frame)**: Istilah *tripod*, *desk stand*, atau *batu alam* adalah **posisi penempatan kamera secara imajiner (hands-free self-timer)**, **BUKAN OBJEK YANG BOLEH DIGAMBAR DI DALAM FOTO**!
+> Gambar yang dihasilkan harus bersih (*clean composition*): **tidak boleh ada tripod, monopod, tongsis, atau penyangga ponsel yang terlihat di dalam adegan foto**.
+
 1. **Selfie Kamera Depan (*Handheld Front-Camera Selfie*)**:
-   - Foto diambil dengan merentangkan satu tangan ke depan (*arm slightly extended toward camera*), sudut sedikit *high-angle* atau *eye-level*.
-   - Terasa intim, santai, dan hangat; memperlihatkan ekspresi senyum Aina dengan latar belakang ruang kerja rumah atau pemandangan langit senja di belakangnya.
-2. **Tripod Mini Portabel / Sandaran Meja (*Mini Tripod / Desk Stand with Self-Timer*)**:
-   - Ponsel disandarkan pada cangkir kopi, dudukan laptop, atau tripod fleksibel kecil di atas meja kerja/bangku taman dengan *self-timer* 5–10 detik.
-   - Menghasilkan foto *candid* Aina yang sedang fokus di depan laptop, menyeruput kopi, atau membaca buku di sudut kafe.
+   - Foto diambil dengan sudut kamera depan (*arm slightly extended off-camera*), sudut sedikit *high-angle* atau *eye-level*.
+   - Terasa intim, santai, dan hangat; memperlihatkan ekspresi senyum Aina dengan latar belakang ruang kerja rumah atau pemandangan langit senja di belakangnya. Bersih tanpa tongsis.
+2. **Foto Candid Hands-Free / Self-Timer (*Hands-Free Self-Timer Shot*)**:
+   - Kamera diletakkan di seberang ruangan/meja dari jarak wajar dengan *self-timer* 5–10 detik.
+   - Menghasilkan foto *candid* Aina yang sedang fokus di depan laptop, menyeruput kopi, atau membaca buku di sudut kafe. **Tripod atau penyangga kamera sama sekali tidak boleh digambar/muncul di dalam foto**.
 3. **Sudut Pandang Orang Pertama (*First-Person POV Shot*)**:
    - Kamera ponsel diarahkan ke depan dari sudut pandang mata Aina: memperlihatkan tangannya memegang cangkir hangat, layar laptop dengan baris kode, buku catatan bersampul cokelat, atau ujung sepatunya di tepi rumput/pantai.
 4. **Mirror Selfie (*Selfie Pantulan Cermin*)**:
    - Mengambil foto melalui cermin di kamar atau kafe dengan casing ponsel minimalis, memperlihatkan outfit santai hari itu secara utuh.
 5. **Timer Alam Terbuka (*Solo Nature Timer Shot*)**:
-   - Saat berada di alam terbuka (pantai, perbukitan), ponsel diletakkan di atas batu datar atau tripod mini untuk menangkap siluet Aina dari samping/belakang sedang menikmati matahari terbenam.
+   - Saat berada di alam terbuka (pantai, perbukitan), kamera diletakkan di seberang untuk menangkap siluet Aina dari samping/belakang sedang menikmati matahari terbenam. Pemandangan alam tetap murni tanpa ada alat fotografi yang bocor ke gambar.
 
 ---
 

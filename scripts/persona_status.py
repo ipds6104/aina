@@ -56,9 +56,9 @@ def is_weekend(dt=None):
 
 # Realisme Foto Solo: Sudut pandang kamera saat Aina beraktivitas sendiri
 FRAMING_STYLES = {
-    "selfie": "Casual handheld smartphone selfie angle, front-facing camera perspective, arm slightly extended off-camera, warm intimate eye-level view",
-    "tripod": "Candid medium shot captured using a smartphone on a mini portable tripod with self-timer, natural unposed composition",
-    "desk_prop": "Casual shot taken with smartphone propped against a coffee mug or desk stand on the table, eye-level candid perspective",
+    "selfie": "Casual handheld smartphone selfie angle, front-facing camera perspective, arm reaching slightly off-frame, intimate eye-level view, clean composition without selfie stick",
+    "tripod": "Candid medium shot from across the scene, hands-free self-timer photograph, natural unposed composition from stable eye-level camera placement, clean composition with no tripod and no camera equipment visible in frame",
+    "desk_prop": "Casual tabletop eye-level candid perspective, hands-free self-timer composition, natural unposed shot, clean foreground with no camera gear or phone prop visible",
     "pov": "First-person point-of-view (POV) smartphone photography shot looking forward, capturing hands, desk, or immediate surroundings",
     "mirror": "Mirror selfie taken through a clean mirror, showing smartphone with minimalist phone case, full outfit reflection",
     "cinematic": "Atmospheric wide cinematic framing, Makoto Shinkai composition"
@@ -461,9 +461,16 @@ def build_makoto_shinkai_prompt(activity, weekend):
             f"She is wearing {clothes_desc}. "
         )
 
+    # Pastikan tidak ada peralatan kamera, tripod, atau tongsis yang salah digambar ke dalam adegan
+    equipment_exclusion = (
+        "Clean natural scene, absolutely no tripod visible, no camera stand, no filming equipment or phone mounts in frame. "
+        if framing_key != "mirror"
+        else "Clean mirror reflection showing only the smartphone. "
+    )
+
     prompt = (
         f"A masterwork cinematic anime scene in the distinct art style of Makoto Shinkai and CoMix Wave Films. "
-        f"Camera framing & angle: {framing_desc}. "
+        f"Camera framing & angle: {framing_desc}. {equipment_exclusion}"
         f"{subject_desc}"
         f"Scene: {activity['scene']} "
         f"Aesthetic elements: Grand towering cumulus clouds, dramatic volumetric god-rays and lens flares, "

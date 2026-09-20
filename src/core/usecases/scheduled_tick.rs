@@ -144,6 +144,14 @@ impl ScheduledTickUseCase {
 
                         let is_story = task.target_jid == "status@broadcast" || task.target_jid == "status";
 
+                        let story_delivery_rule = if is_story {
+                            "Target adalah Status/Story WhatsApp (24 jam).\n\
+                            4. ATURAN STATUS STORY (ANTI STATUS GANDA): Seluruh publikasi story (gambar berserta caption terpasang) WAJIB dilakukan langsung melalui tool: 'python3 scripts/persona_status.py post' atau 'python3 skills/whatsmeow/scripts/wa_tool.py status-send-media --file <path> --caption <caption>'. Scheduler backend TIDAK AKAN mengirim teks percakapan Anda ke status@broadcast agar TIDAK TERJADI STATUS GANDA (satu gambar + satu teks terpisah)!\n"
+                        } else {
+                            "Format ramah obrolan chat.\n\
+                            4. ATURAN PENGIRIMAN: Untuk pesan teks biasa, DILARANG memanggil 'wa_tool.py send-text' di terminal karena teks respons Anda akan dikirim otomatis oleh scheduler backend! Namun, jika tugas ini secara spesifik meminta pengiriman berkas, dokumen, atau GAMBAR/SCREENSHOT, Anda DIPERBOLEHKAN memanggil 'python3 skills/whatsmeow/scripts/wa_tool.py send-media --to <target> --file <path_file> --caption <keterangan_singkat>'.\n"
+                        };
+
                         let prompt = format!(
                             "🔔 [TUGAS TERJADWAL OTOMATIS - WAKE UP CALL]\n\
                             Judul Tugas: {}\n\
@@ -154,19 +162,13 @@ impl ScheduledTickUseCase {
                             1. EFISIENSI KUOTA: Lakukan maksimal 1 hingga 2 kali pencarian web (search_web) yang paling esensial. DILARANG KERAS melakukan pencarian berulang-ulang tanpa henti!\n\
                             2. Susun hasil akhir secara rapi, padat, dan ramah ponsel (format WhatsApp: *tebal*, bullet points •).\n\
                             3. {}\
-                            4. ATURAN PENGIRIMAN: Untuk pesan teks biasa, DILARANG memanggil 'wa_tool.py send-text' atau 'status-send-text' di terminal karena teks respons Anda akan dikirim otomatis oleh scheduler backend! Namun, jika tugas ini secara spesifik meminta pengiriman berkas, dokumen, atau GAMBAR/SCREENSHOT, Anda DIPERBOLEHKAN memanggil 'python3 skills/whatsmeow/scripts/wa_tool.py send-media --to {} --file <path_file> --caption <keterangan_singkat>'.\n\
-                            5. DILARANG KERAS menyertakan laporan status teknis internal seperti 'Status: Terkirim', 'Pesan berhasil dikirim', 'Status telah diterbitkan', dsb.\n\
+                            5. DILARANG KERAS menyertakan laporan status teknis internal seperti 'Status: Terkirim', 'Pesan berhasil dikirim', 'Memproses pengunggahan...', dsb.\n\
                             6. Berikan langsung teks hasil riset atau informasi akhir yang siap dibaca oleh penerima.",
                             task.title,
                             current_time_str,
                             task.target_jid,
                             task.payload,
-                            if is_story {
-                                "Target adalah Status/Story WhatsApp (24 jam). Buat teks ringkas, memikat, dan nyaman dibaca dalam sekali lihat di story (maksimal 3-5 baris padat).\n"
-                            } else {
-                                "Format ramah obrolan chat.\n"
-                            },
-                            task.target_jid,
+                            story_delivery_rule,
                         );
 
                         match agent.execute(None, &prompt).await {
@@ -174,20 +176,6 @@ impl ScheduledTickUseCase {
                                 let duration = start_instant.elapsed().as_secs_f64();
                                 let clean_res = res.response_text.trim();
                                 if !clean_res.is_empty() {
-                                    // Filter out accidental tool confirmation reports from being posted to story
-                                    let is_redundant_report = clean_res.starts_with("Pesan balasan sudah terkirim")
-                                        || clean_res.starts_with("Pesan tanggapan telah berhasil dikirim")
-                                        || clean_res.starts_with("Pesan telah berhasil dikirim")
-                                        || clean_res.starts_with("Pesan berhasil dikirim")
-                                        || (clean_res.starts_with("Status") && (clean_res.contains("berhasil") || clean_res.contains("terbit")));
-
-                                    if is_story && is_redundant_report {
-                                        info!("Suppressed redundant agent status report from being published to story: {}", clean_res);
-                                        let _ = self.session_store.update_scheduled_task_result(task.id, "success", None, duration).await;
-                                        let _ = self.session_store.record_scheduled_task_run(task.id, &task.title, &task.target_jid, "success", duration, None, Some(clean_res)).await;
-                                        continue;
-                                    }
-
                                     // If destination is status story and response contains error, do not post publicly
                                     let is_error_output = clean_res.starts_with("⚠️") || clean_res.contains("503") || clean_res.contains("quota");
                                     let actual_target = if is_story && is_error_output {
@@ -209,6 +197,14 @@ impl ScheduledTickUseCase {
                                     let preview = if clean_res.len() > 300 { &clean_res[..300] } else { clean_res };
                                     let _ = self.session_store.update_scheduled_task_result(task.id, status, err_msg, duration).await;
                                     let _ = self.session_store.record_scheduled_task_run(task.id, &task.title, actual_target, status, duration, err_msg, Some(preview)).await;
+
+                                    if is_story {
+                                        // WhatsApp Story (status@broadcast) is published directly by wa_tool.py status-send-media / persona_status.py.
+                                        // We MUST NEVER send the agent's textual response/summary as an additional text story to status@broadcast,
+                                        // as that results in double status stories (one media story + one text story).
+                                        info!("AgentAction task #{} for status@broadcast completed successfully. Suppressed sending conversational text to status@broadcast. Preview: {}", task.id, preview);
+                                        continue;
+                                    }
 
                                     if let Err(e) = self
                                         .whatsapp
