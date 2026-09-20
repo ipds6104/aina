@@ -926,16 +926,21 @@ pub fn render_html(is_authenticated: bool, state: &WebhookServerState, current_m
             submitBtn.innerText = 'Memverifikasi ke Google...';
             alertEl.style.display = 'none';
 
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 20000);
+
             try {{
                 const res = await fetch('/api/auth/oauth/exchange?key=' + encodeURIComponent(key), {{
                     method: 'POST',
                     headers: {{ 'Content-Type': 'application/json' }},
+                    signal: controller.signal,
                     body: JSON.stringify({{
                         session_id: currentOAuthSessionId,
                         code: code,
                         setup_code: key
                     }})
                 }});
+                clearTimeout(timeoutId);
                 const data = await res.json();
                 if (res.ok && data.success) {{
                     if (oauthCountdownInterval) {{
@@ -956,7 +961,11 @@ pub fn render_html(is_authenticated: bool, state: &WebhookServerState, current_m
                     alertEl.style.display = 'block';
                 }}
             }} catch(e) {{
-                alertEl.innerText = '❌ Error: ' + e;
+                clearTimeout(timeoutId);
+                const isAbort = e.name === 'AbortError';
+                alertEl.innerText = isAbort
+                    ? '⚠️ Waktu verifikasi habis (20 detik). Server sedang memproses atau koneksi lambat. Silakan periksa daftar akun di bawah atau klik tombol Verifikasi lagi.'
+                    : '❌ Error: ' + e;
                 alertEl.style.color = '#ef4444';
                 alertEl.style.display = 'block';
             }} finally {{

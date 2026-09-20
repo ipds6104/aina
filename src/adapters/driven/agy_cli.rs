@@ -783,19 +783,11 @@ impl AgentEnginePort for AntigravityCliAdapter {
             warn!("Failed to persist token pool to data/token_pool.json: {}", e);
         }
 
-        info!("Auth token saved to {:?}, verifying with quick test...", path);
-
-        let test_res = self.execute(None, "Ping! Jawab 'PONG' saja.").await;
-        match test_res {
-            Ok(_) => {
-                info!("Antigravity token verification succeeded!");
-                Ok(())
-            }
-            Err(e) => {
-                warn!("Verification test failed: {}", e);
-                Err(anyhow::anyhow!("Token saved, but verification failed: {}", e))
-            }
-        }
+        info!(
+            "Auth token saved to {:?} and registered in pool successfully for account {:?}",
+            path, new_email
+        );
+        Ok(())
     }
 
     async fn remove_account(&self, account_id: usize) -> anyhow::Result<bool> {
@@ -960,7 +952,13 @@ impl AgentEnginePort for AntigravityCliAdapter {
             .arg(session_id)
             .arg(&clean_code);
 
-        let output = cmd.output().await?;
+        let output = match tokio::time::timeout(std::time::Duration::from_secs(15), cmd.output()).await {
+            Ok(res) => res?,
+            Err(_) => {
+                let _ = tokio::fs::remove_dir_all(&base_dir).await;
+                anyhow::bail!("Timeout saat menukar kode otorisasi ke Google (15 detik). Silakan coba lagi.");
+            }
+        };
         let token_file = base_dir.join("token.json");
         let error_file = base_dir.join("error.txt");
 

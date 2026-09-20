@@ -197,31 +197,8 @@ def main():
     with open(os.path.join(base_dir, "status.txt"), "w") as f:
         f.write("WAITING\n")
 
-    # Tunggu file code.txt diisi (timeout 3600 detik / 1 jam)
-    code_file = os.path.join(base_dir, "code.txt")
-    start_time = time.time()
-    code = None
-
-    while time.time() - start_time < 3600:
-        if os.path.exists(code_file):
-            try:
-                with open(code_file, "r") as f:
-                    code = f.read().strip()
-                if code:
-                    break
-            except Exception:
-                pass
-        time.sleep(0.1)
-
-    if not code:
-        with open(os.path.join(base_dir, "status.txt"), "w") as f:
-            f.write("TIMEOUT\n")
-        with open(os.path.join(base_dir, "error.txt"), "w") as f:
-            f.write("Batas waktu menunggu input kode otorisasi (1 jam) tercapai.\n")
-        sys.exit(1)
-
-    ok = do_exchange(base_dir, code, verifier)
-    sys.exit(0 if ok else 1)
+    print(f"AUTH_URL:{url}")
+    sys.exit(0)
 
 if __name__ == "__main__":
     main()
