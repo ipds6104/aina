@@ -107,12 +107,16 @@ pub fn render_html(is_authenticated: bool, state: &WebhookServerState, current_m
                             <a id="oauth-link-anchor" href="javascript:void(0)" target="_blank" class="btn" style="background: #3b82f6; color: #fff; text-decoration: none; display: inline-block; padding: 6px 14px; font-size: 0.82rem; border-radius: 4px;">
                                 🔗 Buka Halaman Login Google ↗
                             </a>
+                        <div style="margin-bottom: 8px;">
+                            <button type="button" id="paste-submit-oauth-btn" class="btn" style="width: 100%; background: #059669; color: #fff; font-size: 0.82rem; padding: 8px 14px; font-weight: 600; cursor: pointer; border-radius: 4px; border: none; display: flex; align-items: center; justify-content: center; gap: 6px;" onclick="pasteAndSubmitOAuth()">
+                                📋 Tempel dari Clipboard &amp; Simpan (1-Klik Cepat)
+                            </button>
                         </div>
-                        <label class="form-label" style="font-size: 0.82rem;">Tempel Kode Otorisasi Google di sini:</label>
+                        <label class="form-label" style="font-size: 0.78rem; color: #94a3b8;">Atau tempel manual di bawah:</label>
                         <div style="display: flex; gap: 8px;">
                             <input id="oauth-code-input" class="form-input" type="text" placeholder="Tempel kode 4/0A... di sini" style="flex: 1; font-size: 0.82rem; margin-bottom: 0;" />
                             <button type="button" id="submit-oauth-code-btn" class="btn" style="background: #10b981; font-size: 0.82rem; padding: 6px 14px; cursor: pointer; white-space: nowrap;" onclick="submitOAuthCode()">
-                                ✅ Simpan &amp; Verifikasi
+                                ✅ Simpan
                             </button>
                         </div>
                     </div>
@@ -798,6 +802,20 @@ pub fn render_html(is_authenticated: bool, state: &WebhookServerState, current_m
             }}
         }}
 
+        async function pasteAndSubmitOAuth() {{
+            try {{
+                if (navigator.clipboard && navigator.clipboard.readText) {{
+                    const text = await navigator.clipboard.readText();
+                    if (text && text.trim()) {{
+                        document.getElementById('oauth-code-input').value = text.trim();
+                    }}
+                }}
+            }} catch(e) {{
+                console.log('Clipboard read note:', e);
+            }}
+            submitOAuthCode();
+        }}
+
         async function startOAuthFlow() {{
             const keyInput = document.getElementById('add-token-key');
             const alertEl = document.getElementById('oauth-alert');
@@ -834,6 +852,7 @@ pub fn render_html(is_authenticated: bool, state: &WebhookServerState, current_m
                     const countdownEl = document.getElementById('oauth-countdown');
                     const badgeEl = document.getElementById('oauth-timer-badge');
                     const submitBtn = document.getElementById('submit-oauth-code-btn');
+                    const pasteBtn = document.getElementById('paste-submit-oauth-btn');
                     if (countdownEl) countdownEl.innerText = remaining;
                     if (badgeEl) {{
                         badgeEl.style.color = '#fbbf24';
@@ -841,6 +860,7 @@ pub fn render_html(is_authenticated: bool, state: &WebhookServerState, current_m
                         badgeEl.innerHTML = '⏱️ Sisa Waktu: <strong id="oauth-countdown">' + remaining + '</strong>s';
                     }}
                     if (submitBtn) submitBtn.disabled = false;
+                    if (pasteBtn) pasteBtn.disabled = false;
 
                     oauthCountdownInterval = setInterval(() => {{
                         remaining--;
@@ -852,12 +872,9 @@ pub fn render_html(is_authenticated: bool, state: &WebhookServerState, current_m
                             if (badgeEl) {{
                                 badgeEl.style.color = '#ef4444';
                                 badgeEl.style.background = 'rgba(239, 68, 68, 0.15)';
-                                badgeEl.innerHTML = '⚠️ Sesi Kadaluarsa (60s)';
+                                badgeEl.innerHTML = '⏱️ Waktu Hampir Habis (Segera Simpan)';
                             }}
-                            if (submitBtn) submitBtn.disabled = true;
-                            alertEl.innerHTML = '⚠️ <strong>Sesi login Google telah melewati batas waktu 60 detik.</strong> Silakan klik tombol <strong>"🚀 Mulai Ulang / Akun Lain"</strong> untuk meminta tautan baru.';
-                            alertEl.style.color = '#ef4444';
-                            alertEl.style.display = 'block';
+                            // DO NOT DISABLE BUTTONS: allow user to submit if they have the code!
                         }}
                     }}, 1000);
 
