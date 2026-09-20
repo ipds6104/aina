@@ -216,7 +216,7 @@ def main():
     admin_key = os.environ.get("WHATSMEOW_API_KEY") or os.environ.get("ADMIN_KEY")
     if not admin_key:
         try:
-            admin_key = input("\nMasukkan Admin Key / WHATSMEOW_API_KEY Aina Anda: ").strip()
+            admin_key = input("\nMasukkan Admin Key / WHATSMEOW_API_KEY Aina Anda (tekan Enter untuk simpan lokal saja): ").strip()
         except (KeyboardInterrupt, EOFError):
             print("\nBatal.")
             sys.exit(0)
