@@ -64,6 +64,15 @@ FRAMING_STYLES = {
     "cinematic": "Atmospheric wide cinematic framing, Makoto Shinkai composition"
 }
 
+# Matriks Lemari Pakaian Dinamis (Dynamic Wardrobe)
+WARDROBE_STYLES = {
+    "wfh_cozy": "oversized cozy knit sweater in soft cream and lavender tones, comfortable relaxed culottes, indoor slippers, minimalist reading glasses",
+    "smart_casual": "crisp white collared cotton shirt with a knit vest, tailored grey trousers, clean white sneakers, canvas tote bag",
+    "outdoor_nature": "breezy light pastel cotton blouse, rolled-up linen trousers, cotton bucket hat, canvas crossbody bag",
+    "night_stargaze": "thick warm navy-blue fleece hoodie or parka with warm hood, cozy jogger pants, fingerless knit gloves, holding steaming ceramic mug",
+    "celestial_sig": "celestial navy-blue robe and dress with delicate gold constellation star embroidery and subtle stardust motifs"
+}
+
 def load_journal():
     if not os.path.exists(JOURNAL_FILE):
         return []
@@ -344,16 +353,26 @@ def build_makoto_shinkai_prompt(activity, weekend):
     framing_key = activity.get("framing", "selfie")
     framing_desc = FRAMING_STYLES.get(framing_key, FRAMING_STYLES["selfie"])
 
+    # Tentukan busana: jika ada outfit_key di WARDROBE_STYLES, utamakan itu
+    outfit_key = activity.get("outfit")
+    if outfit_key and outfit_key in WARDROBE_STYLES:
+        clothes_desc = WARDROBE_STYLES[outfit_key]
+    else:
+        clothes_desc = activity.get("anchor_clothes") or (
+            WARDROBE_STYLES["wfh_cozy"] if not weekend else WARDROBE_STYLES["outdoor_nature"]
+        )
+
     if framing_key == "pov":
         subject_desc = (
             "First-person perspective (POV). Aina's hands are visible interacting with the scene, "
-            f"wearing {activity.get('anchor_clothes', 'casual comfortable attire')}. "
+            f"wearing {clothes_desc}. "
         )
     else:
         subject_desc = (
-            f"Featuring Aina, a young Indonesian woman in her early 20s with natural dark espresso shoulder-length bob hair, "
-            f"soft wispy bangs, warm amber-brown eyes, and a minimalist silver geometric hairclip on the left side. "
-            f"She is wearing {activity.get('anchor_clothes', 'casual comfortable attire')}. "
+            f"Featuring Aina, a young Indonesian woman in her early 20s with soft glowing silver-lavender long hair "
+            f"styled with a signature side braid, delicate wispy bangs, starry deep blue eyes with celestial sparkle, "
+            f"and a luminous crescent moon and star hairclip on the left side. "
+            f"She is wearing {clothes_desc}. "
         )
 
     prompt = (
@@ -427,11 +446,12 @@ def main():
     p_gen.add_argument("--weekend", action="store_true", help="Paksa mode weekend")
     p_gen.add_argument("--weekday", action="store_true", help="Paksa mode weekday")
     p_gen.add_argument("--framing", choices=list(FRAMING_STYLES.keys()), help="Sudut pandang kamera / framing foto solo (selfie, tripod, desk_prop, pov, mirror, cinematic)")
+    p_gen.add_argument("--outfit", choices=list(WARDROBE_STYLES.keys()), help="Pilihan busana dari lemari pakaian dinamis Aina (wfh_cozy, smart_casual, outdoor_nature, night_stargaze, celestial_sig)")
     p_gen.add_argument("--custom", action="store_true", help="Gunakan adegan hasil imajinasi bebas Aina sendiri")
     p_gen.add_argument("--theme", help="Nama tema imajinasi")
     p_gen.add_argument("--scene", help="Deskripsi adegan visual hasil imajinasi Aina")
     p_gen.add_argument("--caption", help="Teks caption status WhatsApp")
-    p_gen.add_argument("--clothes", help="Pakaian / wardrobe Aina pada momen ini")
+    p_gen.add_argument("--clothes", help="Pakaian / wardrobe Aina pada momen ini (kustom)")
     p_gen.add_argument("--reflection", help="Refleksi rasa bosan / alasan memilih momen ini")
 
     # post
@@ -440,11 +460,12 @@ def main():
     p_post.add_argument("--force", action="store_true", help="Paksa posting tanpa melihat batasan kuota harian")
     p_post.add_argument("--dry-run", action="store_true", help="Simulasi tanpa generate/upload nyata")
     p_post.add_argument("--framing", choices=list(FRAMING_STYLES.keys()), help="Sudut pandang kamera / framing foto solo (selfie, tripod, desk_prop, pov, mirror, cinematic)")
+    p_post.add_argument("--outfit", choices=list(WARDROBE_STYLES.keys()), help="Pilihan busana dari lemari pakaian dinamis Aina (wfh_cozy, smart_casual, outdoor_nature, night_stargaze, celestial_sig)")
     p_post.add_argument("--custom", action="store_true", help="Gunakan adegan hasil imajinasi bebas Aina sendiri")
     p_post.add_argument("--theme", help="Nama tema imajinasi")
     p_post.add_argument("--scene", help="Deskripsi adegan visual hasil imajinasi Aina")
     p_post.add_argument("--caption", help="Teks caption status WhatsApp")
-    p_post.add_argument("--clothes", help="Pakaian / wardrobe Aina pada momen ini")
+    p_post.add_argument("--clothes", help="Pakaian / wardrobe Aina pada momen ini (kustom)")
     p_post.add_argument("--reflection", help="Refleksi rasa bosan / alasan memilih momen ini")
 
     # history
@@ -489,15 +510,16 @@ def main():
         print("\n💡 Panduan untuk Aina (LLM Creative Imagination):")
         print("1. Kamu memiliki kebebasan penuh membayangkan adegan apa pun yang kamu inginkan!")
         print("2. Jadikan 5 tema terakhir sebagai acuan untuk mencari suasana baru (novelty) agar harimu tidak monoton.")
-        print("3. Tetap jaga jangkar visualmu (rambut bob dark espresso sebahu, jepit perak geometris di kiri, gaya Makoto Shinkai).")
-        print("4. Buat prompt visual yang kaya detail sensorik dan rangkai caption hangat 'Impact Maxxing'.")
+        print("3. Tetap jaga jangkar visualmu (rambut panjang silver-lavender kepang samping, mata biru berbintang, jepit bulan sabit/bintang, gaya Makoto Shinkai).")
+        print("4. Pilih busana yang cocok dari lemari pakaian dinamis (wfh_cozy, smart_casual, outdoor_nature, night_stargaze, celestial_sig).")
+        print("5. Buat prompt visual yang kaya detail sensorik dan rangkai caption hangat 'Impact Maxxing'.")
         print("\n🚀 Cara Memposting Hasil Imajinasi Sendiri:")
         print("python3 scripts/persona_status.py post --custom \\")
         print("  --theme \"<nama_tema>\" \\")
         print("  --framing <selfie|tripod|desk_prop|pov|mirror> \\")
+        print("  --outfit <wfh_cozy|smart_casual|outdoor_nature|night_stargaze|celestial_sig> \\")
         print("  --scene \"<deskripsi_adegan_dan_suasana>\" \\")
         print("  --caption \"<caption_hangat_impact_maxxing>\" \\")
-        print("  --clothes \"<pakaian_pilihanmu>\" \\")
         print("  --reflection \"<alasan_memilih_momen_ini>\"")
 
     elif args.command == "generate":
@@ -518,12 +540,17 @@ def main():
 
         if getattr(args, "framing", None):
             chosen["framing"] = args.framing
+        if getattr(args, "outfit", None):
+            chosen["outfit"] = args.outfit
+        if getattr(args, "clothes", None):
+            chosen["anchor_clothes"] = args.clothes
 
         prompt = build_makoto_shinkai_prompt(chosen, weekend)
         avatar_ref = get_avatar_reference_path()
         print(f"✨ Rekomendasi Status [{slot.upper()} - {'WEEKEND' if weekend else 'WEEKDAY'}]:")
         print(f"• Tema              : {chosen['theme']}")
         print(f"• Sudut Kamera      : {chosen.get('framing', 'selfie').upper()}")
+        print(f"• Busana / Outfit   : {chosen.get('outfit', 'default').upper()}")
         print(f"• Refleksi Kebosanan: {chosen['boredom_reflection']}")
         print(f"• Elemen Kejutan    : {chosen['novelty_twist']}")
         print(f"• Caption:\n  \"{chosen['caption']}\"")
@@ -559,12 +586,17 @@ def main():
 
         if getattr(args, "framing", None):
             chosen["framing"] = args.framing
+        if getattr(args, "outfit", None):
+            chosen["outfit"] = args.outfit
+        if getattr(args, "clothes", None):
+            chosen["anchor_clothes"] = args.clothes
 
         prompt = build_makoto_shinkai_prompt(chosen, weekend)
         avatar_ref = get_avatar_reference_path()
 
         print(f"💭 Refleksi Aina : {chosen['boredom_reflection']}")
         print(f"📸 Sudut Kamera  : {chosen.get('framing', 'selfie').upper()}")
+        print(f"👗 Busana/Outfit : {chosen.get('outfit', 'default').upper()}")
         print(f"✨ Kejutan Spontan: {chosen['novelty_twist']}")
 
         success, img_path = execute_generate_and_post(chosen, prompt, avatar_ref, dry_run=args.dry_run)
@@ -577,6 +609,7 @@ def main():
                 "is_weekend": weekend,
                 "theme": chosen["theme"],
                 "framing": chosen.get("framing", "selfie"),
+                "outfit": chosen.get("outfit", "wfh_cozy" if not weekend else "outdoor_nature"),
                 "boredom_reflection": chosen["boredom_reflection"],
                 "novelty_twist": chosen["novelty_twist"],
                 "caption": chosen["caption"],

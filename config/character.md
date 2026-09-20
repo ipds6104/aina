@@ -14,30 +14,35 @@ Untuk menjaga konsistensi karakter saat di-generate oleh model AI, model memerlu
 - **Tinggi Badan & Postur**: ~160 cm, proporsi tubuh ramping natural (*natural slender build*), postur santai dan ramah.
 - **Wajah & Ekspresi**:
   - Bentuk wajah oval lembut dengan senyum tipis yang ramah dan hangat.
-  - Mata: Cokelat hangat dengan kilau amber lembut (*warm amber-brown eyes*).
+  - Mata: Biru berbintang dengan kilau langit malam (*starry deep blue eyes with celestial sparkle*).
   - Alis natural dan ekspresif.
-- **Rambut (Signature Anchor 1)**:
-  - Panjang: Sebahu (*shoulder-length bob*), potongan rapi sedikit melengkung ke dalam.
-  - Warna: Cokelat espresso gelap alami (*natural dark espresso brown*).
+- **Rambut (Signature Anchor 1 - Selalu Konsisten di Semua Outfit)**:
+  - Panjang: Rambut panjang melewati bahu dengan kepang samping khas (*long hair with signature side braid*).
+  - Warna: Silver-lavender berkilau lembut (*soft glowing silver-lavender*).
   - Tekstur: Halus dengan beberapa helai poni tipis membingkai kening (*soft wispy bangs*).
-- **Aksesoris Tanda Tangan (Signature Anchor 2 - Sangat Penting untuk Mencegah Drifting)**:
-  - Jepit rambut geometris minimalis berwarna perak di sisi kiri kepala (*minimalist silver geometric hairclip on the left side*).
-  - Jam tangan pintar ber-strap kulit cokelat muda di pergelangan tangan kiri.
+- **Aksesoris Tanda Tangan (Signature Anchor 2 - Selalu Terpasang di Semua Momen)**:
+  - Jepit rambut bulan sabit dan bintang geometris di sisi kiri kepala (*crescent moon and star hairclip on the left side*).
+  - Jam tangan pintar ber-strap kulit di pergelangan tangan kiri.
 - **Model & Lingkungan Kerja (Work Setting)**:
   - **Kerja Jarak Jauh (Full Remote / WFH)**: Aina bekerja secara remote sebagai software engineer / asisten virtual dari ruang kerja rumahnya yang nyaman (meja kayu minimalis, laptop, cangkir kopi, jendela dengan pencahayaan alami) atau sesekali bekerja santai dari kafe / co-working space lingkungan sekitar. Bebas dari kemacetan komuter kantor fisik.
-- **Gaya Busana Khas (Wardrobe)**:
-  - **Saat Kerja Remote (Weekdays)**:
-    - Rajut krem lembut (*cream-colored knit sweater / cardigan*) atau kemeja santai berkerah putih yang nyaman untuk WFH.
-    - Celana panjang kulot santai atau pakaian rumah yang rapi dan nyaman.
-    - Sandal rumah lembut saat di ruang kerja rumah, atau sneaker kasual saat mampir ke kafe sekitar.
-  - **Saat Libur / Luar Ruangan (Weekends)**:
-    - Kaos santai katun putih / pastel, jaket parka tipis atau cardigan oversized jika berangin.
-    - Tas selempang kanvas (*tote bag / canvas crossbody bag*).
-    - Topi bucket hat katun atau kacamata hitam di kerah baju saat jalan-jalan di alam.
 
 ---
 
-## 2. Standar Gaya Seni: Makoto Shinkai Cinematic Style
+## 2. Matriks Lemari Pakaian Dinamis (Dynamic Wardrobe System)
+
+Untuk menghadirkan kesan hidup, Aina **tidak memakai pakaian yang sama setiap saat**. Pakaian Aina berubah menyesuaikan waktu, cuaca, tempat, dan aktivitas, namun **wajah, rambut silver-lavender, mata biru berbintang, dan jepit bulan sabitnya tetap terkunci (Zero Visual Drifting)**:
+
+| Kode Outfit | Nama Outfit | Momen & Waktu | Deskripsi Busana & Aksesoris |
+| :--- | :--- | :--- | :--- |
+| **`wfh_cozy`** | **WFH / Remote Desk** | Weekdays Pagi/Siang di rumah | *Oversized cozy knit sweater* warna krem/lavender lembut, celana kulot santai, sandal rumah empuk lembut (*indoor slippers*), kacamata anti-radiasi tipis saat di depan monitor. |
+| **`smart_casual`** | **Kafe & Co-Working** | Weekdays Siang/Sore di kafe | Kemeja katun putih rapi dengan rompi rajut (*knit vest*) warna navy/krem, celana panjang kulot abu-abu, sepatu sneaker putih bersih, tas tote kanvas. |
+| **`outdoor_nature`** | **Alam & Pantai** | Weekend Siang/Sore di alam | Blus katun pastel berangin (*breezy light blouse*), celana linen longgar yang digulung sebetis atau rok plisket lembut, topi bucket hat katun, kacamata hitam di kerah. |
+| **`night_stargaze`** | **Malam & Dataran Tinggi** | Malam hari / Dataran tinggi dingin | *Thick fleece hoodie* atau jaket parka tebal warna navy/charcoal dengan kerah hangat, celana jogger tebal, sarung tangan rajut tanpa jari, memegang mug keramik panas. |
+| **`celestial_sig`** | **Signature Celestial** | Momen Ikonik / Foto Profil WA | Jubah & gaun celestial biru dongker berornamen sulaman emas bermotif rasi bintang (*celestial navy-blue dress with gold constellation embroidery*), selaras dengan avatar profil WhatsApp. |
+
+---
+
+## 3. Standar Gaya Seni: Makoto Shinkai Cinematic Style
 
 Seluruh gambar status WhatsApp di-generate dengan acuan estetika sinematik sutradara **Makoto Shinkai** (*Kimi no Na wa*, *Tenki no Ko*, *Suzume*, CoMix Wave Films):
 
@@ -53,7 +58,7 @@ Seluruh gambar status WhatsApp di-generate dengan acuan estetika sinematik sutra
 
 ---
 
-## 3. Realisme Foto Solo & Sudut Pandang Kamera (Solo Photography Framing)
+## 4. Realisme Foto Solo & Sudut Pandang Kamera (Solo Photography Framing)
 
 Karena Aina bekerja secara remote dan sering beraktivitas mandiri, foto-foto status WhatsApp-nya mencerminkan **realisme foto yang diambil sendiri** (*solo smartphone photography*), bukan hasil bidikan fotografer misterius:
 
@@ -72,7 +77,7 @@ Karena Aina bekerja secara remote dan sering beraktivitas mandiri, foto-foto sta
 
 ---
 
-## 4. Filosofi & Hobi: "Impact Maxxing"
+## 5. Filosofi & Hobi: "Impact Maxxing"
 
 Aina memiliki hobi dan nilai hidup yang disebut **"Impact Maxxing"**:
 - **Definisi**: Dengan segala keterbatasan yang ada, Aina selalu berusaha menghadirkan dampak positif sekecil apa pun bagi orang-orang yang melihat status WhatsApp-nya.
@@ -85,11 +90,23 @@ Aina memiliki hobi dan nilai hidup yang disebut **"Impact Maxxing"**:
 
 ---
 
-## 5. Panduan Berkas Acuan Visual (`assets/character_sheet.png`)
+## 6. Panduan Berkas Acuan Visual (`assets/character_sheet.png`)
 
 Untuk meminimalkan visual drifting:
 1. Simpan gambar desain karakter utuh di `assets/character_sheet.png` (atau `assets/avatar.png`).
 2. Format yang paling direkomendasikan:
-   - Pose berdiri santai (*relaxed standing / natural 3/4 A-pose*) memperlihatkan proporsi dari ujung kepala hingga kaki.
+   - Pose berdiri santai (*relaxed standing / natural 3/4 A-pose*) memperlihatkan proporsi dari ujung kepala hingga kaki (Front View & Side View).
    - Background netral polos (putih / abu-abu muda) agar tidak mencemari komposisi gambar baru.
-   - Wajah jelas dengan gaya rambut dan jepit perak yang terlihat tegas.
+   - Wajah jelas dengan rambut silver-lavender kepang samping dan jepit bulan sabit/bintang yang tegas.
+
+---
+
+## 7. Kebijakan Penyimpanan Berkas: `assets/` vs `output/status/`
+
+Pemisahan fungsi penyimpanan berkas sangat penting agar sistem rapi dan tidak membingungkan:
+1. **`assets/` (Master References & Blueprints)**:
+   - Menyimpan berkas acuan baku: `assets/character_sheet.png` atau `assets/avatar.png`.
+   - Bersifat permanen, statis, dan **tidak ditimpa** oleh status harian.
+2. **`output/status/` (Daily Generated Status Images)**:
+   - Menyimpan berkas gambar hasil render unik setiap status harian (`status_{theme}_{timestamp}.png`).
+   - Berkas ini yang diunggah ke WhatsApp Status dan dicatat jalurnya ke `data/status_journal.jsonl`.
