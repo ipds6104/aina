@@ -11,6 +11,7 @@
 Aina dirancang bukan sebagai bot CS yang kaku, melainkan sebagai **rekan kerja teknis (software engineer / staf data)** di grup WhatsApp maupun percakapan pribadi:
 - ⚡ **Cekatan & Solutif**: Memberikan solusi konkret, siap pakai, dan mampu mengeksekusi kode secara nyata di terminal.
 - 💬 **Basa-Basi Seperlunya**: *Low-noise*, to-the-point, santun, dan bersahabat.
+- 🔄 **Multi-Account Quota Pool (Round-Robin & Auto-Failover)**: Bebas khawatir kuota harian habis. Hubungkan banyak akun Google (misal 5–11 akun), Aina otomatis memutar akun bergantian (*Round-Robin*) atau *failover* saat akun terkena *rate limit* (429/quota).
 - 🧭 **Proactive Clarification & Tabayyun**: Bertanya dan meminta klarifikasi terarah jika instruksi multitafsir, serta menahan diri (*Tawaqquf*) bila ditanya data sensitif oleh pihak luar sebelum meminta izin User Companion.
 - 🛡️ **Gatekeeper Cerdas**: Tidak *spamming* di grup kantor (hanya menjawab jika di-tag/disebut, dan mencatat percakapan pasif sebagai konteks).
 - 👥 **Dynamic Profiling Memory**: Mengenali peran dan wewenang rekan kerja (`admin`, `staff`, `guest`) dengan memori SQLite permanen (`aina user`), mencegah *context loss* meski berbulan-bulan tidak berinteraksi.
@@ -29,7 +30,8 @@ Aina dirancang bukan sebagai bot CS yang kaku, melainkan sebagai **rekan kerja t
   - [📋 Prasyarat Sistem & Kesiapan Operasional](#-prasyarat-sistem--kesiapan-operasional-system--infrastructure-requirements)
   - [Langkah 1: Pilih Sumber Knowledge Base](#langkah-1-pilih-sumber-knowledge-base-anda)
   - [Langkah 2: Deploy & Jalankan Aina (Coolify / Docker / Lokal)](#langkah-2-deploy--jalankan-aina)
-- [🔐 Setup Autentikasi Pertama Kali (`/setup`)](#-setup-autentikasi-pertama-kali-setup)
+- [⚡ Setup Autentikasi Cepat: Web OAuth PKCE & Multi-Akun (`/setup`)](#-setup-autentikasi-cepat-web-oauth-pkce--multi-akun-setup)
+- [🔄 Multi-Account Pool & Rotasi Kuota Otomatis (Round-Robin)](#-multi-account-pool--rotasi-kuota-otomatis-round-robin)
 - [🧪 Web Simulator (Real End-to-End Testing)](#-web-simulator-real-end-to-end-testing)
 - [👥 Profiling Memory & Manajemen Rekan Kerja (`aina user`)](#-profiling-memory--manajemen-rekan-kerja-aina-user)
 - [🤖 Manajemen Model AI (Gemini-First Priority & Native CLI)](#-manajemen-model-ai-gemini-first-priority--native-cli)
@@ -288,31 +290,91 @@ Akses dashboard lokal di browser: `http://localhost:8090`.
 
 ---
 
-## 🔐 Setup Autentikasi Pertama Kali (`/setup`)
+## ⚡ Setup Autentikasi Cepat: Web OAuth PKCE & Multi-Akun (`/setup`)
 
-Setelah server Aina aktif dan sehat (*healthy*):
+Aina menggunakan kredensial resmi **Google OAuth 2.0 PKCE** untuk mengakses mesin Antigravity CLI (`agy`). Anda **tidak perlu memiliki kartu kredit** atau membeli API key berbayar.
 
-1. Buka browser ke URL aplikasi Anda:
-   ```text
-   https://aina.domainkamu.com (atau http://IP_SERVER:8090)
-   ```
-2. Anda akan disambut oleh **Web Setup Onboarding Wizard**:
-   - **Cek Kode Setup**: Buka terminal log deployment Anda (di Coolify tab *Logs* atau `docker compose logs`), temukan:
-     ```text
-     🔐 SETUP / ADMIN CODE: AINA-XXXXXX
-     ```
-   - **Ambil Token Antigravity**: Di terminal laptop lokal Anda yang sudah login `agy`, jalankan:
-     ```bash
-     cat ~/.gemini/antigravity-cli/antigravity-oauth-token
-     ```
-   - Tempelkan kode setup dan seluruh JSON token pada form wizard, lalu klik **"Verifikasi & Simpan Token"**.
-3. Aina akan memverifikasi token secara *real-time*. Endpoint setup otomatis terkunci, dan dashboard berubah menjadi **"ONLINE & TERAUTENTIKASI"**!
-4. **Daftarkan Profil User Companion (Pemilik Utama)**:
-   Di terminal server, daftarkan nomor WhatsApp pribadi Anda sebagai Administrator utama:
+Aina menyediakan 3 metode setup yang sangat fleksibel:
+
+### 🌟 Metode 1: Login Cepat via Browser (Sangat Direkomendasikan - Tanpa Laptop/Terminal)
+Ini adalah cara tercepat, bisa dilakukan langsung dari ponsel Android/iPhone atau browser komputer Anda:
+1. Buka dashboard web Aina: `https://aina.domainkamu.com` (atau `http://IP_SERVER:8090`).
+2. Masukkan **Admin Key / WHATSMEOW_API_KEY** Anda di kolom atas.
+3. Klik tombol **`⚡ Tambah Akun Google via OAuth Cepat`**.
+4. Klik tombol **`🔗 Buka Halaman Login Google ↗`** yang muncul.
+5. Di tab Google baru, pilih akun Google Anda lalu klik **Izinkan (Allow)**.
+6. Di halaman konfirmasi Google, klik tombol **"Copy to Clipboard"**.
+7. Kembali ke tab dashboard Aina, klik tombol hijau **`📋 Tempel dari Clipboard & Simpan (1-Klik Cepat)`**.
+8. **Selesai!** Token akun Anda langsung diverifikasi via native PKCE dalam hitungan milidetik (~0.2 detik) dan masuk ke Pool Akun Aina.
+
+---
+
+### 📱 Metode 2: Batch Login Banyak Akun via Terminal (`login_account.py`)
+Jika Anda memiliki 5–11 akun Google dan ingin menghubungkan semuanya sekaligus secara berurutan langsung dari terminal (termasuk di HP via Termux):
+```bash
+# Jalankan script interaktif di server atau terminal Termux:
+python3 /root/projects/aina/scripts/login_account.py
+```
+- Script akan mencetak tautan login Google untuk Akun #1.
+- Buka link di browser, login akun Google, klik *Copy to Clipboard*, lalu tempel kodenya di terminal.
+- Token langsung tersimpan di `data/saved_tokens/<email>.json` dan otomatis didaftarkan ke server Aina.
+- Ketik `y` untuk lanjut ke Akun #2, #3, sampai semua akun selesai terhubung!
+
+---
+
+### 💾 Metode 3: Tempel Manual File JSON Token (Cadangan/Tradisional)
+Jika Anda sudah memiliki laptop dengan Antigravity CLI terpasang dan sudah login:
+1. Jalankan di laptop Anda:
    ```bash
-   aina user set <NOMOR_WHATSAPP_ANDA@s.whatsapp.net> --name "Nama Anda" --role "Owner & Lead" --authority admin --notes "Penanggung jawab sistem utama"
+   cat ~/.gemini/antigravity-cli/antigravity-oauth-token
    ```
-   Dengan langkah ini, Aina langsung mengenali Anda sebagai Companion terpercaya dengan hak wewenang penuh tanpa konfirmasi berulang!
+2. Buka dashboard web Aina ➔ Klik **`+ Tambah Akun Cadangan`** ➔ Buka bagian **"▸ Atau tempel manual file JSON token"**.
+3. Tempel seluruh isi JSON token tersebut lalu klik **"Simpan & Verifikasi"**.
+
+---
+
+### 👤 Daftarkan Profil User Companion (Pemilik Utama)
+Setelah akun terhubung, daftarkan nomor WhatsApp pribadi Anda sebagai Administrator utama di terminal server:
+```bash
+aina user set <NOMOR_WHATSAPP_ANDA@s.whatsapp.net> --name "Nama Anda" --role "Owner & Lead" --authority admin --notes "Penanggung jawab sistem utama"
+```
+Aina akan langsung mengenali Anda sebagai Companion terpercaya dengan wewenang penuh tanpa konfirmasi berulang!
+
+---
+
+## 🔄 Multi-Account Pool & Rotasi Kuota Otomatis (Round-Robin)
+
+Salah satu keunggulan terbesar Aina adalah kemampuan mengelola **Pool Akun Antigravity Multi-Akun** secara cerdas:
+
+```text
+┌──────────────────────────────────────────────────────────────────────────┐
+│                   AINA MULTI-ACCOUNT POOL MANAGER                        │
+├─────────────────┬─────────────────┬─────────────────┬────────────────────┤
+│ #1 Akun Utama   │ #2 Akun Tim     │ #3 Akun Cadangan│ ... Akun #11       │
+│ (ihza1@...) 🟢  │ (ihza2@...) 🟢  │ (ihza3@...) 🟢  │ (ihza11@...) 🟢    │
+└────────┬────────┴────────┬────────┴────────┬────────┴─────────┬──────────┘
+         │                 │                 │                  │
+         ▼                 ▼                 ▼                  ▼
+   [Request 1]       [Request 2]       [Request 3]        [Request N]
+         └───► Diputar Merata (Round-Robin) atau Otomatis Pindah jika 429 ◄───┘
+```
+
+### 💡 Mengapa Fitur Ini Krusial?
+Akun gratis Google Gemini memiliki batasan kuota harian (*Daily Quota & Rate Limit*). Dengan menghubungkan beberapa akun (misalnya 5 s.d. 11 akun Google):
+- **Kapasitas Kuota Berlipat Ganda**: 11 akun = 11x lipat kuota harian untuk tim/grup kantor Anda.
+- **Auto Failover Tanpa Putus**: Jika Akun #1 mencapai limit kuota (`429 Too Many Requests` atau `Resource Exhausted`), Aina secara otomatis mengistirahatkan akun tersebut (*auto-cooldown*) dan **seketika mengalihkan request ke Akun #2** tanpa memunculkan pesan error di WhatsApp.
+- **Auto-Cooldown Recovery**: Akun yang terkena limit akan diistirahatkan sementara (misal 30 menit s.d. pergantian hari) dan otomatis diaktifkan kembali saat kuota pulih.
+
+### ⚙️ Pilihan Strategi Rotasi Kuota:
+Atur melalui environment variable `AINA_TOKEN_STRATEGY`:
+1. **`round_robin` (Default - Direkomendasikan)**:
+   Setiap request baru ke Aina akan diputar secara bergantian ke seluruh akun yang sehat (`Account-1` ➔ `Account-2` ➔ `Account-3` ➔ dst). Memastikan beban kuota terbagi sangat merata.
+2. **`sticky` / `priority`**:
+   Aina akan selalu menggunakan akun pertama (`Account-1`). Hanya jika akun pertama terkena limit kuota, Aina beralih ke `Account-2`, dan seterusnya.
+
+### 📊 Memantau & Mengelola Akun:
+- **Via Web Dashboard**: Buka kartu **Pool Akun Antigravity (Multi-Account)** di dashboard web untuk melihat daftar akun aktif, email, status cooldown, dan tombol hapus akun.
+- **Via File Penyimpanan**: Seluruh token tersimpan aman di berkas persistent `data/token_pool.json` sehingga tetap utuh meskipun container di-restart atau server reboot.
 
 ---
 
@@ -668,7 +730,9 @@ Aina didesain dengan prinsip **Privacy-First & Zero Leakage** untuk lingkungan k
 | `DATABASE_PATH` | `data/aina.db` | Path berkas SQLite database (`/app/data/aina.db` di container) |
 | `ADMIN_KEY` / `AINA_ADMIN_KEY` | *(Auto-generated)* | Kunci rahasia untuk membuka kunci Web Simulator & Wizard |
 | `ADMIN_JID` / `AINA_ADMIN_JID` | - | Nomor WhatsApp pemilik/admin dengan hak wewenang penuh |
+| `AINA_TOKEN_STRATEGY` | `round_robin` | Strategi rotasi pool akun: `round_robin` (diputar merata) atau `sticky` (prioritas sampai limit) |
 | `AINA_OAUTH_TOKEN` | - | *(Opsional)* Token OAuth Antigravity CLI mentah (JSON) untuk auto-injeksi di Coolify/Docker |
+| `ANTIGRAVITY_TOKEN_PATH` | `/root/.gemini/antigravity-cli/antigravity-oauth-token` | Path berkas token Antigravity aktif di server |
 | `AINA_PERSONA_TEXT` | - | *(Opsional)* Teks persona kustom untuk meng-override isi `config/persona.md` |
 | `AINA_ORGANIZATION_TEXT` | - | *(Opsional)* Konteks organisasi kustom untuk meng-override `config/organization.md` |
 | `SCHEDULER_ENABLED` | `true` | Mengaktifkan pemindaian berkala in-process otomatis |
@@ -692,7 +756,7 @@ src/
 │   │   ├── archive.rs           # SQLite FTS5 Full-Text Search BM25 Engine
 │   │   └── audit.rs             # Audit Trail Jejak Eksekusi Antigravity
 │   ├── ports/                   # Port Interfaces (Dependency Inversion)
-│   │   ├── agent_engine.rs      # Trait AgentEnginePort (LLM Invocation & Models)
+│   │   ├── agent_engine.rs      # Trait AgentEnginePort (LLM Invocation, Token Pool & Models)
 │   │   ├── whatsapp.rs          # Trait WhatsAppPort (Multi-Session Dispatch & Presence)
 │   │   ├── session_store.rs     # Trait SessionStorePort (Chat History & Active Jobs)
 │   │   └── ingestion.rs         # Trait KnowledgeIngestionPort & SourceRegistryPort
@@ -705,7 +769,7 @@ src/
 │   │   ├── scheduler.rs         # In-Process Background Scheduler Runner
 │   │   └── cli.rs               # Unified Rust CLI Dispatcher (`aina [subcommand]`)
 │   └── driven/                  # Driven / Outbound Adapters
-│       ├── agy_cli.rs           # Google Antigravity CLI Adapter (`agy`)
+│       ├── agy_cli.rs           # Google Antigravity CLI Adapter (`agy`) & Multi-Account Pool
 │       ├── whatsmeow_http.rs    # Whatsmeow Multi-Session REST Client
 │       └── sqlite_store.rs      # SQLite Persistence Adapter + FTS5 Search
 ├── config/                      # Pengaturan aplikasi & pemuat persona
@@ -732,16 +796,26 @@ Atau jika menggunakan Coolify, periksa tab <b>Logs</b> pada aplikasi Aina Anda.
 
 <details>
 <summary><b>3. Muncul pesan status "Unauthenticated" pada Dashboard. Bagaimana solusinya?</b></summary>
-Pastikan volume persistent <code>aina_gemini</code> terpasang di <code>/root/.gemini</code> pada Docker/Coolify. Buka <code>https://aina.domainkamu.com/setup</code> dan tempelkan token JSON dari <code>~/.gemini/antigravity-cli/antigravity-oauth-token</code> di laptop lokal Anda.
+Pastikan volume persistent <code>aina_gemini</code> terpasang di <code>/root/.gemini</code> pada Docker/Coolify. Anda tidak perlu repot menyalin file JSON—cukup buka <code>https://aina.domainkamu.com</code>, masukkan Admin Key, dan klik tombol <b><code>⚡ Tambah Akun Google via OAuth Cepat</code></b> langsung dari browser Anda!
 </details>
 
 <details>
 <summary><b>4. Apakah saya butuh kartu kredit atau API key LLM berbayar pihak ketiga?</b></summary>
-Tidak. Aina memanfaatkan antarmuka langsung <b>Google Antigravity CLI (<code>agy</code>)</b> yang terhubung dengan akun Google pengembang Anda, sehingga model-model canggih seperti <b>Gemini 3.8 Flash</b> dan <b>Gemini 3.1 Pro</b> dapat langsung beroperasi.
+Tidak. Aina memanfaatkan antarmuka langsung <b>Google Antigravity CLI (<code>agy</code>)</b> yang terhubung dengan akun Google pengembang Anda, sehingga model-model canggih seperti <b>Gemini 3.8 Flash</b> dan <b>Gemini 3.1 Pro</b> dapat langsung beroperasi secara gratis.
 </details>
 
 <details>
-<summary><b>5. Bagaimana jika Whatsmeow mengalami putus koneksi (disconnected)?</b></summary>
+<summary><b>5. Bagaimana jika kuota harian Google Gemini / Antigravity habis?</b></summary>
+Aina telah dilengkapi fitur <b>Multi-Account Pool</b>! Anda dapat menambahkan 5 s.d. 11 akun Google cadangan. Jika satu akun mencapai kuota (<i>429 Too Many Requests / Resource Exhausted</i>), Aina secara otomatis mengistirahatkan akun tersebut dan <b>seketika mengalihkan request ke akun berikutnya (Round-Robin / Failover)</b> tanpa membuat obrolan di WhatsApp terputus.
+</details>
+
+<details>
+<summary><b>6. Apakah saya bisa setup Aina tanpa memiliki laptop (hanya dari HP Android)?</b></summary>
+Bisa 100%! Anda dapat membuka Dashboard Web Aina langsung dari Google Chrome di HP Anda, lalu gunakan tombol <b><code>⚡ Tambah Akun Google via OAuth Cepat</code></b> (tersedia tombol 1-klik tempel clipboard). Anda juga bisa menjalankan script <code>python3 scripts/login_account.py</code> langsung di terminal Termux Android.
+</details>
+
+<details>
+<summary><b>7. Bagaimana jika Whatsmeow mengalami putus koneksi (disconnected)?</b></summary>
 Cek status koneksi seketika melalui CLI server:
 <pre><code>aina status</code></pre>
 Jika salah satu sesi terputus, buka antarmuka gateway Whatsmeow Anda dan lakukan tautkan ulang (<i>re-link device</i>) dengan scan QR code baru.
