@@ -115,6 +115,22 @@ impl WhatsmeowHttpAdapter {
         let api_key = self.api_key.as_str();
 
         let is_status_broadcast = to_jid == "status@broadcast" || to_jid == "status";
+        if is_status_broadcast {
+            let clean = text.trim();
+            let clean_lower = clean.to_lowercase();
+            if clean.is_empty()
+                || clean_lower.contains("error")
+                || clean_lower.contains("exception")
+                || clean_lower.contains("failed")
+                || clean_lower.contains("traceback")
+                || clean_lower.contains("500 internal")
+                || clean_lower.contains("503 service")
+                || clean_lower.contains("quota exceeded")
+                || clean.starts_with("⚠️")
+            {
+                anyhow::bail!("Refused to post empty or error-laden message to status@broadcast: {}", clean);
+            }
+        }
         let url = if is_status_broadcast {
             format!("{}/api/v1/status/send-story", base_url.trim_end_matches('/'))
         } else {

@@ -379,7 +379,50 @@ def cmd_about_set(args):
     res = make_request("POST", "/api/v1/user/about", {"status": args.status})
     print(json.dumps(res, indent=2, ensure_ascii=False))
 
+# Import StatusSafetyGuard dari scripts/persona/safety jika tersedia
+try:
+    from scripts.persona.safety import StatusSafetyGuard
+except Exception:
+    _aina_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    if _aina_root not in sys.path:
+        sys.path.insert(0, _aina_root)
+    try:
+        from scripts.persona.safety import StatusSafetyGuard
+    except Exception:
+        StatusSafetyGuard = None
+
+def validate_safe_status(text=None, file_path=None):
+    if StatusSafetyGuard:
+        if text is not None:
+            is_safe, reason = StatusSafetyGuard.validate_status_text(text)
+            if not is_safe:
+                return False, f"Teks status tidak aman / mengandung error: {reason}"
+        if file_path is not None:
+            is_safe, reason = StatusSafetyGuard.validate_status_media(file_path)
+            if not is_safe:
+                return False, f"Media status tidak valid / rusak: {reason}"
+        return True, ""
+    else:
+        # Fallback minimal jika modul safety tidak dapat dimuat
+        if text is not None:
+            clean = str(text).strip().lower()
+            if not clean or any(e in clean for e in ["error", "exception", "failed", "traceback", "500", "502", "503", "quota"]):
+                return False, "Teks status mengandung indikasi pesan error."
+        if file_path is not None:
+            if not os.path.exists(file_path) or os.path.getsize(file_path) < 1024:
+                return False, "Berkas media tidak ditemukan atau berukuran 0/rusak."
+        return True, ""
+
 def cmd_status_send_text(args):
+    is_safe, reason = validate_safe_status(text=args.text)
+    if not is_safe:
+        print(json.dumps({
+            "error": True,
+            "safety_violation": True,
+            "message": f"DITOLAK STATUS SAFETY GUARD: {reason}"
+        }, indent=2, ensure_ascii=False))
+        sys.exit(1)
+
     payload = {
         "type": "text",
         "text": args.text
@@ -395,9 +438,26 @@ def cmd_status_send_media(args):
     base_url, api_key = get_config(args)
     endpoint = f"{base_url}/api/v1/status/send-story"
     file_path = os.path.abspath(args.file)
-    if not os.path.exists(file_path):
-        print(json.dumps({"error": True, "message": f"File not found: {file_path}"}))
+
+    # Validasi media dan caption melalui StatusSafetyGuard
+    is_safe_media, media_err = validate_safe_status(file_path=file_path)
+    if not is_safe_media:
+        print(json.dumps({
+            "error": True,
+            "safety_violation": True,
+            "message": f"DITOLAK STATUS SAFETY GUARD: {media_err}"
+        }, indent=2, ensure_ascii=False))
         sys.exit(1)
+
+    if args.caption:
+        is_safe_caption, cap_err = validate_safe_status(text=args.caption)
+        if not is_safe_caption:
+            print(json.dumps({
+                "error": True,
+                "safety_violation": True,
+                "message": f"DITOLAK STATUS SAFETY GUARD (Caption tidak aman): {cap_err}"
+            }, indent=2, ensure_ascii=False))
+            sys.exit(1)
 
     media_type = args.type
     if not media_type or media_type == "auto":

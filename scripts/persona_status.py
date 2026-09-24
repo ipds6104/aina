@@ -20,6 +20,22 @@ import random
 import argparse
 from datetime import datetime, timezone, timedelta
 
+# Sisipkan direktori skrip ke sys.path agar modul persona dapat diimpor langsung
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+_BASE_ROOT = os.path.abspath(os.path.join(_SCRIPT_DIR, ".."))
+if _BASE_ROOT not in sys.path:
+    sys.path.insert(0, _BASE_ROOT)
+
+from persona import (
+    StatusSafetyGuard,
+    AtmosphereEngine,
+    WardrobeManager,
+    WARDROBE_PRESETS,
+    ImageCaptionEngine,
+)
+
 # Default Timezone: WIB (UTC+7)
 WIB = timezone(timedelta(hours=7))
 
@@ -64,14 +80,8 @@ FRAMING_STYLES = {
     "cinematic": "Atmospheric wide cinematic framing, Makoto Shinkai composition"
 }
 
-# Matriks Lemari Pakaian Dinamis (Dynamic Wardrobe)
-WARDROBE_STYLES = {
-    "wfh_cozy": "oversized cozy knit sweater in soft cream and lavender tones, comfortable relaxed culottes, indoor slippers, minimalist reading glasses",
-    "smart_casual": "crisp white collared cotton shirt with a knit vest, tailored grey trousers, clean white sneakers, canvas tote bag",
-    "outdoor_nature": "breezy light pastel cotton blouse, rolled-up linen trousers, cotton bucket hat, canvas crossbody bag",
-    "night_stargaze": "thick warm navy-blue fleece hoodie or parka with warm hood, cozy jogger pants, fingerless knit gloves, holding steaming ceramic mug",
-    "celestial_sig": "celestial navy-blue robe and dress with delicate gold constellation star embroidery and subtle stardust motifs"
-}
+# Matriks Lemari Pakaian Dinamis (Dynamic Wardrobe) dari WardrobeManager
+WARDROBE_STYLES = WARDROBE_PRESETS
 
 def load_journal():
     if not os.path.exists(JOURNAL_FILE):
@@ -161,10 +171,11 @@ def should_post_now(today_entries, slot, force=False):
 
     return False, "Kondisi tidak terpenuhi"
 
-def detect_boredom_state(recent_entries, weekend):
-    recent_themes = [e.get("theme") for e in recent_entries[-5:] if e.get("theme")]
-    recent_outfits = [e.get("outfit") for e in recent_entries[-5:] if e.get("outfit")]
+def detect_boredom_state(recent_entries, weekend, dt=None):
+    if dt is None:
+        dt = get_current_wib_time()
 
+    recent_themes = [e.get("theme") for e in recent_entries[-5:] if e.get("theme")]
     theme_counts = {t: recent_themes.count(t) for t in set(recent_themes)}
     max_theme_rep = max(theme_counts.values()) if theme_counts else 0
     unique_themes = len(set(recent_themes))
@@ -180,11 +191,13 @@ def detect_boredom_state(recent_entries, weekend):
         boredom_score += 35
         reasons.append(f"Variasi tema rendah ({unique_themes} tema unik dari {len(recent_themes)} status)")
 
-    if recent_outfits and len(recent_outfits) >= 3 and len(set(recent_outfits[-3:])) == 1:
-        boredom_score += 25
-        reasons.append(f"Outfit '{recent_outfits[-1]}' dipakai 3 kali berturut-turut")
+    # Evaluasi kebosanan busana via WardrobeManager
+    w_boredom = WardrobeManager.detect_outfit_boredom(recent_entries, dt)
+    if w_boredom["is_bored"]:
+        boredom_score += w_boredom["boredom_score"]
+        reasons.extend(w_boredom["reasons"])
 
-    boredom_triggered = boredom_score >= 40 or (len(recent_themes) >= 3 and max_theme_rep >= 2)
+    boredom_triggered = boredom_score >= 40 or (len(recent_themes) >= 3 and max_theme_rep >= 2) or w_boredom["is_bored"]
 
     if weekend:
         suggested_queries = [
@@ -204,16 +217,17 @@ def detect_boredom_state(recent_entries, weekend):
         ]
 
     return {
-        "boredom_score": boredom_score,
+        "boredom_score": min(boredom_score, 100),
         "is_triggered": boredom_triggered,
         "reasons": reasons,
         "recent_themes": recent_themes,
-        "recent_outfits": recent_outfits,
+        "recent_outfits": w_boredom["recent_outfits"],
+        "wardrobe_boredom": w_boredom,
         "suggested_search_queries": suggested_queries,
         "selected_query": random.choice(suggested_queries)
     }
 
-def select_activity_with_novelty(recent_entries, slot, weekend, search_query=None):
+def select_activity_with_novelty(recent_entries, slot, weekend, search_query=None, custom_clothes=None, requested_outfit=None):
     # Kumpulan tema dasar terstruktur
     if not weekend:
         # Weekday: Remote Software Engineer & Virtual Assistant (Work From Home)
@@ -273,7 +287,7 @@ def select_activity_with_novelty(recent_entries, slot, weekend, search_query=Non
             "sore": [
                 {
                     "theme": "golden_hour_balkon",
-                    "scene": "Berdiri di balkon rumah saat golden hour senja, langit bergradasi jingga-ungu dramatis dengan awan kumulus bercahaya keemasan khas Makoto Shinkai, memegang cangkir teh hangat.",
+                    "scene": "Berdiri di balkon rumah saat golden hour senja, langit bergradasi jingga-ungu hangat menawan khas Makoto Shinkai, memegang cangkir teh hangat.",
                     "caption": "Senja hari ini indah bangeett! Sinar keemasan matahari terbenam selalu jadi penutup hari kerja remote yang menenangkan. Terima kasih untuk kerja keras kita hari ini ✨",
                     "anchor_clothes": "cream-colored knit cardigan, silver crescent moon hairclip glinting",
                     "framing": "selfie",
@@ -357,7 +371,7 @@ def select_activity_with_novelty(recent_entries, slot, weekend, search_query=Non
                 },
                 {
                     "theme": "bukit_hijau_lembah",
-                    "scene": "Duduk di lereng perbukitan hijau berpadang rumput, menatap lembah luas di bawah awan kumulus emas yang megah saat matahari terbenam.",
+                    "scene": "Duduk di lereng perbukitan hijau berpadang rumput, menatap lembah luas bermandikan cahaya matahari terbenam keemasan yang megah.",
                     "caption": "Dari atas perbukitan ini, dunia terasa begitu luas dan indah. Kadang kita cuma perlu melangkah keluar untuk melihat betapa besarnya harapan yang ada.",
                     "anchor_clothes": "warm windbreaker jacket, silver hairclip glinting in the sunset",
                     "framing": "tripod",
@@ -398,7 +412,7 @@ def select_activity_with_novelty(recent_entries, slot, weekend, search_query=Non
         {"desc": "Menemukan pantulan pelangi tipis di genangan air jernih setelah gerimis reda.", "tag": "pelangi_gerimis"},
         {"desc": "Hembusan angin sejuk menerbangkan beberapa helai daun keemasan di atas bangku taman.", "tag": "daun_keemasan"},
         {"desc": "Penjual bunga sepeda melintas dengan keranjang krisan dan lili beraneka warna.", "tag": "sepeda_bunga"},
-        {"desc": "Menemukan pembatas buku berilustrasi awan di dalam buku catatan lama yang terselip.", "tag": "pembatas_buku"},
+        {"desc": "Menemukan pembatas buku berilustrasi rasi bintang di dalam buku catatan lama yang terselip.", "tag": "pembatas_buku"},
     ]
 
     # Beri penalti: Tema yang sama dengan kemarin diberi penalti keras (+10) agar tidak duplikat
@@ -433,19 +447,34 @@ def select_activity_with_novelty(recent_entries, slot, weekend, search_query=Non
         chosen["boredom_reflection"] = reflection
         chosen["scene"] = f"{chosen['scene']} Elemen kejutan tak terduga: {twist['desc']}"
 
+    # Integrasi Lemari Pakaian & Anti-Kebosanan Busana
+    outfit_key, clothes_desc, is_custom, w_reflection = WardrobeManager.resolve_outfit(
+        slot=slot,
+        weekend=weekend,
+        activity=chosen,
+        journal=recent_entries,
+        custom_clothes=custom_clothes,
+        requested_outfit=requested_outfit,
+    )
+    chosen["slot"] = slot
+    chosen["outfit"] = outfit_key
+    chosen["anchor_clothes"] = clothes_desc
+    chosen["is_custom_outfit"] = is_custom
+    chosen["wardrobe_reflection"] = w_reflection
+
     return chosen
 
-def build_makoto_shinkai_prompt(activity, weekend):
+def build_makoto_shinkai_prompt(activity, weekend, force_clouds=False):
     framing_key = activity.get("framing", "selfie")
     framing_desc = FRAMING_STYLES.get(framing_key, FRAMING_STYLES["selfie"])
 
-    # Tentukan busana: jika ada outfit_key di WARDROBE_STYLES, utamakan itu
+    # Tentukan busana: jika ada outfit_key di WARDROBE_PRESETS, utamakan itu
     outfit_key = activity.get("outfit")
-    if outfit_key and outfit_key in WARDROBE_STYLES:
-        clothes_desc = WARDROBE_STYLES[outfit_key]
+    if outfit_key and outfit_key in WARDROBE_PRESETS:
+        clothes_desc = WARDROBE_PRESETS[outfit_key]
     else:
         clothes_desc = activity.get("anchor_clothes") or (
-            WARDROBE_STYLES["wfh_cozy"] if not weekend else WARDROBE_STYLES["outdoor_nature"]
+            WARDROBE_PRESETS["wfh_cozy"] if not weekend else WARDROBE_PRESETS["outdoor_nature"]
         )
 
     if framing_key == "pov":
@@ -468,49 +497,82 @@ def build_makoto_shinkai_prompt(activity, weekend):
         else "Clean mirror reflection showing only the smartphone. "
     )
 
+    # Estetika sinematik Makoto Shinkai kontekstual (tanpa awan paksaan!)
+    slot = activity.get("slot", "sore")
+    aesthetic = AtmosphereEngine.build_cinematic_atmosphere(
+        scene_desc=activity.get("scene", ""),
+        slot=slot,
+        framing=framing_key,
+        include_clouds=force_clouds
+    )
+
     prompt = (
         f"A masterwork cinematic anime scene in the distinct art style of Makoto Shinkai and CoMix Wave Films. "
         f"Camera framing & angle: {framing_desc}. {equipment_exclusion}"
         f"{subject_desc}"
         f"Scene: {activity['scene']} "
-        f"Aesthetic elements: Grand towering cumulus clouds, dramatic volumetric god-rays and lens flares, "
-        f"breathtaking sky gradients, photorealistic painterly background, rich emotional atmosphere, 8k resolution anime film still."
+        f"Aesthetic elements: {aesthetic}"
     )
     return prompt
 
-def execute_generate_and_post(activity, prompt, avatar_ref=None, dry_run=False):
+def execute_generate_and_post(activity, prompt, avatar_ref=None, dry_run=False, image_file=None):
     output_dir = os.path.join(BASE_DIR, "output", "status")
     os.makedirs(output_dir, exist_ok=True)
     timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-    image_name = f"status_{activity['theme']}_{timestamp_str}.png"
-    target_path = os.path.join(output_dir, image_name)
+
+    if image_file and os.path.exists(image_file):
+        target_path = os.path.abspath(image_file)
+    else:
+        image_name = f"status_{activity['theme']}_{timestamp_str}.png"
+        target_path = os.path.join(output_dir, image_name)
+
     start_time = time.time()
 
-    print(f"\n🎨 [1/3] Menyiapkan Prompt Gambar Makoto Shinkai:")
-    print(f"• Tema: {activity['theme']}")
+    print(f"\n🎨 [1/3] Menyiapkan Visual Makoto Shinkai (Kontekstual & Bebas Awan Paksaan):")
+    print(f"• Tema       : {activity['theme']}")
+    print(f"• Outfit     : {activity.get('outfit', 'default')} ({activity.get('anchor_clothes', '')})")
     print(f"• Prompt:\n  {prompt}\n")
     if avatar_ref:
         print(f"• Menggunakan Avatar Acuan: {avatar_ref}")
     else:
-        print(f"• Avatar Acuan: Tidak ditemukan di assets/, mengandalkan prompt anchors teks")
-
-    print(f"\n📝 [2/3] Caption Status WhatsApp (Impact Maxxing):")
-    print(f"  \"{activity['caption']}\"\n")
+        print(f"• Avatar Acuan: Mengandalkan prompt anchors teks")
 
     duration_secs = time.time() - start_time
     if dry_run:
-        print("💡 [DRY-RUN] Melewati pembuatan gambar nyata dan posting WhatsApp.")
-        return True, target_path, "dry_run", None, duration_secs
+        print(f"\n📝 [2/3] Draf Awal Caption:")
+        print(f"  \"{activity.get('caption', '')}\"")
+        print("\n💡 [DRY-RUN] Melewati pembuatan gambar nyata dan posting WhatsApp.")
+        return True, target_path, "dry_run", None, duration_secs, activity.get("caption", "")
 
-    # Pemanggilan generate_image atau placeholder pembuatan
     wa_tool = os.path.join(BASE_DIR, "skills", "whatsmeow", "scripts", "wa_tool.py")
+
+    # ALUR UTAMA: Jika berkas gambar telah selesai dibuat di target_path (atau via --image):
     if os.path.exists(target_path):
+        # 1. Validasi integritas berkas media terlebih dahulu
+        is_media_valid, media_err = StatusSafetyGuard.validate_status_media(target_path)
+        if not is_media_valid:
+            print(f"🛑 [StatusSafetyGuard] Berkas gambar tidak valid: {media_err}")
+            return False, target_path, "failed", f"Media tidak valid: {media_err}", duration_secs, ""
+
+        # 2. GENERATE & SESUAIKAN CAPTION SETELAH GAMBAR SELESAI DIBUAT
+        print(f"\n📝 [2/3] Menyusun & Menyesuaikan Caption WhatsApp Berdasarkan Gambar Nyata (Post-Image Generation)...")
+        final_caption = ImageCaptionEngine.generate_caption_from_image(
+            image_path=target_path,
+            activity_context=activity,
+            fallback_caption=activity.get("caption")
+        )
+        # Sanitasi ketat untuk menjamin ZERO ERROR dalam status WhatsApp
+        final_caption = StatusSafetyGuard.sanitize_caption(final_caption, fallback=activity.get("caption"))
+        activity["caption"] = final_caption
+        print(f"• Caption Terpasang (Impact Maxxing): \"{final_caption}\"\n")
+
+        # 3. Publikasikan ke Status WhatsApp via wa_tool.py
         import subprocess
         print(f"🚀 [3/3] Mempublikasikan ke Status WhatsApp via wa_tool.py...")
         cmd = [
             sys.executable, wa_tool, "status-send-media",
             "--file", target_path,
-            "--caption", activity['caption']
+            "--caption", final_caption
         ]
         res = subprocess.run(cmd, capture_output=True, text=True)
         duration_secs = time.time() - start_time
@@ -518,12 +580,14 @@ def execute_generate_and_post(activity, prompt, avatar_ref=None, dry_run=False):
         if res.returncode != 0:
             err_msg = res.stderr.strip() or "wa_tool status-send-media returned non-zero exit code"
             print(f"⚠️ Error wa_tool: {err_msg}")
-            return False, target_path, "failed", err_msg, duration_secs
-        return True, target_path, "published", None, duration_secs
+            return False, target_path, "failed", err_msg, duration_secs, final_caption
+        return True, target_path, "published", None, duration_secs, final_caption
     else:
+        print(f"\n📝 [2/3] Draf Perencanaan Gambar & Rujukan:")
         print(f"ℹ️ Target gambar akan di-generate via antarmuka agy/generate_image ke: {target_path}")
+        print("ℹ️ Begitu gambar selesai di-generate, caption akan otomatis disusun dan diselaraskan dengan gambar sebelum diposting ke status WhatsApp.")
         duration_secs = time.time() - start_time
-        return True, target_path, "draft_ready", None, duration_secs
+        return True, target_path, "draft_ready", None, duration_secs, activity.get("caption", "")
 
 def get_diagnostics():
     now = get_current_wib_time()
@@ -633,21 +697,34 @@ def main():
     p_gen.add_argument("--clothes", help="Pakaian / wardrobe Aina pada momen ini (kustom)")
     p_gen.add_argument("--reflection", help="Refleksi rasa bosan / alasan memilih momen ini")
     p_gen.add_argument("--search-query", help="Inspirasi hasil riset internet terarah untuk memperkaya adegan")
+    p_gen.add_argument("--force-clouds", action="store_true", help="Paksa elemen awan kumulus pada estetika prompt")
 
     # post
     p_post = subparsers.add_parser("post", help="Eksekusi pembuatan status (jika kuota & peluang terpenuhi)")
     p_post.add_argument("--slot", choices=["pagi", "siang", "sore", "malam"], help="Override slot waktu")
     p_post.add_argument("--force", action="store_true", help="Paksa posting tanpa melihat batasan kuota harian")
     p_post.add_argument("--dry-run", action="store_true", help="Simulasi tanpa generate/upload nyata")
+    p_post.add_argument("--image", help="Jalur berkas gambar yang telah selesai di-generate untuk diposting")
     p_post.add_argument("--framing", choices=list(FRAMING_STYLES.keys()), help="Sudut pandang kamera / framing foto solo (selfie, tripod, desk_prop, pov, mirror, cinematic)")
     p_post.add_argument("--outfit", choices=list(WARDROBE_STYLES.keys()), help="Pilihan busana dari lemari pakaian dinamis Aina (wfh_cozy, smart_casual, outdoor_nature, night_stargaze, celestial_sig)")
     p_post.add_argument("--custom", action="store_true", help="Gunakan adegan hasil imajinasi bebas Aina sendiri")
     p_post.add_argument("--theme", help="Nama tema imajinasi")
     p_post.add_argument("--scene", help="Deskripsi adegan visual hasil imajinasi Aina")
-    p_post.add_argument("--caption", help="Teks caption status WhatsApp")
+    p_post.add_argument("--caption", help="Teks caption status WhatsApp (opsional jika sudah ada gambar, otomatis diracik sesuai gambar)")
     p_post.add_argument("--clothes", help="Pakaian / wardrobe Aina pada momen ini (kustom)")
     p_post.add_argument("--reflection", help="Refleksi rasa bosan / alasan memilih momen ini")
     p_post.add_argument("--search-query", help="Inspirasi hasil riset internet terarah untuk memperkaya adegan")
+    p_post.add_argument("--force-clouds", action="store_true", help="Paksa elemen awan kumulus pada estetika prompt")
+
+    # wardrobe (Inspeksi & Diagnostik Busana Dinamis)
+    p_ward = subparsers.add_parser("wardrobe", help="Status lemari pakaian dinamis, kuota kreasi busana mingguan, dan deteksi kebosanan")
+    p_ward.add_argument("--json", action="store_true", help="Output format JSON terstruktur")
+
+    # caption (Sintesis Caption Pasca-Gambar)
+    p_cap = subparsers.add_parser("caption", help="Susun dan sesuaikan caption dari gambar yang telah dibuat")
+    p_cap.add_argument("--file", required=True, help="Jalur berkas gambar (.png/.jpg)")
+    p_cap.add_argument("--slot", choices=["pagi", "siang", "sore", "malam"], help="Slot waktu")
+    p_cap.add_argument("--theme", help="Nama tema aktivitas")
 
     # history
     p_hist = subparsers.add_parser("history", help="Lihat riwayat status yang pernah di-post")
@@ -786,21 +863,59 @@ def main():
         print("  --reflection \"<alasan_memilih_momen_ini>\"")
         print("  # (Opsi tambahan: ganti --outfit dengan --clothes \"<busana_baru_on_the_spot>\" jika ingin kreasi baju baru)\n")
 
+    elif args.command == "wardrobe":
+        w_boredom = WardrobeManager.detect_outfit_boredom(journal, now)
+        if getattr(args, "json", False):
+            print(json.dumps(w_boredom, indent=2, ensure_ascii=False))
+            return
+
+        print("👗 Lemari Pakaian Dinamis & Pelacak Kebosanan Aina")
+        print("================================================================================")
+        print(f"  Waktu Pemeriksaan        : {now.strftime('%A, %d %B %Y %H:%M:%S')} WIB")
+        print(f"  Kuota Kustom Minggu Ini   : {w_boredom['weekly_custom_count']} / {w_boredom['weekly_custom_limit']} maksimal (Boleh buat baru: {'✅ Ya' if w_boredom['can_create_custom'] else '⏸️ Penuh (Max 2x/minggu)'})")
+        b_st = "⚠️ TERPICU (Bosan terhadap busana tertentu)" if w_boredom["is_bored"] else "✅ NORMAL (Variasi Sehat)"
+        print(f"  Status Kebosanan Busana   : {b_st} (Skor: {w_boredom['boredom_score']})")
+        if w_boredom["repeated_outfit"]:
+            print(f"  Outfit Berulang           : {w_boredom['repeated_outfit']}")
+        if w_boredom["reasons"]:
+            print(f"  Catatan Evaluasi          : {', '.join(w_boredom['reasons'])}")
+        print("--------------------------------------------------------------------------------")
+        print("📋 5 Preset Busana Utama (Zero Visual Drifting):")
+        for k, v in WARDROBE_PRESETS.items():
+            print(f"  • {k:<15}: {v}")
+        print("================================================================================")
+        return
+
+    elif args.command == "caption":
+        img_file = args.file
+        slot = getattr(args, "slot", None) or get_time_slot(now)
+        theme = getattr(args, "theme", None) or "momen_hari_ini"
+        ctx = {"slot": slot, "theme": theme}
+        raw_caption = ImageCaptionEngine.generate_caption_from_image(img_file, activity_context=ctx)
+        final_caption = StatusSafetyGuard.sanitize_caption(raw_caption)
+        print(f"📸 Hasil Analisis Gambar & Caption:\n\"{final_caption}\"")
+        return
+
     elif args.command == "generate":
         slot = args.slot or get_time_slot(now)
         weekend = True if args.weekend else (False if args.weekday else is_weekend(now))
 
-        if getattr(args, "custom", False) and getattr(args, "scene", None) and getattr(args, "caption", None):
+        if getattr(args, "custom", False) and getattr(args, "scene", None):
             chosen = {
                 "theme": args.theme or f"imajinasi_{slot}",
                 "scene": args.scene,
-                "caption": args.caption,
+                "caption": getattr(args, "caption", None) or "Rehat sejenak dan nikmati momen hari ini ✨",
                 "anchor_clothes": getattr(args, "clothes", None) or ("casual cozy knit cardigan, comfortable home attire" if not weekend else "light cotton pastel top, canvas tote bag"),
                 "boredom_reflection": getattr(args, "reflection", None) or f"Aina secara mandiri membayangkan adegan '{args.theme or 'bebas'}' untuk menghadirkan nuansa baru.",
                 "novelty_twist": "Imajinasi orisinal Aina",
             }
         else:
-            chosen = select_activity_with_novelty(journal, slot, weekend, search_query=getattr(args, "search_query", None))
+            chosen = select_activity_with_novelty(
+                journal, slot, weekend,
+                search_query=getattr(args, "search_query", None),
+                custom_clothes=getattr(args, "clothes", None),
+                requested_outfit=getattr(args, "outfit", None),
+            )
 
         if getattr(args, "framing", None):
             chosen["framing"] = args.framing
@@ -809,7 +924,7 @@ def main():
         if getattr(args, "clothes", None):
             chosen["anchor_clothes"] = args.clothes
 
-        prompt = build_makoto_shinkai_prompt(chosen, weekend)
+        prompt = build_makoto_shinkai_prompt(chosen, weekend, force_clouds=getattr(args, "force_clouds", False))
         avatar_ref = get_avatar_reference_path()
         print(f"🎬 [DRAF STATUS AINA]")
         print(f"• Slot: {slot.upper()} | Hari: {'Weekend' if weekend else 'Weekday'}")
@@ -818,8 +933,8 @@ def main():
         print(f"• Busana / Wardrobe : {chosen.get('outfit', 'default').upper()} ({chosen.get('anchor_clothes')})")
         print(f"• Refleksi Kebosanan: {chosen['boredom_reflection']}")
         print(f"• Elemen Kejutan    : {chosen['novelty_twist']}")
-        print(f"• Caption:\n  \"{chosen['caption']}\"")
-        print(f"\n🎨 Prompt Makoto Shinkai:\n{prompt}")
+        print(f"• Caption (Draf)    :\n  \"{chosen['caption']}\"")
+        print(f"\n🎨 Prompt Makoto Shinkai (Kontekstual):\n{prompt}")
         if avatar_ref:
             print(f"\n🖼️ Avatar Acuan: {avatar_ref}")
 
@@ -837,17 +952,22 @@ def main():
             print("🛑 Melewati pembuatan status untuk slot waktu ini.")
             sys.exit(0)
 
-        if getattr(args, "custom", False) and getattr(args, "scene", None) and getattr(args, "caption", None):
+        if getattr(args, "custom", False) and getattr(args, "scene", None):
             chosen = {
                 "theme": args.theme or f"imajinasi_{slot}",
                 "scene": args.scene,
-                "caption": args.caption,
+                "caption": getattr(args, "caption", None) or "Rehat sejenak dan nikmati momen hari ini ✨",
                 "anchor_clothes": getattr(args, "clothes", None) or ("casual cozy knit cardigan, comfortable home attire" if not weekend else "light cotton pastel top, canvas tote bag"),
                 "boredom_reflection": getattr(args, "reflection", None) or f"Aina secara mandiri membayangkan adegan '{args.theme or 'bebas'}' untuk menghadirkan nuansa baru.",
                 "novelty_twist": "Imajinasi orisinal Aina",
             }
         else:
-            chosen = select_activity_with_novelty(journal, slot, weekend, search_query=getattr(args, "search_query", None))
+            chosen = select_activity_with_novelty(
+                journal, slot, weekend,
+                search_query=getattr(args, "search_query", None),
+                custom_clothes=getattr(args, "clothes", None),
+                requested_outfit=getattr(args, "outfit", None),
+            )
 
         if getattr(args, "framing", None):
             chosen["framing"] = args.framing
@@ -856,16 +976,16 @@ def main():
         if getattr(args, "clothes", None):
             chosen["anchor_clothes"] = args.clothes
 
-        prompt = build_makoto_shinkai_prompt(chosen, weekend)
+        prompt = build_makoto_shinkai_prompt(chosen, weekend, force_clouds=getattr(args, "force_clouds", False))
         avatar_ref = get_avatar_reference_path()
 
         print(f"💭 Refleksi Aina : {chosen['boredom_reflection']}")
         print(f"📸 Sudut Kamera  : {chosen.get('framing', 'selfie').upper()}")
-        print(f"👗 Busana/Outfit : {chosen.get('outfit', 'default').upper()}")
+        print(f"👗 Busana/Outfit : {chosen.get('outfit', 'default').upper()} ({chosen.get('anchor_clothes', '')})")
         print(f"✨ Kejutan Spontan: {chosen['novelty_twist']}")
 
-        success, img_path, status_label, error_msg, duration_secs = execute_generate_and_post(
-            chosen, prompt, avatar_ref, dry_run=args.dry_run
+        success, img_path, status_label, error_msg, duration_secs, final_caption = execute_generate_and_post(
+            chosen, prompt, avatar_ref, dry_run=args.dry_run, image_file=getattr(args, "image", None)
         )
         entry = {
             "id": f"status_{now.strftime('%Y%m%d_%H%M%S')}_{slot}",
@@ -877,9 +997,12 @@ def main():
             "theme": chosen["theme"],
             "framing": chosen.get("framing", "selfie"),
             "outfit": chosen.get("outfit", "wfh_cozy" if not weekend else "outdoor_nature"),
+            "clothes_desc": chosen.get("anchor_clothes", ""),
+            "is_custom_outfit": chosen.get("is_custom_outfit", False),
+            "wardrobe_reflection": chosen.get("wardrobe_reflection", ""),
             "boredom_reflection": chosen.get("boredom_reflection", ""),
             "novelty_twist": chosen.get("novelty_twist", ""),
-            "caption": chosen["caption"],
+            "caption": final_caption or chosen.get("caption", ""),
             "image_path": img_path,
             "image_exists": os.path.exists(img_path),
             "image_size_bytes": os.path.getsize(img_path) if os.path.exists(img_path) else 0,
