@@ -607,14 +607,29 @@ impl AgentEnginePort for AntigravityCliAdapter {
                 || combined_lower.contains("exceeded your current quota")
                 || combined_lower.contains("capacity");
 
+            let is_auth_error = combined_lower.contains("eligibility check failed")
+                || combined_lower.contains("not eligible for antigravity")
+                || combined_lower.contains("verify your account to continue")
+                || combined_lower.contains("signin/continue")
+                || combined_lower.contains("not logged into antigravity")
+                || combined_lower.contains("invalid_grant");
+
             if !output.status.success() {
-                if is_quota && pool.len() > 1 && attempt + 1 < max_attempts {
+                if (is_quota || is_auth_error) && pool.len() > 1 && attempt + 1 < max_attempts {
                     if let Some(ref acc) = active_acc {
-                        let cooldown_dur = extract_quota_cooldown_duration(&combined_lower);
+                        let cooldown_dur = if is_auth_error {
+                            std::time::Duration::from_secs(6 * 3600)
+                        } else {
+                            extract_quota_cooldown_duration(&combined_lower)
+                        };
                         *acc.cooldown_until.write().await = Some(std::time::Instant::now() + cooldown_dur);
                         warn!(
-                            "Account {} hit quota limit. Cooling down for {:?}. Failing over (attempt {}/{})...",
-                            acc.label, cooldown_dur, attempt + 1, max_attempts
+                            "Account {} encountered {} (cooling down for {:?}). Failing over (attempt {}/{})...",
+                            acc.label,
+                            if is_auth_error { "eligibility/auth checkpoint" } else { "quota limit" },
+                            cooldown_dur,
+                            attempt + 1,
+                            max_attempts
                         );
                         continue;
                     }
@@ -658,16 +673,27 @@ impl AgentEnginePort for AntigravityCliAdapter {
 
                 if let Some(ref err) = parsed.error {
                     if parsed.response.trim().is_empty() {
-                        let is_err_quota = err.contains("503")
-                            || err.contains("429")
-                            || err.contains("quota")
-                            || err.contains("exhausted");
-                        if is_err_quota && pool.len() > 1 && attempt + 1 < max_attempts {
+                        let err_lower = err.to_lowercase();
+                        let is_err_quota = err_lower.contains("503")
+                            || err_lower.contains("429")
+                            || err_lower.contains("quota")
+                            || err_lower.contains("exhausted");
+                        let is_err_auth = err_lower.contains("eligibility")
+                            || err_lower.contains("not eligible")
+                            || err_lower.contains("verify your account")
+                            || err_lower.contains("not logged in");
+                        if (is_err_quota || is_err_auth) && pool.len() > 1 && attempt + 1 < max_attempts {
                             if let Some(ref acc) = active_acc {
-                                *acc.cooldown_until.write().await = Some(std::time::Instant::now() + std::time::Duration::from_secs(300));
+                                let cd_secs = if is_err_auth { 6 * 3600 } else { 300 };
+                                *acc.cooldown_until.write().await = Some(std::time::Instant::now() + std::time::Duration::from_secs(cd_secs));
                                 warn!(
-                                    "Account {} returned quota error in JSON: {}. Cooling down for 5m. Failing over (attempt {}/{})...",
-                                    acc.label, err, attempt + 1, max_attempts
+                                    "Account {} returned {} in JSON: {}. Cooling down for {}s. Failing over (attempt {}/{})...",
+                                    acc.label,
+                                    if is_err_auth { "auth/eligibility error" } else { "quota error" },
+                                    err,
+                                    cd_secs,
+                                    attempt + 1,
+                                    max_attempts
                                 );
                                 continue;
                             }

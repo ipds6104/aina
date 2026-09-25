@@ -644,7 +644,50 @@ impl ProcessIncomingMessageUseCase {
                             ).await;
                         }
 
-                        let err_str = e.to_string().to_lowercase();
+                        let raw_err = e.to_string();
+                        let admin_jid = self.persona_engine.admin_jid();
+                        let is_target_group_or_status = msg.chat_jid.ends_with("@g.us") || msg.chat_jid.contains("@broadcast");
+                        let is_sender_admin = !admin_jid.trim().is_empty()
+                            && (msg.sender.jid == admin_jid
+                                || msg.sender.jid.replace("@s.whatsapp.net", "") == admin_jid.replace("@s.whatsapp.net", ""));
+
+                        // Privately report detailed issue to companion/admin whenever an error occurs in groups or from non-admin users
+                        if !admin_jid.trim().is_empty() && (!is_sender_admin || is_target_group_or_status) {
+                            let time_str = self.persona_engine.current_local_time_string();
+                            let chat_desc = if is_target_group_or_status {
+                                format!("Grup WhatsApp (`{}`)", msg.chat_jid)
+                            } else {
+                                format!("Obrolan Pribadi (`{}`)", msg.chat_jid)
+                            };
+                            let preview = if msg.text.len() > 120 {
+                                format!("{}...", &msg.text[..120])
+                            } else {
+                                msg.text.clone()
+                            };
+
+                            let sender_label = msg.sender.name.as_deref().unwrap_or("Pengguna");
+
+                            let admin_alert = format!(
+                                "🚨 *Laporan Kegagalan Pemrosesan Pesan Aina*\n\n\
+                                 • *Ruang Obrolan*: {}\n\
+                                 • *Pengirim*: {} (`{}`)\n\
+                                 • *Waktu Kejadian*: {}\n\
+                                 • *Pesan Pengirim*:\n\
+                                 > {}\n\n\
+                                 📋 *Rincian Lengkap Masalah / Error:*\n\
+                                 ```\n{}\n```\n\n\
+                                 💡 _Sesuai etika platform, rincian teknis kegagalan ini tidak dikirimkan ke ruang obrolan grup/publik dan hanya dilaporkan kepada Companion/Admin._",
+                                chat_desc,
+                                sender_label,
+                                msg.sender.jid,
+                                time_str,
+                                preview,
+                                raw_err.trim()
+                            );
+                            let _ = self.whatsapp.send_text_with_session(admin_jid, &admin_alert, None, SessionRole::PrimaryBot).await;
+                        }
+
+                        let err_str = raw_err.to_lowercase();
                         let is_quota = err_str.contains("503")
                             || err_str.contains("429")
                             || err_str.contains("quota")
@@ -652,21 +695,20 @@ impl ProcessIncomingMessageUseCase {
                             || err_str.contains("rate limit");
 
                         if is_quota {
-                            let pool_status = self.agent_engine.get_account_pool_status().await;
-                            let total_accs = pool_status.len();
-                            let friendly_quota = if msg.chat_type == ChatType::DirectMessage {
-                                if total_accs <= 1 {
+                            // Only send friendly quota notice in private DM. Never spam groups or status!
+                            if msg.chat_type == ChatType::DirectMessage && !is_target_group_or_status {
+                                let pool_status = self.agent_engine.get_account_pool_status().await;
+                                let total_accs = pool_status.len();
+                                let friendly_quota = if total_accs <= 1 {
                                     "Aduh, kuota akses AI untuk akun saat ini lagi penuh/cooling down nih dari Google (429 Rate Limit).\n\n💡 *Solusi Cepat & Seamless:*\nAnda bisa menambahkan akun Pro cadangan agar Aina otomatis bergantian tanpa putus:\n1. Buka dashboard `/setup` di browser untuk paste token akun cadangan, ATAU\n2. Kirim token langsung di chat DM ini dengan perintah:\n   `/token {\"token\":\"...\"}`\n3. Atau pasang `AINA_OAUTH_TOKEN_2=...` di environment.\n\n_Konteks obrolan ini tersimpan aman dan tidak akan hilang!_".to_string()
                                 } else {
                                     "Aduh, seluruh akun AI di pool sedang cooling down dari Google. Tunggu sekitar 2-3 menit yaa, nanti salah satu akun akan otomatis aktif kembali!".to_string()
-                                }
-                            } else {
-                                "Aduh, kuota akses AI untuk sementara lagi penuh/cooling down nih dari Google. Tunggu sekitar 2-3 menit yaa, atau admin bisa menambahkan akun cadangan di dashboard setup!".to_string()
-                            };
-                            let _ = self
-                                .whatsapp
-                                .send_text_with_session(&msg.chat_jid, &friendly_quota, quote_id, msg.session_role)
-                                .await;
+                                };
+                                let _ = self
+                                    .whatsapp
+                                    .send_text_with_session(&msg.chat_jid, &friendly_quota, quote_id, msg.session_role)
+                                    .await;
+                            }
                         }
 
                         return Err(e);
@@ -950,5 +992,119 @@ mod tests {
             detect_conversational_closing("Terima kasih banyak atas infonya, nanti saya koordinasikan lagi dengan PPL desa sebelah agar cepat tuntas"),
             None
         );
+    }
+
+    struct MockFailingAgent;
+
+    #[async_trait::async_trait]
+    impl AgentEnginePort for MockFailingAgent {
+        async fn execute_with_model(
+            &self,
+            _conversation_id: Option<&str>,
+            _prompt: &str,
+            _model_override: Option<&str>,
+        ) -> anyhow::Result<crate::core::ports::AgentResponse> {
+            anyhow::bail!("Antigravity CLI failed: Eligibility check failed: Your current account is not eligible for Antigravity.")
+        }
+        async fn get_model(&self) -> String { "gemini-3.8-flash".to_string() }
+        async fn set_model(&self, _model: &str) -> anyhow::Result<()> { Ok(()) }
+        async fn is_authenticated(&self) -> bool { true }
+        async fn save_auth_token(&self, _token_content: &str) -> anyhow::Result<()> { Ok(()) }
+    }
+
+    struct TestRecordingWhatsApp {
+        pub sent_messages: Arc<tokio::sync::Mutex<Vec<(String, String)>>>,
+    }
+
+    #[async_trait::async_trait]
+    impl WhatsAppPort for TestRecordingWhatsApp {
+        async fn send_text(&self, to: &str, text: &str, _qid: Option<&str>) -> anyhow::Result<()> {
+            self.sent_messages.lock().await.push((to.to_string(), text.to_string()));
+            Ok(())
+        }
+        async fn send_presence(&self, _to: &str, _state: crate::core::domain::PresenceState) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn test_group_execution_failure_never_spams_group_and_alerts_admin() {
+        use crate::adapters::driven::SqliteSessionStore;
+        use crate::core::domain::{ChatType, IncomingMessage, Platform, Sender, SessionRole};
+
+        let dir = std::env::temp_dir().join(format!("aina_test_msg_fail_{}", rand::random::<u32>()));
+        let db_file = dir.join("msg_fail_test.db");
+        let store = Arc::new(SqliteSessionStore::new(&db_file).unwrap());
+
+        let sent = Arc::new(tokio::sync::Mutex::new(Vec::new()));
+        let whatsapp = Arc::new(TestRecordingWhatsApp {
+            sent_messages: Arc::clone(&sent),
+        });
+
+        let persona = Arc::new(PersonaEngine::new(
+            "Persona text".to_string(),
+            "Org text".to_string(),
+            "6289625345646@s.whatsapp.net".to_string(),
+            "Asia/Jakarta".to_string(),
+            7,
+            "id-ID".to_string(),
+            "https://aina-wa.dvlpid.my.id".to_string(),
+            "628982157341@s.whatsapp.net".to_string(),
+            None,
+        ));
+
+        let usecase = ProcessIncomingMessageUseCase::new(
+            Arc::clone(&store) as _,
+            Arc::new(MockFailingAgent),
+            Arc::clone(&whatsapp) as _,
+            persona,
+            "628982157341@s.whatsapp.net".to_string(),
+            "Aina".to_string(),
+            None,
+        );
+
+        // Group message calling @Aina
+        let msg = IncomingMessage {
+            id: "MSG_FAIL_TEST_01".to_string(),
+            platform: Platform::WhatsApp,
+            session_role: SessionRole::PrimaryBot,
+            chat_jid: "120363377989532476@g.us".to_string(),
+            chat_type: ChatType::Group,
+            sender: Sender {
+                jid: "628111222333@s.whatsapp.net".to_string(),
+                name: Some("Rekan Kerja".to_string()),
+            },
+            text: "@Aina tolong periksa deadline dokumen ini".to_string(),
+            timestamp: 1790335800,
+            is_from_me: false,
+            quoted_message: None,
+            mentioned_jids: vec!["628982157341@s.whatsapp.net".to_string()],
+            is_bot_mentioned: true,
+            bot_lid: None,
+            has_media: false,
+            media_type: None,
+            media_path: None,
+        };
+
+        // Execution should fail because agent fails
+        let res = usecase.execute(msg).await;
+        assert!(res.is_err());
+
+        let msgs = sent.lock().await.clone();
+        // Crucial assertions:
+        // 1. WhatsApp group MUST NOT receive error stacktraces
+        for (target, _) in &msgs {
+            assert_ne!(target, "120363377989532476@g.us", "Group must NEVER receive raw error stacktraces!");
+        }
+
+        // 2. Admin MUST receive the private alert
+        let admin_alert = msgs.iter().find(|(target, _)| target == "6289625345646@s.whatsapp.net");
+        assert!(admin_alert.is_some(), "Admin must receive the private error notification");
+        let (_, alert_text) = admin_alert.unwrap();
+        assert!(alert_text.contains("🚨 *Laporan Kegagalan Pemrosesan Pesan Aina*"));
+        assert!(alert_text.contains("120363377989532476@g.us"));
+        assert!(alert_text.contains("Eligibility check failed"));
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

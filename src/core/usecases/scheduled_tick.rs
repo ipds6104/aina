@@ -148,6 +148,29 @@ impl ScheduledTickUseCase {
                         error!("Failed to deliver direct notification for task #{}: {}", task.id, e);
                         let _ = self.session_store.update_scheduled_task_result(task.id, "failed", Some(&err_str), duration).await;
                         let _ = self.session_store.record_scheduled_task_run(task.id, &task.title, &task.target_jid, "failed", duration, Some(&err_str), None).await;
+
+                        if let Some(admin) = self.persona_engine.as_ref().map(|p| p.admin_jid()).filter(|j| !j.trim().is_empty()) {
+                            if admin != task.target_jid {
+                                let time_str = self.persona_engine.as_ref()
+                                    .map(|p| p.current_local_time_string())
+                                    .unwrap_or_else(|| format!("Epoch: {}", now_epoch));
+                                let notif_report = format!(
+                                    "🚨 *Laporan Kegagalan Notifikasi Terjadwal Aina*\n\n\
+                                     • *ID Tugas*: #{}\n\
+                                     • *Judul*: *{}*\n\
+                                     • *Target Asli*: `{}`\n\
+                                     • *Waktu Kejadian*: {}\n\n\
+                                     📋 *Rincian Error:*\n\
+                                     ```\n{}\n```",
+                                    task.id,
+                                    task.title,
+                                    task.target_jid,
+                                    time_str,
+                                    err_str.trim()
+                                );
+                                let _ = self.whatsapp.send_text_with_session(admin, &notif_report, None, SessionRole::PrimaryBot).await;
+                            }
+                        }
                     } else {
                         let duration = start_instant.elapsed().as_secs_f64();
                         info!("Delivered scheduled notification for task #{} to {}", task.id, task.target_jid);
@@ -296,16 +319,47 @@ impl ScheduledTickUseCase {
                                     Some(&err_str),
                                 ).await;
 
-                                let err_msg = format!("⚠️ _Gagal menjalankan tugas terjadwal '{}': {}_", task.title, e);
-                                let fallback_target = if is_story {
-                                    self.persona_engine.as_ref()
-                                        .map(|p| p.admin_jid())
-                                        .filter(|j| !j.trim().is_empty())
-                                        .unwrap_or(&task.target_jid)
+                                let admin_jid = self.persona_engine.as_ref()
+                                    .map(|p| p.admin_jid())
+                                    .filter(|j| !j.trim().is_empty());
+
+                                let time_str = self.persona_engine.as_ref()
+                                    .map(|p| p.current_local_time_string())
+                                    .unwrap_or_else(|| format!("Epoch: {}", now_epoch));
+
+                                let target_kind = if is_story {
+                                    "Status / Story WhatsApp (`status@broadcast`)".to_string()
+                                } else if task.target_jid.ends_with("@g.us") {
+                                    format!("Grup WhatsApp (`{}`)", task.target_jid)
                                 } else {
-                                    &task.target_jid
+                                    format!("Obrolan Pribadi (`{}`)", task.target_jid)
                                 };
-                                let _ = self.whatsapp.send_text_with_session(fallback_target, &err_msg, None, SessionRole::PrimaryBot).await;
+
+                                let full_err_report = format!(
+                                    "🚨 *Laporan Kegagalan Tugas Terjadwal Aina*\n\n\
+                                     • *ID Tugas*: #{}\n\
+                                     • *Judul*: *{}*\n\
+                                     • *Target Asli*: {}\n\
+                                     • *Waktu Kejadian*: {}\n\
+                                     • *Durasi Eksekusi*: {:.2} detik\n\n\
+                                     📋 *Rincian Lengkap Masalah / Error:*\n\
+                                     ```\n{}\n```\n\n\
+                                     💡 _Sesuai kebijakan privasi sistem, pesan error kegagalan ini tidak dikirimkan ke grup ataupun status WhatsApp, melainkan hanya dilaporkan langsung ke WhatsApp Companion/Admin._",
+                                    task.id,
+                                    task.title,
+                                    target_kind,
+                                    time_str,
+                                    duration,
+                                    err_str.trim()
+                                );
+
+                                if let Some(admin) = admin_jid {
+                                    let _ = self.whatsapp.send_text_with_session(admin, &full_err_report, None, SessionRole::PrimaryBot).await;
+                                } else if !task.target_jid.ends_with("@g.us") && !task.target_jid.contains("@broadcast") {
+                                    let _ = self.whatsapp.send_text_with_session(&task.target_jid, &full_err_report, None, SessionRole::PrimaryBot).await;
+                                } else {
+                                    warn!("Suppressed failure notification to public target {} because admin_jid is not configured", task.target_jid);
+                                }
                             }
                         }
                     } else {
@@ -602,6 +656,116 @@ mod tests {
         let task = store.get_scheduled_task(task_id).await.unwrap().unwrap();
         assert!(!task.is_active);
         assert!(task.last_run_epoch.is_some());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    struct MockFailingAgent;
+
+    #[async_trait::async_trait]
+    impl AgentEnginePort for MockFailingAgent {
+        async fn execute_with_model(
+            &self,
+            _conversation_id: Option<&str>,
+            _prompt: &str,
+            _model_override: Option<&str>,
+        ) -> anyhow::Result<crate::core::ports::AgentResponse> {
+            anyhow::bail!("Antigravity CLI failed: Eligibility check failed: Your current account is not eligible for Antigravity.")
+        }
+        async fn get_model(&self) -> String { "gemini-3.8-flash".to_string() }
+        async fn set_model(&self, _model: &str) -> anyhow::Result<()> { Ok(()) }
+        async fn is_authenticated(&self) -> bool { true }
+        async fn save_auth_token(&self, _token_content: &str) -> anyhow::Result<()> { Ok(()) }
+    }
+
+    struct TestRecordingWhatsApp {
+        pub sent_messages: Arc<tokio::sync::Mutex<Vec<(String, String)>>>,
+    }
+
+    #[async_trait::async_trait]
+    impl WhatsAppPort for TestRecordingWhatsApp {
+        async fn send_text(&self, to: &str, text: &str, _qid: Option<&str>) -> anyhow::Result<()> {
+            self.sent_messages.lock().await.push((to.to_string(), text.to_string()));
+            Ok(())
+        }
+        async fn send_presence(&self, _to: &str, _state: crate::core::domain::PresenceState) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn test_scheduled_tick_agent_action_failure_routes_only_to_admin_never_to_group_or_status() {
+        let dir = std::env::temp_dir().join(format!("aina_test_fail_route_{}", rand::random::<u32>()));
+        let db_file = dir.join("fail_route_test.db");
+        let store = Arc::new(SqliteSessionStore::new(&db_file).unwrap());
+
+        let sent = Arc::new(tokio::sync::Mutex::new(Vec::new()));
+        let whatsapp = Arc::new(TestRecordingWhatsApp {
+            sent_messages: Arc::clone(&sent),
+        });
+
+        // 1. Group task that will fail
+        let group_task = NewScheduledTask {
+            title: "Cek Deadline Harian IPDS 6104".to_string(),
+            task_type: ScheduledTaskType::AgentAction,
+            target_jid: "120363377989532476@g.us".to_string(),
+            payload: "Periksa deadline hari ini".to_string(),
+            schedule_type: "once".to_string(),
+            schedule_expr: "22:00".to_string(),
+            next_run_epoch: 100,
+        };
+        store.create_scheduled_task(&group_task).await.unwrap();
+
+        // 2. Status broadcast task that will fail
+        let status_task = NewScheduledTask {
+            title: "Status WhatsApp Malam".to_string(),
+            task_type: ScheduledTaskType::AgentAction,
+            target_jid: "status@broadcast".to_string(),
+            payload: "Buat status senja".to_string(),
+            schedule_type: "once".to_string(),
+            schedule_expr: "22:00".to_string(),
+            next_run_epoch: 100,
+        };
+        store.create_scheduled_task(&status_task).await.unwrap();
+
+        let persona = Arc::new(PersonaEngine::new(
+            "Persona text".to_string(),
+            "Org text".to_string(),
+            "6289625345646@s.whatsapp.net".to_string(),
+            "Asia/Jakarta".to_string(),
+            7,
+            "id-ID".to_string(),
+            "https://aina-wa.dvlpid.my.id".to_string(),
+            "628982157341@s.whatsapp.net".to_string(),
+            None,
+        ));
+
+        let usecase = ScheduledTickUseCase::new(
+            Arc::clone(&store) as _,
+            Arc::clone(&whatsapp) as _,
+            Some(Arc::new(MockFailingAgent)),
+            Some(persona),
+            None,
+            7,
+        );
+
+        // Execute tick
+        usecase.execute().await.unwrap();
+
+        let msgs = sent.lock().await.clone();
+        // Should have received 2 failure reports, BOTH delivered to admin (6289625345646@s.whatsapp.net)!
+        assert_eq!(msgs.len(), 2);
+
+        for (target, text) in &msgs {
+            // NEVER sent to the group or status!
+            assert_ne!(target, "120363377989532476@g.us");
+            assert_ne!(target, "status@broadcast");
+            // Exclusively sent to companion/admin
+            assert_eq!(target, "6289625345646@s.whatsapp.net");
+            assert!(text.contains("🚨 *Laporan Kegagalan Tugas Terjadwal Aina*"));
+            assert!(text.contains("Eligibility check failed"));
+            assert!(text.contains("Rincian Lengkap Masalah"));
+        }
 
         let _ = std::fs::remove_dir_all(&dir);
     }
