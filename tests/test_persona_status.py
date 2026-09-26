@@ -20,7 +20,11 @@ from datetime import datetime, timezone, timedelta
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.persona.safety import StatusSafetyGuard, DEFAULT_SAFE_IMPACT_MAXXING_CAPTION
+from scripts.persona.safety import (
+    StatusSafetyGuard,
+    DEFAULT_SAFE_IMPACT_MAXXING_CAPTION,
+    WhatsAppStatusCaptionPayload,
+)
 from scripts.persona.atmosphere import AtmosphereEngine
 from scripts.persona.wardrobe import WardrobeManager, WARDROBE_PRESETS
 from scripts.persona.captioner import ImageCaptionEngine
@@ -112,6 +116,43 @@ class TestStatusSafetyGuard(unittest.TestCase):
             self.assertFalse(sanitized.lower().startswith("status"))
             self.assertFalse(sanitized.lower().startswith("caption"))
             self.assertFalse(sanitized.lower().startswith("berikut"))
+
+    def test_strict_typed_schema_validation(self):
+        """Test strongly-typed schema model and validate_typed_caption function."""
+        # 1. Valid Dict with caption
+        payload = {"caption": "Pagi semuanyaa! Selamat beraktivitas hari ini yaa ✨"}
+        is_valid, clean, reason = StatusSafetyGuard.validate_typed_caption(payload)
+        self.assertTrue(is_valid)
+        self.assertEqual(clean, "Pagi semuanyaa! Selamat beraktivitas hari ini yaa ✨")
+        self.assertEqual(reason, "")
+
+        # 2. Dict with fallback key 'text' and leaked prefix
+        payload2 = {"text": "Status WhatsApp Story: Secangkir kopi hangat dulu yuk!"}
+        is_valid, clean2, reason2 = StatusSafetyGuard.validate_typed_caption(payload2)
+        self.assertTrue(is_valid)
+        self.assertEqual(clean2, "Secangkir kopi hangat dulu yuk!")
+
+        # 3. Invalid payload (missing caption field)
+        payload_missing = {"error": "Something went wrong"}
+        is_valid, clean_missing, reason_missing = StatusSafetyGuard.validate_typed_caption(payload_missing)
+        self.assertFalse(is_valid)
+        self.assertIn("Field 'caption' kosong", reason_missing)
+        self.assertEqual(clean_missing, DEFAULT_SAFE_IMPACT_MAXXING_CAPTION)
+
+        # 4. Error dump in caption field
+        payload_err = {"caption": "Internal server error 500: Gateway timeout"}
+        is_valid, clean_err, reason_err = StatusSafetyGuard.validate_typed_caption(payload_err)
+        self.assertFalse(is_valid)
+        self.assertIn("error/dump teknis", reason_err)
+        self.assertEqual(clean_err, DEFAULT_SAFE_IMPACT_MAXXING_CAPTION)
+
+        # 5. WhatsAppStatusCaptionPayload dataclass direct instantiation
+        obj = WhatsAppStatusCaptionPayload.from_dict({"caption": "status whatsapp story: Semangat pagi!"})
+        self.assertEqual(obj.caption, "Semangat pagi!")
+
+        # 6. Type error rejection
+        with self.assertRaises(TypeError):
+            WhatsAppStatusCaptionPayload.from_dict(["bukan", "dict"])
 
     def test_media_file_validation(self):
         with tempfile.TemporaryDirectory() as tmpdir:

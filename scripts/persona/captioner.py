@@ -15,6 +15,23 @@ import urllib.error
 from typing import Optional, Dict, Any, Tuple
 from .safety import StatusSafetyGuard, DEFAULT_SAFE_IMPACT_MAXXING_CAPTION
 
+# JSON Schema Constrained Decoding Definition (Standard 2026 Structured Outputs)
+CAPTION_JSON_SCHEMA = {
+    "name": "whatsapp_status_caption",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "caption": {
+                "type": "string",
+                "description": "Teks caption status WhatsApp murni bernuansa Impact Maxxing tanpa label atau kata pengantar apapun"
+            }
+        },
+        "required": ["caption"],
+        "additionalProperties": False
+    }
+}
+
 class ImageCaptionEngine:
     """Mesin pembuat caption WhatsApp Story pasca-generasi gambar (Post-Image Multimodal Captioning)."""
 
@@ -129,43 +146,47 @@ class ImageCaptionEngine:
             "stream": False,
             "max_tokens": 200,
             "temperature": 0.7,
-            "response_format": {"type": "json_object"},
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": CAPTION_JSON_SCHEMA
+            },
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content}
             ]
         }
 
-        req = urllib.request.Request(
-            endpoint,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-                "User-Agent": "Aina-Caption-Engine/2026.9"
-            },
-            method="POST"
-        )
-
-        try:
+        def execute_http_attempt(p_body: dict) -> dict:
+            req = urllib.request.Request(
+                endpoint,
+                data=json.dumps(p_body).encode("utf-8"),
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "Aina-Caption-Engine/2026.9"
+                },
+                method="POST"
+            )
             with urllib.request.urlopen(req, timeout=30) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
+                return json.loads(resp.read().decode("utf-8"))
+
+        data = None
+        # Tier 1: Constrained Decoding via json_schema (strict: true)
+        try:
+            data = execute_http_attempt(payload)
         except urllib.error.HTTPError as e:
-            # Jika model endpoint menolak response_format json_object (HTTP 400), coba ulang tanpa response_format
-            if e.code == 400 and "response_format" in payload:
-                payload.pop("response_format", None)
-                req_fallback = urllib.request.Request(
-                    endpoint,
-                    data=json.dumps(payload).encode("utf-8"),
-                    headers={
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json",
-                        "User-Agent": "Aina-Caption-Engine/2026.9"
-                    },
-                    method="POST"
-                )
-                with urllib.request.urlopen(req_fallback, timeout=30) as resp:
-                    data = json.loads(resp.read().decode("utf-8"))
+            # Tier 2 Fallback: Jika endpoint belum mendukung json_schema (HTTP 400), coba json_object
+            if e.code == 400:
+                payload["response_format"] = {"type": "json_object"}
+                try:
+                    data = execute_http_attempt(payload)
+                except urllib.error.HTTPError as e2:
+                    # Tier 3 Fallback: Jika json_object juga ditolak, coba tanpa response_format
+                    if e2.code == 400:
+                        payload.pop("response_format", None)
+                        data = execute_http_attempt(payload)
+                    else:
+                        raise
             else:
                 raise
 

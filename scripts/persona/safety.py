@@ -8,7 +8,8 @@ technical dumps, stack traces, or corrupted media are ever posted to WhatsApp St
 import os
 import re
 import json
-from typing import Tuple, Optional
+from dataclasses import dataclass
+from typing import Tuple, Optional, Any, Dict
 
 # Pola deteksi prefix meta/preamble yang sering bocor dari model LLM/VLM
 # (Contoh: "status whatsapp story:", "Caption Status WA:", "Berikut caption story:", dsb.)
@@ -62,8 +63,68 @@ DEFAULT_SAFE_IMPACT_MAXXING_CAPTION = (
 )
 
 
+@dataclass(frozen=True)
+class WhatsAppStatusCaptionPayload:
+    """
+    Strict Type Schema untuk representasi data Caption Status WhatsApp.
+    Mencegah type confusion, shell injection, dan field hallucination.
+    """
+    caption: str
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "WhatsAppStatusCaptionPayload":
+        if not isinstance(data, dict):
+            raise TypeError(f"Payload harus berupa dictionary / JSON Object, bukan {type(data).__name__}")
+        val = data.get("caption")
+        if val is None or not isinstance(val, str) or not val.strip():
+            for k in ["text", "status", "message", "content"]:
+                candidate = data.get(k)
+                if isinstance(candidate, str) and candidate.strip():
+                    val = candidate
+                    break
+        if not val or not isinstance(val, str) or not val.strip():
+            raise ValueError("Field 'caption' kosong atau bukan string.")
+        
+        clean = StatusSafetyGuard.sanitize_caption(val)
+        return cls(caption=clean)
+
+
 class StatusSafetyGuard:
     """Penjaga gerbang keselamatan status WhatsApp story (Anti-Error & Anti-Corruption)."""
+
+    @classmethod
+    def validate_typed_caption(cls, raw: Any) -> Tuple[bool, str, str]:
+        """
+        Validasi berbasis tipe ketat (Strict Typed Validation).
+        Mengembalikan tuple: (is_valid: bool, clean_caption: str, reason: str).
+        """
+        try:
+            if isinstance(raw, str):
+                cleaned = cls.extract_caption_from_raw(raw)
+                is_safe, reason = cls.validate_status_text(cleaned)
+                if not is_safe:
+                    return False, DEFAULT_SAFE_IMPACT_MAXXING_CAPTION, reason
+                return True, cleaned, ""
+            elif isinstance(raw, dict):
+                val = raw.get("caption")
+                if val is None or not isinstance(val, str) or not val.strip():
+                    for k in ["text", "status", "message", "content"]:
+                        candidate = raw.get(k)
+                        if isinstance(candidate, str) and candidate.strip():
+                            val = candidate
+                            break
+                if not val or not isinstance(val, str) or not val.strip():
+                    return False, DEFAULT_SAFE_IMPACT_MAXXING_CAPTION, "Field 'caption' kosong atau bukan string."
+
+                cleaned = cls.extract_caption_from_raw(val)
+                is_safe, reason = cls.validate_status_text(cleaned)
+                if not is_safe:
+                    return False, DEFAULT_SAFE_IMPACT_MAXXING_CAPTION, reason
+                return True, cleaned, ""
+            else:
+                return False, DEFAULT_SAFE_IMPACT_MAXXING_CAPTION, f"Tipe input tidak legal: {type(raw).__name__}"
+        except Exception as e:
+            return False, DEFAULT_SAFE_IMPACT_MAXXING_CAPTION, str(e)
 
     @staticmethod
     def validate_status_text(text: Optional[str]) -> Tuple[bool, str]:
