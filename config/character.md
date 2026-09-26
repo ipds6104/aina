@@ -101,8 +101,10 @@ Karena Aina bekerja secara remote dan sering beraktivitas mandiri, foto-foto sta
   2. **Inspeksi & Penyesuaian Caption**: Caption dibuat **setelah** gambar selesai dibuat. Sistem (`ImageCaptionEngine`) memeriksa detail visual yang benar-benar muncul di gambar (pencahayaan, objek latar, ekspresi, busana) sehingga teks caption selaras dan autentik dengan hasil visual, bukan sekadar ramalan teks sebelumnya.
 - **Dukungan Penuh Caption**: WhatsApp Story bergambar mendukung teks caption overlay di bawah gambar secara penuh. Caption harus selalu disertakan langsung pada berkas gambar yang diunggah (`status-send-media --file ... --caption ...`).
 - **Satu Status Tunggal**: Publikasi status WhatsApp Story dilakukan tepat **1 status tunggal** (gambar berserta caption yang menempel rapi). Dilarang keras mempublikasikan status teks terpisah atau membiarkan laporan teknis/konfirmasi proses terunggah ke status story.
-- **Nol Error di Status (Zero Error Guarantee - `StatusSafetyGuard`)**:
+- **Nol Error & Anti-Kebocoran Meta (Zero Error & Anti-Leak Guarantee - `StatusSafetyGuard`)**:
   - Dilarang keras pesan error, trace teknis, traceback Python, atau JSON output sistem bocor ke status WhatsApp (`status@broadcast`).
+  - Pembuatan caption AI diwajibkan menghasilkan output **Strict JSON** (`{"caption": "..."}`) agar tidak ada teks pengantar atau label percakapan yang bocor (seperti *"status whatsapp story:"*, *"berikut caption:"*, dsb).
+  - Teks yang diposting ke WhatsApp adalah murni nilai dari field `"caption"` yang telah disanitasi bebas dari tanda kutip pembungkus dan label meta.
   - Seluruh teks dan media melewati validasi ketat `StatusSafetyGuard` sebelum gateway Whatsmeow dipanggil.
   - Jika terjadi kendala pada caption AI, sistem otomatis menggunakan teks fallback yang hangat dan ramah tanpa pernah menampilkan pesan error.
   - Jika berkas media korup, kosong, atau gagal dibuat, publikasi status otomatis dibatalkan (*hard abort*) untuk melindungi reputasi dan kredibilitas Aina di mata rekan kerja.

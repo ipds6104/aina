@@ -7,7 +7,22 @@ technical dumps, stack traces, or corrupted media are ever posted to WhatsApp St
 
 import os
 import re
+import json
 from typing import Tuple, Optional
+
+# Pola deteksi prefix meta/preamble yang sering bocor dari model LLM/VLM
+# (Contoh: "status whatsapp story:", "Caption Status WA:", "Berikut caption story:", dsb.)
+META_LEAK_PATTERNS = [
+    # Status / story / caption labels di awal baris
+    re.compile(r"^\s*(?:#+\s*)?(?:\*\*)?(?:draf\s+)?(?:teks\s+)?(?:caption\s+)?(?:status\s+)?(?:whatsapp|wa)?\s*(?:story)?(?:\s*[-–—]\s*[a-zA-Z0-9_]+)?(?:\*\*)?\s*[:\-–—\n]+\s*", re.IGNORECASE),
+    # Kalimat pengantar seperti "Berikut adalah status whatsapp story:", "Berikut caption status WhatsApp:"
+    re.compile(r"^\s*(?:berikut\s+(?:adalah\s+)?(?:draf\s+)?(?:teks\s+)?(?:status|caption|story)[^:\n]*[:\-–—\n]+)\s*", re.IGNORECASE),
+    # "Caption:", "Teks Caption:", "Status:"
+    re.compile(r"^\s*(?:#+\s*)?(?:\*\*)?(?:teks\s+)?caption\s*(?:\*\*)?\s*[:\-–—\n]+\s*", re.IGNORECASE),
+    re.compile(r"^\s*(?:#+\s*)?(?:\*\*)?status\s*(?:\*\*)?\s*[:\-–—\n]+\s*", re.IGNORECASE),
+    # Markdown header seperti "### Status Story" atau "## Caption"
+    re.compile(r"^\s*#+\s+[^\n]+\n+\s*", re.IGNORECASE),
+]
 
 # Pola deteksi pesan error teknis, dump sistem, atau laporan kegagalan
 ERROR_REGEX_PATTERNS = [
@@ -130,15 +145,93 @@ class StatusSafetyGuard:
         return True, media_type
 
     @classmethod
+    def extract_caption_from_raw(cls, raw: Optional[str]) -> str:
+        """
+        Mengekstrak teks caption murni dari output mentah yang mungkin berupa:
+        1. Strict JSON ({"caption": "..."})
+        2. Markdown code block (```json\n{"caption": "..."}\n``` atau ```{"caption": "..."}```)
+        3. Teks yang diawali label meta (contoh: "status whatsapp story: ...", "Berikut caption:")
+        4. Teks biasa bertanda kutip pembungkus.
+        """
+        if not raw or not str(raw).strip():
+            return ""
+
+        text = str(raw).strip()
+
+        # 1. Periksa apakah teks dibungkus markdown code fence (misal ```json ... ``` atau ``` ... ```)
+        fence_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text, re.IGNORECASE)
+        if fence_match:
+            candidate_json = fence_match.group(1).strip()
+            try:
+                parsed = json.loads(candidate_json)
+                if isinstance(parsed, dict):
+                    for k in ["caption", "text", "status", "content", "message"]:
+                        if k in parsed and isinstance(parsed[k], str) and parsed[k].strip():
+                            text = parsed[k].strip()
+                            break
+                elif isinstance(parsed, str) and parsed.strip():
+                    text = parsed.strip()
+            except Exception:
+                text = candidate_json
+
+        # 2. Coba parse teks langsung sebagai JSON
+        if text.startswith("{") or '"caption"' in text.lower():
+            try:
+                parsed = json.loads(text)
+                if isinstance(parsed, dict):
+                    for k in ["caption", "text", "status", "content", "message"]:
+                        if k in parsed and isinstance(parsed[k], str) and parsed[k].strip():
+                            text = parsed[k].strip()
+                            break
+            except Exception:
+                # Jika json.loads gagal (misal ada teks pengantar sebelum {), cari blok JSON dengan regex
+                json_blob_match = re.search(r'\{[\s\S]*?["\']caption["\']\s*:\s*["\']((?:[^"\'\\]|\\.)*)["\'][\s\S]*?\}', text, re.IGNORECASE)
+                if json_blob_match:
+                    try:
+                        escaped_str = '"' + json_blob_match.group(1) + '"'
+                        text = json.loads(escaped_str)
+                    except Exception:
+                        text = json_blob_match.group(1)
+
+        # 3. Bersihkan prefix meta / header bocor secara berulang hingga tuntas
+        changed = True
+        iterations = 0
+        while changed and iterations < 5:
+            changed = False
+            iterations += 1
+            for pat in META_LEAK_PATTERNS:
+                m = pat.match(text)
+                if m:
+                    text = text[m.end():].strip()
+                    changed = True
+
+        # 4. Bersihkan tanda kutip pembungkus atau format markdown bold/italic di awal & akhir
+        for _ in range(3):
+            if (text.startswith('"') and text.endswith('"')) or \
+               (text.startswith("'") and text.endswith("'")) or \
+               (text.startswith("“") and text.endswith("”")) or \
+               (text.startswith("«") and text.endswith("»")):
+                text = text[1:-1].strip()
+            elif text.startswith("**") and text.endswith("**") and len(text) > 4:
+                text = text[2:-2].strip()
+
+        return text.strip()
+
+    @classmethod
     def sanitize_caption(cls, caption: Optional[str], fallback: Optional[str] = None) -> str:
         """
-        Membersihkan caption. Bila caption terdeteksi bermasalah, kembalikan fallback aman
-        bertaraf Impact Maxxing. DILARANG mengembalikan pesan error.
+        Membersihkan caption. Bila caption terdeteksi bermasalah atau mengandung error,
+        kembalikan fallback aman bertaraf Impact Maxxing. DILARANG mengembalikan pesan error.
+        Mengekstrak teks murni jika output berupa Strict JSON atau mengandung label meta.
         """
-        is_safe, reason = cls.validate_status_text(caption)
-        if is_safe and caption:
-            return caption.strip()
+        cleaned = cls.extract_caption_from_raw(caption)
+        is_safe, _ = cls.validate_status_text(cleaned)
+        if is_safe and cleaned:
+            return cleaned.strip()
 
         # Gunakan fallback yang valid atau default Impact Maxxing
-        safe_fallback = fallback.strip() if fallback and cls.validate_status_text(fallback)[0] else DEFAULT_SAFE_IMPACT_MAXXING_CAPTION
-        return safe_fallback
+        safe_fallback = cls.extract_caption_from_raw(fallback) if fallback else ""
+        if safe_fallback and cls.validate_status_text(safe_fallback)[0]:
+            return safe_fallback.strip()
+
+        return DEFAULT_SAFE_IMPACT_MAXXING_CAPTION

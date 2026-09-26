@@ -450,6 +450,8 @@ def cmd_status_send_media(args):
         sys.exit(1)
 
     if args.caption:
+        if StatusSafetyGuard:
+            args.caption = StatusSafetyGuard.sanitize_caption(args.caption)
         is_safe_caption, cap_err = validate_safe_status(text=args.caption)
         if not is_safe_caption:
             print(json.dumps({

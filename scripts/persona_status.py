@@ -725,6 +725,7 @@ def main():
     p_cap.add_argument("--file", required=True, help="Jalur berkas gambar (.png/.jpg)")
     p_cap.add_argument("--slot", choices=["pagi", "siang", "sore", "malam"], help="Slot waktu")
     p_cap.add_argument("--theme", help="Nama tema aktivitas")
+    p_cap.add_argument("--json", action="store_true", help="Output format Strict JSON ({\"caption\": \"...\"})")
 
     # history
     p_hist = subparsers.add_parser("history", help="Lihat riwayat status yang pernah di-post")
@@ -893,7 +894,10 @@ def main():
         ctx = {"slot": slot, "theme": theme}
         raw_caption = ImageCaptionEngine.generate_caption_from_image(img_file, activity_context=ctx)
         final_caption = StatusSafetyGuard.sanitize_caption(raw_caption)
-        print(f"📸 Hasil Analisis Gambar & Caption:\n\"{final_caption}\"")
+        if getattr(args, "json", False):
+            print(json.dumps({"caption": final_caption}, ensure_ascii=False))
+        else:
+            print(f"📸 Hasil Analisis Gambar & Caption:\n\"{final_caption}\"")
         return
 
     elif args.command == "generate":
@@ -901,10 +905,12 @@ def main():
         weekend = True if args.weekend else (False if args.weekday else is_weekend(now))
 
         if getattr(args, "custom", False) and getattr(args, "scene", None):
+            raw_c = getattr(args, "caption", None)
+            clean_c = StatusSafetyGuard.sanitize_caption(raw_c) if raw_c else "Rehat sejenak dan nikmati momen hari ini ✨"
             chosen = {
                 "theme": args.theme or f"imajinasi_{slot}",
                 "scene": args.scene,
-                "caption": getattr(args, "caption", None) or "Rehat sejenak dan nikmati momen hari ini ✨",
+                "caption": clean_c,
                 "anchor_clothes": getattr(args, "clothes", None) or ("casual cozy knit cardigan, comfortable home attire" if not weekend else "light cotton pastel top, canvas tote bag"),
                 "boredom_reflection": getattr(args, "reflection", None) or f"Aina secara mandiri membayangkan adegan '{args.theme or 'bebas'}' untuk menghadirkan nuansa baru.",
                 "novelty_twist": "Imajinasi orisinal Aina",
@@ -916,6 +922,8 @@ def main():
                 custom_clothes=getattr(args, "clothes", None),
                 requested_outfit=getattr(args, "outfit", None),
             )
+            if getattr(args, "caption", None):
+                chosen["caption"] = StatusSafetyGuard.sanitize_caption(args.caption)
 
         if getattr(args, "framing", None):
             chosen["framing"] = args.framing
@@ -953,10 +961,12 @@ def main():
             sys.exit(0)
 
         if getattr(args, "custom", False) and getattr(args, "scene", None):
+            raw_c = getattr(args, "caption", None)
+            clean_c = StatusSafetyGuard.sanitize_caption(raw_c) if raw_c else "Rehat sejenak dan nikmati momen hari ini ✨"
             chosen = {
                 "theme": args.theme or f"imajinasi_{slot}",
                 "scene": args.scene,
-                "caption": getattr(args, "caption", None) or "Rehat sejenak dan nikmati momen hari ini ✨",
+                "caption": clean_c,
                 "anchor_clothes": getattr(args, "clothes", None) or ("casual cozy knit cardigan, comfortable home attire" if not weekend else "light cotton pastel top, canvas tote bag"),
                 "boredom_reflection": getattr(args, "reflection", None) or f"Aina secara mandiri membayangkan adegan '{args.theme or 'bebas'}' untuk menghadirkan nuansa baru.",
                 "novelty_twist": "Imajinasi orisinal Aina",
@@ -968,6 +978,8 @@ def main():
                 custom_clothes=getattr(args, "clothes", None),
                 requested_outfit=getattr(args, "outfit", None),
             )
+            if getattr(args, "caption", None):
+                chosen["caption"] = StatusSafetyGuard.sanitize_caption(args.caption)
 
         if getattr(args, "framing", None):
             chosen["framing"] = args.framing

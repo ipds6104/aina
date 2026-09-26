@@ -67,6 +67,52 @@ class TestStatusSafetyGuard(unittest.TestCase):
         self.assertFalse(is_valid)
         self.assertIn("kosong", reason.lower())
 
+    def test_strict_json_extraction(self):
+        """Strict JSON payload should extract clean caption without any JSON markup."""
+        json_samples = [
+            ('{"caption": "Pagi kawan-kawan! Secangkir kopi hangat dulu sebelum ngoding remote ✨"}',
+             "Pagi kawan-kawan! Secangkir kopi hangat dulu sebelum ngoding remote ✨"),
+            ('```json\n{"caption": "Senja hari ini indah bangeett di ufuk barat ✨"}\n```',
+             "Senja hari ini indah bangeett di ufuk barat ✨"),
+            ('{"message": "Selamat malam semuanya, istirahat yang cukup yaa 🌙"}',
+             "Selamat malam semuanya, istirahat yang cukup yaa 🌙"),
+        ]
+        for raw, expected in json_samples:
+            cleaned = StatusSafetyGuard.extract_caption_from_raw(raw)
+            self.assertEqual(cleaned, expected)
+            sanitized = StatusSafetyGuard.sanitize_caption(raw)
+            self.assertEqual(sanitized, expected)
+
+    def test_strip_meta_leaks_and_preambles(self):
+        """Status/Story meta labels like 'status whatsapp story:' must be completely stripped."""
+        leak_samples = [
+            ("status whatsapp story: Pagi semuanyaa! Semangat memulai hari remote yaa ✨",
+             "Pagi semuanyaa! Semangat memulai hari remote yaa ✨"),
+            ("Status WhatsApp Story:\nSecangkir teh chamomile hangat penutup hari yang menenangkan ✨",
+             "Secangkir teh chamomile hangat penutup hari yang menenangkan ✨"),
+            ("Status WA Story - Pagi: Udara sejuk pagi ini bikin suasana ngoding jadi tenang bangeett!",
+             "Udara sejuk pagi ini bikin suasana ngoding jadi tenang bangeett!"),
+            ("Berikut adalah status whatsapp story:\n\nRehat sejenak dan nikmati indahnya senja hari ini ✨",
+             "Rehat sejenak dan nikmati indahnya senja hari ini ✨"),
+            ("Berikut caption status WhatsApp: Makan siang dulu yuk kawan-kawan ✨",
+             "Makan siang dulu yuk kawan-kawan ✨"),
+            ("**Caption Status WhatsApp Story:**\nJangan lupa istirahatkan mata sejenak yaa!",
+             "Jangan lupa istirahatkan mata sejenak yaa!"),
+            ("### Status Story\nMenikmati semilir angin di taman kota sore ini ✨",
+             "Menikmati semilir angin di taman kota sore ini ✨"),
+            ('"Pagi kawan-kawan! Selamat beraktivitas hari ini yaa ✨"',
+             "Pagi kawan-kawan! Selamat beraktivitas hari ini yaa ✨"),
+            # Double leak test: Preamble + JSON containing prefix
+            ('Tentu, ini status whatsapp story:\n```json\n{"caption": "Status WA Story: Selamat pagi semuanya ✨"}\n```',
+             "Selamat pagi semuanya ✨"),
+        ]
+        for leaked, expected in leak_samples:
+            sanitized = StatusSafetyGuard.sanitize_caption(leaked)
+            self.assertEqual(sanitized, expected, f"Failed on sample: {leaked}")
+            self.assertFalse(sanitized.lower().startswith("status"))
+            self.assertFalse(sanitized.lower().startswith("caption"))
+            self.assertFalse(sanitized.lower().startswith("berikut"))
+
     def test_media_file_validation(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)

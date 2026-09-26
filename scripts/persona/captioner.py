@@ -96,19 +96,27 @@ class ImageCaptionEngine:
         system_prompt = (
             "Kamu adalah Aina (rekan kerja santai, hangat, dan ramah). "
             "Tugasmu: Perhatikan baik-baik gambar anime Makoto Shinkai yang baru saja di-generate ini. "
-            "Susunlah 1 hingga 2 kalimat caption status WhatsApp bernuansa 'Impact Maxxing' (pesan hangat, menenangkan, penuh rasa syukur, tanpa menggurui).\n"
-            "Aturan Mutlak:\n"
+            "Susunlah 1 hingga 2 kalimat caption status WhatsApp bernuansa 'Impact Maxxing' (pesan hangat, menenangkan, penuh rasa syukur, tanpa menggurui).\n\n"
+            "Aturan Visual & Gaya Bahasa:\n"
             "1. Caption HARUS SESUAI DENGAN DETAIL VISUAL NYATA DI GAMBAR (warna pakaian, suasana cahaya/senja/malam/pagi, objek yang dipegang/ada di meja, ekspresi wajah).\n"
             "2. Gunakan bahasa Indonesia santai, akrab sesama rekan kerja, menggunakan pelunak nada halus (misal: 'bangett', 'yaa', 'dulu yuk', ✨).\n"
-            "3. HANYA cetak teks caption langsung tanpa tanda kutip pembuka/penutup dan tanpa teks pengantar seperti 'Berikut captionnya:'.\n"
-            "4. DILARANG KERAS menyertakan istilah teknis atau error sistem."
+            "3. DILARANG KERAS menyertakan istilah teknis atau error sistem.\n\n"
+            "ATURAN FORMAT OUTPUT STRICT JSON (MUTLAK):\n"
+            "- Output WAJIB 100% STRICT JSON valid tanpa teks pengantar, markdown di luar JSON, atau penutup apapun.\n"
+            "- Format schema persis:\n"
+            "  {\n"
+            '    "caption": "<teks_caption_hangat_impact_maxxing>"\n'
+            "  }\n"
+            "- DILARANG KERAS menyertakan label meta seperti 'status whatsapp story', 'caption status:', 'berikut captionnya', dll baik di dalam maupun di luar JSON.\n"
+            "- Contoh output yang benar:\n"
+            '  {"caption": "Pagi semuanyaa! Secangkir kopi hangat dulu yuk sebelum mulai sesi ngoding remote hari ini ✨"}'
         )
 
         user_content = [
             {
                 "type": "text",
                 "text": f"Konteks Momen: Slot {context.get('slot', 'sekarang')}, Tema: {context.get('theme', 'keseharian')}. "
-                        f"Perhatikan gambar ini dan buatkan caption WhatsApp Story yang serasi dengan apa yang terlihat:"
+                        f"Perhatikan gambar ini dan kembalikan Strict JSON {{\"caption\": \"...\"}} yang serasi dengan apa yang terlihat:"
             },
             {
                 "type": "image_url",
@@ -121,6 +129,7 @@ class ImageCaptionEngine:
             "stream": False,
             "max_tokens": 200,
             "temperature": 0.7,
+            "response_format": {"type": "json_object"},
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content}
@@ -138,15 +147,35 @@ class ImageCaptionEngine:
             method="POST"
         )
 
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            choice = data.get("choices", [{}])[0]
-            msg = choice.get("message", {})
-            content = msg.get("content", "").strip()
-            # Bersihkan tanda kutip pembungkus jika ada
-            if content.startswith('"') and content.endswith('"'):
-                content = content[1:-1].strip()
-            return content
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            # Jika model endpoint menolak response_format json_object (HTTP 400), coba ulang tanpa response_format
+            if e.code == 400 and "response_format" in payload:
+                payload.pop("response_format", None)
+                req_fallback = urllib.request.Request(
+                    endpoint,
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                        "User-Agent": "Aina-Caption-Engine/2026.9"
+                    },
+                    method="POST"
+                )
+                with urllib.request.urlopen(req_fallback, timeout=30) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+            else:
+                raise
+
+        choice = data.get("choices", [{}])[0]
+        msg = choice.get("message", {})
+        raw_content = msg.get("content", "").strip()
+
+        # Ekstrak dan sanitasi Strict JSON agar ZERO LEAKAGE
+        clean_caption = StatusSafetyGuard.sanitize_caption(raw_content)
+        return clean_caption
 
     @classmethod
     def _synthesize_adaptive_caption(

@@ -191,7 +191,10 @@ impl ScheduledTickUseCase {
 
                         let story_delivery_rule = if is_story {
                             "Target adalah Status/Story WhatsApp (24 jam).\n\
-                            4. ATURAN STATUS STORY (ANTI STATUS GANDA): Seluruh publikasi story (gambar berserta caption terpasang) WAJIB dilakukan langsung melalui tool: 'python3 scripts/persona_status.py post' atau 'python3 skills/whatsmeow/scripts/wa_tool.py status-send-media --file <path> --caption <caption>'. Scheduler backend TIDAK AKAN mengirim teks percakapan Anda ke status@broadcast agar TIDAK TERJADI STATUS GANDA (satu gambar + satu teks terpisah)!\n"
+                            4. ATURAN STATUS STORY (ANTI STATUS GANDA & STRICT CAPTION):\n\
+                               - Seluruh publikasi story (gambar berserta caption terpasang) WAJIB dilakukan langsung melalui tool: 'python3 scripts/persona_status.py post' atau 'python3 skills/whatsmeow/scripts/wa_tool.py status-send-media --file <path> --caption <caption>'.\n\
+                               - Caption yang diposting WAJIB murni teks pesan hangat Impact Maxxing tanpa kata pengantar atau label meta seperti 'status whatsapp story:', 'caption:', 'berikut caption...'. Jika menyusun caption, buat murni atau format strict JSON {\"caption\": \"...\"}.\n\
+                               - Scheduler backend TIDAK AKAN mengirim teks percakapan Anda ke status@broadcast agar TIDAK TERJADI STATUS GANDA (satu gambar + satu teks terpisah)!\n"
                         } else {
                             "Format ramah obrolan chat.\n\
                             4. ATURAN PENGIRIMAN: Untuk pesan teks biasa, DILARANG memanggil 'wa_tool.py send-text' di terminal karena teks respons Anda akan dikirim otomatis oleh scheduler backend! Namun, jika tugas ini secara spesifik meminta pengiriman berkas, dokumen, atau GAMBAR/SCREENSHOT, Anda DIPERBOLEHKAN memanggil 'python3 skills/whatsmeow/scripts/wa_tool.py send-media --to <target> --file <path_file> --caption <keterangan_singkat>'.\n"
