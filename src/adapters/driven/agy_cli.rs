@@ -184,6 +184,48 @@ pub fn extract_quota_cooldown_duration(err: &str) -> Duration {
     Duration::from_secs(300) // 5 minutes
 }
 
+pub fn is_transient_error(s: &str) -> bool {
+    let lower = s.to_lowercase();
+    lower.contains("subscriber fell behind updates")
+        || lower.contains("connection to the agent was interrupted")
+        || lower.contains("stalled for")
+        || lower.contains("connection reset")
+        || lower.contains("broken pipe")
+        || lower.contains("stream error")
+        || lower.contains("deadline has elapsed")
+        || lower.contains("transport error")
+        || lower.contains("temporarily unavailable")
+        || lower.contains("client network socket disconnected")
+        || lower.contains("econnreset")
+        || lower.contains("etimedout")
+        || lower.contains("timed out")
+        || lower.contains("timeout")
+}
+
+pub fn is_quota_error(s: &str) -> bool {
+    let lower = s.to_lowercase();
+    lower.contains("503")
+        || lower.contains("429")
+        || lower.contains("quota")
+        || lower.contains("resource has been exhausted")
+        || lower.contains("resource_exhausted")
+        || lower.contains("rate limit")
+        || lower.contains("rate-limit")
+        || lower.contains("too many requests")
+        || lower.contains("exceeded your current quota")
+        || lower.contains("capacity")
+}
+
+pub fn is_auth_error(s: &str) -> bool {
+    let lower = s.to_lowercase();
+    lower.contains("eligibility check failed")
+        || lower.contains("not eligible for antigravity")
+        || lower.contains("verify your account to continue")
+        || lower.contains("signin/continue")
+        || lower.contains("not logged into antigravity")
+        || lower.contains("invalid_grant")
+}
+
 #[derive(Debug, Clone)]
 pub struct AccountToken {
     #[allow(dead_code)]
@@ -467,7 +509,7 @@ impl AgentEnginePort for AntigravityCliAdapter {
         }
 
         let pool = self.token_pool.read().await.clone();
-        let max_attempts = if pool.is_empty() { 1 } else { pool.len() };
+        let max_attempts = if pool.is_empty() { 2 } else { pool.len().max(2) };
 
         let strategy = std::env::var("AINA_TOKEN_STRATEGY")
             .unwrap_or_else(|_| "round_robin".to_string())
@@ -596,28 +638,14 @@ impl AgentEnginePort for AntigravityCliAdapter {
             let combined = format!("{}\n{}", stderr_raw, stdout_raw);
             let combined_lower = combined.to_lowercase();
 
-            let is_quota = combined_lower.contains("503")
-                || combined_lower.contains("429")
-                || combined_lower.contains("quota")
-                || combined_lower.contains("resource has been exhausted")
-                || combined_lower.contains("resource_exhausted")
-                || combined_lower.contains("rate limit")
-                || combined_lower.contains("rate-limit")
-                || combined_lower.contains("too many requests")
-                || combined_lower.contains("exceeded your current quota")
-                || combined_lower.contains("capacity");
-
-            let is_auth_error = combined_lower.contains("eligibility check failed")
-                || combined_lower.contains("not eligible for antigravity")
-                || combined_lower.contains("verify your account to continue")
-                || combined_lower.contains("signin/continue")
-                || combined_lower.contains("not logged into antigravity")
-                || combined_lower.contains("invalid_grant");
+            let is_quota_detected = is_quota_error(&combined_lower);
+            let is_auth_detected = is_auth_error(&combined_lower);
+            let is_transient_detected = is_transient_error(&combined_lower);
 
             if !output.status.success() {
-                if (is_quota || is_auth_error) && pool.len() > 1 && attempt + 1 < max_attempts {
+                if (is_quota_detected || is_auth_detected) && pool.len() > 1 && attempt + 1 < max_attempts {
                     if let Some(ref acc) = active_acc {
-                        let cooldown_dur = if is_auth_error {
+                        let cooldown_dur = if is_auth_detected {
                             std::time::Duration::from_secs(6 * 3600)
                         } else {
                             extract_quota_cooldown_duration(&combined_lower)
@@ -626,7 +654,7 @@ impl AgentEnginePort for AntigravityCliAdapter {
                         warn!(
                             "Account {} encountered {} (cooling down for {:?}). Failing over (attempt {}/{})...",
                             acc.label,
-                            if is_auth_error { "eligibility/auth checkpoint" } else { "quota limit" },
+                            if is_auth_detected { "eligibility/auth checkpoint" } else { "quota limit" },
                             cooldown_dur,
                             attempt + 1,
                             max_attempts
@@ -634,6 +662,18 @@ impl AgentEnginePort for AntigravityCliAdapter {
                         continue;
                     }
                 }
+
+                if is_transient_detected && attempt + 1 < max_attempts {
+                    warn!(
+                        "Antigravity CLI encountered transient stream/network glitch (attempt {}/{}): {}. Backing off and retrying...",
+                        attempt + 1,
+                        max_attempts,
+                        stderr_raw.lines().next().unwrap_or(&stderr_raw)
+                    );
+                    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+                    continue;
+                }
+
                 error!(
                     "Antigravity CLI failed with code {:?}. Stderr: {}",
                     output.status.code(),
@@ -673,15 +713,10 @@ impl AgentEnginePort for AntigravityCliAdapter {
 
                 if let Some(ref err) = parsed.error {
                     if parsed.response.trim().is_empty() {
-                        let err_lower = err.to_lowercase();
-                        let is_err_quota = err_lower.contains("503")
-                            || err_lower.contains("429")
-                            || err_lower.contains("quota")
-                            || err_lower.contains("exhausted");
-                        let is_err_auth = err_lower.contains("eligibility")
-                            || err_lower.contains("not eligible")
-                            || err_lower.contains("verify your account")
-                            || err_lower.contains("not logged in");
+                        let is_err_quota = is_quota_error(err);
+                        let is_err_auth = is_auth_error(err);
+                        let is_err_transient = is_transient_error(err);
+
                         if (is_err_quota || is_err_auth) && pool.len() > 1 && attempt + 1 < max_attempts {
                             if let Some(ref acc) = active_acc {
                                 let cd_secs = if is_err_auth { 6 * 3600 } else { 300 };
@@ -697,6 +732,17 @@ impl AgentEnginePort for AntigravityCliAdapter {
                                 );
                                 continue;
                             }
+                        }
+
+                        if is_err_transient && attempt + 1 < max_attempts {
+                            warn!(
+                                "Antigravity CLI returned transient stream/network error in JSON (attempt {}/{}): {}. Retrying...",
+                                attempt + 1,
+                                max_attempts,
+                                err
+                            );
+                            tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+                            continue;
                         }
                         error!("Antigravity agent failed with error in payload: {}", err);
                         anyhow::bail!("Antigravity agent error: {}", err);
@@ -1472,5 +1518,29 @@ Tangkapan layar tersebut diambil langsung menggunakan browser headless bawaan pa
             sanitize_oauth_code(url_encoded),
             "4/0ATsMZqCyxR6mxx8ph9vz1TH9kw"
         );
+    }
+
+    #[test]
+    fn test_error_classification_transient_quota_auth() {
+        // 1. Transient stream interruption (the exact bug encountered in production)
+        let stream_stall = "Antigravity CLI failed: error: the connection to the agent was interrupted before the response finished: subscriber fell behind updates, stalled for 5s";
+        assert!(is_transient_error(stream_stall));
+        assert!(!is_quota_error(stream_stall));
+        assert!(!is_auth_error(stream_stall));
+
+        // 2. Connection reset & network drops
+        assert!(is_transient_error("error: connection reset by peer"));
+        assert!(is_transient_error("transport error: stream terminated"));
+        assert!(is_transient_error("request timed out after 30s"));
+
+        // 3. Quota errors
+        let quota_err = "Error 429: Resource has been exhausted (rate limit exceeded).";
+        assert!(is_quota_error(quota_err));
+        assert!(!is_transient_error(quota_err));
+
+        // 4. Auth errors
+        let auth_err = "Eligibility check failed: Your account is not eligible for Antigravity.";
+        assert!(is_auth_error(auth_err));
+        assert!(!is_transient_error(auth_err));
     }
 }
