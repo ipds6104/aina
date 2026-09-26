@@ -12,7 +12,7 @@ import json
 import base64
 import urllib.request
 import urllib.error
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 from .safety import StatusSafetyGuard, DEFAULT_SAFE_IMPACT_MAXXING_CAPTION
 
 class ImageCaptionEngine:
