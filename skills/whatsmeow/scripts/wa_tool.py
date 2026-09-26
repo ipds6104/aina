@@ -414,7 +414,10 @@ def validate_safe_status(text=None, file_path=None):
         return True, ""
 
 def cmd_status_send_text(args):
-    is_safe, reason = validate_safe_status(text=args.text)
+    clean_text = args.text
+    if StatusSafetyGuard:
+        clean_text = StatusSafetyGuard.sanitize_caption(args.text)
+    is_safe, reason = validate_safe_status(text=clean_text)
     if not is_safe:
         print(json.dumps({
             "error": True,
@@ -425,7 +428,7 @@ def cmd_status_send_text(args):
 
     payload = {
         "type": "text",
-        "text": args.text
+        "text": clean_text
     }
     if args.background:
         payload["background_color"] = args.background
