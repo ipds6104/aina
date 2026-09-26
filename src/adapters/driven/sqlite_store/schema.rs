@@ -114,11 +114,26 @@ pub fn init_schema(conn: &Connection) -> anyhow::Result<()> {
             error_message TEXT,
             duration_seconds REAL,
             tools_invoked TEXT NOT NULL DEFAULT '[]',
+            usecase TEXT NOT NULL DEFAULT 'casual_and_consultation',
             created_at_epoch INTEGER NOT NULL,
             completed_at_epoch INTEGER
         )",
         [],
     )?;
+
+    // Backward-compatible schema migration for existing databases: ensure 'usecase' exists
+    let has_usecase_col: bool = conn
+        .prepare("PRAGMA table_info(whatsapp_action_audits)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .filter_map(|r| r.ok())
+        .any(|name| name == "usecase");
+
+    if !has_usecase_col {
+        let _ = conn.execute(
+            "ALTER TABLE whatsapp_action_audits ADD COLUMN usecase TEXT NOT NULL DEFAULT 'casual_and_consultation'",
+            [],
+        );
+    }
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_action_audits_chat 
@@ -135,6 +150,12 @@ pub fn init_schema(conn: &Connection) -> anyhow::Result<()> {
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_action_audits_status 
          ON whatsapp_action_audits(status, created_at_epoch DESC)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_action_audits_usecase 
+         ON whatsapp_action_audits(usecase, created_at_epoch DESC)",
         [],
     )?;
 

@@ -81,6 +81,7 @@ pub async fn dispatch_message_to_queue(state: &Arc<WebhookServerState>, msg: Inc
                         "cancelled",
                         Some(dur),
                         &[],
+                        None,
                     ).await;
                 }
             }
@@ -109,7 +110,8 @@ pub async fn dispatch_message_to_queue(state: &Arc<WebhookServerState>, msg: Inc
                 response_text: Some(reply.clone()),
                 error_message: None,
                 duration_seconds: Some(0.0),
-                tools_invoked: vec!["task_kill".to_string()],
+                tools_invoked: vec!["task_kill".to_string(), "builtin:kill".to_string()],
+                usecase: "system_and_control".to_string(),
                 created_at_epoch: now_epoch,
                 completed_at_epoch: Some(now_epoch),
             };

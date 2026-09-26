@@ -553,7 +553,7 @@ mod tests {
             })
         }
         async fn record_action_audit(&self, _audit: &crate::core::domain::NewWhatsAppActionAudit) -> anyhow::Result<i64> { Ok(1) }
-        async fn update_action_audit_result(&self, _id: i64, _conversation_id: Option<&str>, _response_text: Option<&str>, _error_message: Option<&str>, _status: &str, _duration_seconds: Option<f64>, _tools_invoked: &[String]) -> anyhow::Result<()> { Ok(()) }
+        async fn update_action_audit_result(&self, _id: i64, _conversation_id: Option<&str>, _response_text: Option<&str>, _error_message: Option<&str>, _status: &str, _duration_seconds: Option<f64>, _tools_invoked: &[String], _usecase: Option<&str>) -> anyhow::Result<()> { Ok(()) }
         async fn query_action_audits(&self, _filter: &crate::core::domain::ActionAuditFilter) -> anyhow::Result<Vec<crate::core::domain::WhatsAppActionAudit>> { Ok(vec![]) }
         async fn get_action_audit_by_id(&self, _id: i64) -> anyhow::Result<Option<crate::core::domain::WhatsAppActionAudit>> { Ok(None) }
         async fn get_action_audit_by_message_id(&self, _message_id: &str) -> anyhow::Result<Option<crate::core::domain::WhatsAppActionAudit>> { Ok(None) }
@@ -570,6 +570,9 @@ mod tests {
                 decision_breakdown: vec![],
                 status_breakdown: vec![],
                 top_tools_used: vec![],
+                top_usecases: vec![],
+                usecase_breakdown: vec![],
+                tool_call_frequency: vec![],
             })
         }
         async fn record_metacognitive_prediction(&self, _pred: &crate::core::domain::NewMetacognitivePrediction) -> anyhow::Result<i64> { Ok(1) }

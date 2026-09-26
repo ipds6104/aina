@@ -22,6 +22,10 @@ pub struct AuditStep {
     pub tool_calls_count: usize,
 }
 
+fn default_usecase() -> String {
+    "casual_and_consultation".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WhatsAppActionAudit {
     pub id: i64,
@@ -41,6 +45,8 @@ pub struct WhatsAppActionAudit {
     pub error_message: Option<String>,
     pub duration_seconds: Option<f64>,
     pub tools_invoked: Vec<String>,
+    #[serde(default = "default_usecase")]
+    pub usecase: String,
     pub created_at_epoch: i64,
     pub completed_at_epoch: Option<i64>,
 }
@@ -63,6 +69,7 @@ pub struct NewWhatsAppActionAudit {
     pub error_message: Option<String>,
     pub duration_seconds: Option<f64>,
     pub tools_invoked: Vec<String>,
+    pub usecase: String,
     pub created_at_epoch: i64,
     pub completed_at_epoch: Option<i64>,
 }
@@ -73,6 +80,8 @@ pub struct ActionAuditFilter {
     pub sender_jid: Option<String>,
     pub decision: Option<String>,
     pub status: Option<String>,
+    pub usecase: Option<String>,
+    pub tool: Option<String>,
     pub query: Option<String>,
     pub since_epoch: Option<i64>,
     pub until_epoch: Option<i64>,
@@ -143,6 +152,12 @@ pub struct AuditSummaryReport {
     pub decision_breakdown: Vec<CountMetric>,
     pub status_breakdown: Vec<CountMetric>,
     pub top_tools_used: Vec<CountMetric>,
+    #[serde(default)]
+    pub top_usecases: Vec<CountMetric>,
+    #[serde(default)]
+    pub usecase_breakdown: Vec<CountMetric>,
+    #[serde(default)]
+    pub tool_call_frequency: Vec<CountMetric>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -558,6 +573,27 @@ impl AuditEngine {
     ) -> Vec<String> {
         let (_, tools) = Self::load_transcript_for_conversation(brain_path, conversation_id);
         tools
+    }
+
+    /// Extracts tool names and total invocation counts for a conversation.
+    #[allow(dead_code)]
+    pub fn extract_tool_frequencies_for_conversation<P: AsRef<Path>>(
+        brain_path: P,
+        conversation_id: &str,
+    ) -> Vec<CountMetric> {
+        let (steps, _) = Self::load_transcript_for_conversation(brain_path, conversation_id);
+        let mut counts = std::collections::HashMap::new();
+        for step in steps {
+            for tool in step.tool_calls {
+                *counts.entry(tool.name).or_insert(0i64) += 1;
+            }
+        }
+        let mut list: Vec<CountMetric> = counts
+            .into_iter()
+            .map(|(key, count)| CountMetric { key, count })
+            .collect();
+        list.sort_by(|a, b| b.count.cmp(&a.count));
+        list
     }
 
     /// Inspects workspaces and extracts git repository provenance and script count.

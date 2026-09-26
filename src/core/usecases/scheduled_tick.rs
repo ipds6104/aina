@@ -578,7 +578,8 @@ impl ScheduledTickUseCase {
                             response_text: Some(clean.to_string()),
                             error_message: None,
                             duration_seconds: Some(dur),
-                            tools_invoked: vec!["autonomous_task_watcher".to_string()],
+                            tools_invoked: vec!["autonomous_task_watcher".to_string(), "builtin:scheduler".to_string()],
+                            usecase: "task_and_scheduling".to_string(),
                             created_at_epoch: now_epoch,
                             completed_at_epoch: Some(now_epoch + dur as i64),
                         };

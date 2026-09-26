@@ -8,6 +8,7 @@ pub fn map_action_audit_row(row: &Row) -> rusqlite::Result<WhatsAppActionAudit> 
     let has_media_int: i32 = row.get(11)?;
     let tools_json: String = row.get(16)?;
     let tools_invoked: Vec<String> = serde_json::from_str(&tools_json).unwrap_or_default();
+    let usecase: String = row.get(17).unwrap_or_else(|_| "casual_and_consultation".to_string());
 
     Ok(WhatsAppActionAudit {
         id: row.get(0)?,
@@ -27,8 +28,9 @@ pub fn map_action_audit_row(row: &Row) -> rusqlite::Result<WhatsAppActionAudit> 
         error_message: row.get(14)?,
         duration_seconds: row.get(15)?,
         tools_invoked,
-        created_at_epoch: row.get(17)?,
-        completed_at_epoch: row.get(18)?,
+        usecase,
+        created_at_epoch: row.get(18)?,
+        completed_at_epoch: row.get(19)?,
     })
 }
 
@@ -39,8 +41,8 @@ pub fn record_action_audit(conn: &Connection, audit: &NewWhatsAppActionAudit) ->
             message_id, chat_jid, chat_type, sender_jid, sender_name,
             decision, decision_reason, conversation_id, status, input_text,
             has_media, media_path, response_text, error_message, duration_seconds,
-            tools_invoked, created_at_epoch, completed_at_epoch
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+            tools_invoked, usecase, created_at_epoch, completed_at_epoch
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
         params![
             audit.message_id,
             audit.chat_jid,
@@ -58,6 +60,7 @@ pub fn record_action_audit(conn: &Connection, audit: &NewWhatsAppActionAudit) ->
             audit.error_message,
             audit.duration_seconds,
             tools_json,
+            audit.usecase,
             audit.created_at_epoch,
             audit.completed_at_epoch,
         ],
@@ -74,6 +77,7 @@ pub fn update_action_audit_result(
     status: &str,
     duration_seconds: Option<f64>,
     tools_invoked: &[String],
+    usecase: Option<&str>,
 ) -> anyhow::Result<()> {
     let completed_at = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -89,8 +93,9 @@ pub fn update_action_audit_result(
             status = ?4,
             duration_seconds = COALESCE(?5, duration_seconds),
             tools_invoked = ?6,
-            completed_at_epoch = ?7
-        WHERE id = ?8",
+            usecase = COALESCE(?7, usecase),
+            completed_at_epoch = ?8
+        WHERE id = ?9",
         params![
             conversation_id,
             response_text,
@@ -98,6 +103,7 @@ pub fn update_action_audit_result(
             status,
             duration_seconds,
             tools_json,
+            usecase,
             completed_at,
             id,
         ],
@@ -113,7 +119,7 @@ pub fn query_action_audits(
         "SELECT id, message_id, chat_jid, chat_type, sender_jid, sender_name,
                 decision, decision_reason, conversation_id, status, input_text,
                 has_media, media_path, response_text, error_message, duration_seconds,
-                tools_invoked, created_at_epoch, completed_at_epoch
+                tools_invoked, usecase, created_at_epoch, completed_at_epoch
          FROM whatsapp_action_audits WHERE 1=1"
     );
 
@@ -138,6 +144,17 @@ pub fn query_action_audits(
     if let Some(ref st) = filter.status {
         conditions.push("status = ?");
         query_params.push(Box::new(st.clone()));
+    }
+
+    if let Some(ref uc) = filter.usecase {
+        conditions.push("usecase = ?");
+        query_params.push(Box::new(uc.clone()));
+    }
+
+    if let Some(ref tool) = filter.tool {
+        let tool_pattern = format!("%\"{}\"%", tool);
+        conditions.push("tools_invoked LIKE ?");
+        query_params.push(Box::new(tool_pattern));
     }
 
     if let Some(since) = filter.since_epoch {
@@ -189,7 +206,7 @@ pub fn get_action_audit_by_id(conn: &Connection, id: i64) -> anyhow::Result<Opti
         "SELECT id, message_id, chat_jid, chat_type, sender_jid, sender_name,
                 decision, decision_reason, conversation_id, status, input_text,
                 has_media, media_path, response_text, error_message, duration_seconds,
-                tools_invoked, created_at_epoch, completed_at_epoch
+                tools_invoked, usecase, created_at_epoch, completed_at_epoch
          FROM whatsapp_action_audits WHERE id = ?1 LIMIT 1"
     )?;
     let mut rows = stmt.query_map(params![id], map_action_audit_row)?;
@@ -205,7 +222,7 @@ pub fn get_action_audit_by_message_id(conn: &Connection, message_id: &str) -> an
         "SELECT id, message_id, chat_jid, chat_type, sender_jid, sender_name,
                 decision, decision_reason, conversation_id, status, input_text,
                 has_media, media_path, response_text, error_message, duration_seconds,
-                tools_invoked, created_at_epoch, completed_at_epoch
+                tools_invoked, usecase, created_at_epoch, completed_at_epoch
          FROM whatsapp_action_audits WHERE message_id = ?1 ORDER BY id DESC LIMIT 1"
     )?;
     let mut rows = stmt.query_map(params![message_id], map_action_audit_row)?;
@@ -301,25 +318,52 @@ pub fn get_action_audit_summary(conn: &Connection) -> anyhow::Result<AuditSummar
     })?;
     let status_breakdown = st_rows.filter_map(|r| r.ok()).collect();
 
-    // Top tools used (parse recent tools_invoked)
+    // Usecase breakdown & top usecases (fast indexed SQL aggregation)
+    let mut stmt_uc = conn.prepare(
+        "SELECT usecase, COUNT(*) as cnt FROM whatsapp_action_audits WHERE usecase IS NOT NULL AND usecase != '' GROUP BY usecase ORDER BY cnt DESC"
+    )?;
+    let uc_rows = stmt_uc.query_map([], |r| {
+        Ok(CountMetric {
+            key: r.get(0)?,
+            count: r.get(1)?,
+        })
+    })?;
+    let usecase_breakdown: Vec<CountMetric> = uc_rows.filter_map(|r| r.ok()).collect();
+    let top_usecases: Vec<CountMetric> = usecase_breakdown.iter().take(5).cloned().collect();
+
+    // Top tools used & total call frequencies (parse tools_invoked)
     let mut stmt_tools = conn.prepare(
-        "SELECT tools_invoked FROM whatsapp_action_audits WHERE tools_invoked != '[]' ORDER BY id DESC LIMIT 500"
+        "SELECT tools_invoked FROM whatsapp_action_audits WHERE tools_invoked != '[]' ORDER BY id DESC LIMIT 1000"
     )?;
     let tool_rows = stmt_tools.query_map([], |r| r.get::<_, String>(0))?;
-    let mut tool_counts: HashMap<String, i64> = HashMap::new();
+    let mut tool_action_counts: HashMap<String, i64> = HashMap::new();
+    let mut tool_freq_counts: HashMap<String, i64> = HashMap::new();
+
     for t_res in tool_rows.flatten() {
         if let Ok(arr) = serde_json::from_str::<Vec<String>>(&t_res) {
+            let mut seen_in_action = std::collections::HashSet::new();
             for tool_name in arr {
-                *tool_counts.entry(tool_name).or_insert(0) += 1;
+                *tool_freq_counts.entry(tool_name.clone()).or_insert(0) += 1;
+                if seen_in_action.insert(tool_name.clone()) {
+                    *tool_action_counts.entry(tool_name).or_insert(0) += 1;
+                }
             }
         }
     }
-    let mut top_tools: Vec<CountMetric> = tool_counts
+
+    let mut top_tools: Vec<CountMetric> = tool_action_counts
         .into_iter()
         .map(|(key, count)| CountMetric { key, count })
         .collect();
     top_tools.sort_by(|a, b| b.count.cmp(&a.count));
     top_tools.truncate(10);
+
+    let mut tool_call_frequency: Vec<CountMetric> = tool_freq_counts
+        .into_iter()
+        .map(|(key, count)| CountMetric { key, count })
+        .collect();
+    tool_call_frequency.sort_by(|a, b| b.count.cmp(&a.count));
+    tool_call_frequency.truncate(10);
 
     Ok(AuditSummaryReport {
         total_actions,
@@ -333,5 +377,8 @@ pub fn get_action_audit_summary(conn: &Connection) -> anyhow::Result<AuditSummar
         decision_breakdown,
         status_breakdown,
         top_tools_used: top_tools,
+        top_usecases,
+        usecase_breakdown,
+        tool_call_frequency,
     })
 }

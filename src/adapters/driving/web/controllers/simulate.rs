@@ -238,6 +238,7 @@ pub async fn simulate_handler(
 
     match decision {
         GatekeeperDecision::Ignore { reason } => {
+            let initial_usecase = crate::core::domain::UseCaseClassifier::classify(&msg.text, false, None, &[]);
             let audit = crate::core::domain::NewWhatsAppActionAudit {
                 message_id: msg.id.clone(),
                 chat_jid: msg.chat_jid.clone(),
@@ -255,6 +256,7 @@ pub async fn simulate_handler(
                 error_message: None,
                 duration_seconds: Some(0.0),
                 tools_invoked: vec![],
+                usecase: initial_usecase.as_str().to_string(),
                 created_at_epoch: chrono_now_secs(),
                 completed_at_epoch: Some(chrono_now_secs()),
             };
@@ -273,6 +275,7 @@ pub async fn simulate_handler(
         }
         GatekeeperDecision::RecordOnly { reason } => {
             let _ = state.session_store.record_message(&msg.chat_jid, &msg.sender.jid, &msg.text, false).await;
+            let initial_usecase = crate::core::domain::UseCaseClassifier::classify(&msg.text, false, None, &[]);
             let audit = crate::core::domain::NewWhatsAppActionAudit {
                 message_id: msg.id.clone(),
                 chat_jid: msg.chat_jid.clone(),
@@ -290,6 +293,7 @@ pub async fn simulate_handler(
                 error_message: None,
                 duration_seconds: Some(0.0),
                 tools_invoked: vec![],
+                usecase: initial_usecase.as_str().to_string(),
                 created_at_epoch: chrono_now_secs(),
                 completed_at_epoch: Some(chrono_now_secs()),
             };
@@ -323,6 +327,7 @@ pub async fn simulate_handler(
             let job_id = format!("job-{}", chrono_now_secs() * 1000 + (rand::random::<u32>() % 1000) as i64);
 
             let now = chrono_now_secs();
+            let initial_usecase = crate::core::domain::UseCaseClassifier::classify(&msg.text, false, None, &[]);
             let audit = crate::core::domain::NewWhatsAppActionAudit {
                 message_id: msg.id.clone(),
                 chat_jid: msg.chat_jid.clone(),
@@ -340,6 +345,7 @@ pub async fn simulate_handler(
                 error_message: None,
                 duration_seconds: None,
                 tools_invoked: vec![],
+                usecase: initial_usecase.as_str().to_string(),
                 created_at_epoch: now,
                 completed_at_epoch: None,
             };
@@ -366,6 +372,7 @@ pub async fn simulate_handler(
             let state_clone = Arc::clone(&state);
             let job_id_clone = job_id.clone();
             let msg_chat_jid = msg.chat_jid.clone();
+            let msg_text_clone = msg.text.clone();
             let model_override = payload.model_override.clone();
 
             tokio::spawn(async move {
@@ -388,6 +395,12 @@ pub async fn simulate_handler(
                                 &brain_path,
                                 &agent_res.conversation_id,
                             );
+                            let refined_usecase = crate::core::domain::UseCaseClassifier::classify(
+                                &msg_text_clone,
+                                false,
+                                None,
+                                &tools,
+                            );
                             let _ = state_clone.session_store.update_action_audit_result(
                                 aid,
                                 Some(&agent_res.conversation_id),
@@ -396,6 +409,7 @@ pub async fn simulate_handler(
                                 "success",
                                 Some(agent_res.duration_seconds),
                                 &tools,
+                                Some(refined_usecase.as_str()),
                             ).await;
                         }
 
@@ -426,6 +440,7 @@ pub async fn simulate_handler(
                                 "failed",
                                 Some(dur),
                                 &[],
+                                None,
                             ).await;
                         }
 

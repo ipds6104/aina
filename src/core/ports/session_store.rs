@@ -100,6 +100,7 @@ pub trait SessionStorePort: Send + Sync {
         status: &str,
         duration_seconds: Option<f64>,
         tools_invoked: &[String],
+        usecase: Option<&str>,
     ) -> anyhow::Result<()>;
 
     /// Queries action audit records according to filter parameters.

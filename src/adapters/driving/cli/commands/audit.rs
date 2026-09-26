@@ -24,19 +24,42 @@ pub async fn handle_audit(args: &[String]) -> anyhow::Result<()> {
                 println!("• Total Kesalahan/Gagal: {}", summary.total_errors);
                 println!("• Rata-rata Durasi     : {:.2}s\n", summary.avg_duration_seconds);
 
+                if !summary.top_usecases.is_empty() {
+                    println!("🎯 Usecase Paling Sering Digunakan:");
+                    for (i, u) in summary.top_usecases.iter().enumerate() {
+                        let label = crate::core::domain::UseCaseCategory::from_str(&u.key).display_name();
+                        let pct = if summary.total_actions > 0 {
+                            (u.count as f64 / summary.total_actions as f64) * 100.0
+                        } else {
+                            0.0
+                        };
+                        println!("  {}. {} ({} kali, {:.1}%)", i + 1, label, u.count, pct);
+                    }
+                    println!();
+                }
+
+                if !summary.top_tools_used.is_empty() {
+                    println!("🛠️ Alat AI Paling Sering Digunakan (Frekuensi Aksi):");
+                    for (i, t) in summary.top_tools_used.iter().enumerate() {
+                        println!("  {}. {} ({} aksi)", i + 1, t.key, t.count);
+                    }
+                    println!();
+                }
+
+                if !summary.tool_call_frequency.is_empty() {
+                    println!("📈 Total Pemanggilan Alat (Tool Call Volume):");
+                    for (i, t) in summary.tool_call_frequency.iter().enumerate() {
+                        println!("  {}. {} ({} kali dipanggil)", i + 1, t.key, t.count);
+                    }
+                    println!();
+                }
+
                 if !summary.most_active_chats.is_empty() {
                     println!("💬 Ruang Obrolan Paling Aktif:");
                     for (i, c) in summary.most_active_chats.iter().enumerate() {
                         println!("  {}. {} ({} pesan)", i + 1, c.key, c.count);
                     }
                     println!();
-                }
-
-                if !summary.top_tools_used.is_empty() {
-                    println!("🛠️ Alat AI Paling Sering Digunakan:");
-                    for (i, t) in summary.top_tools_used.iter().enumerate() {
-                        println!("  {}. {} ({} kali)", i + 1, t.key, t.count);
-                    }
                 }
             }
             Ok(())
@@ -103,6 +126,8 @@ pub async fn handle_audit(args: &[String]) -> anyhow::Result<()> {
             let mut limit = 20;
             let mut query = None;
             let mut status = None;
+            let mut usecase = None;
+            let mut tool = None;
             let mut idx = 1;
             while idx < args.len() {
                 let a = &args[idx];
@@ -121,6 +146,16 @@ pub async fn handle_audit(args: &[String]) -> anyhow::Result<()> {
                     idx += 2;
                     continue;
                 }
+                if (a == "--usecase" || a == "-u") && idx + 1 < args.len() {
+                    usecase = Some(args[idx + 1].clone());
+                    idx += 2;
+                    continue;
+                }
+                if (a == "--tool" || a == "-t") && idx + 1 < args.len() {
+                    tool = Some(args[idx + 1].clone());
+                    idx += 2;
+                    continue;
+                }
                 idx += 1;
             }
 
@@ -132,6 +167,8 @@ pub async fn handle_audit(args: &[String]) -> anyhow::Result<()> {
             let filter = crate::core::domain::ActionAuditFilter {
                 query,
                 status,
+                usecase,
+                tool,
                 limit: Some(limit),
                 ..Default::default()
             };
@@ -147,8 +184,9 @@ pub async fn handle_audit(args: &[String]) -> anyhow::Result<()> {
                     for (i, act) in actions.iter().enumerate() {
                         let dur_str = act.duration_seconds.map(|d| format!("{:.2}s", d)).unwrap_or_else(|| "-".to_string());
                         let sender = act.sender_name.as_deref().unwrap_or(&act.sender_jid);
-                        println!("{}. [{}] {} | Pengirim: {} | Status: {} (Durasi: {})",
-                            i + 1, act.id, act.decision.to_uppercase(), sender, act.status, dur_str);
+                        let uc_label = crate::core::domain::UseCaseCategory::from_str(&act.usecase).display_name();
+                        println!("{}. [{}] {} [{}] | Pengirim: {} | Status: {} (Durasi: {})",
+                            i + 1, act.id, act.decision.to_uppercase(), uc_label, sender, act.status, dur_str);
                         println!("   Pesan Masuk: {}", act.input_text.lines().next().unwrap_or(""));
                         if let Some(ref resp) = act.response_text {
                             let resp_line: &str = resp.as_str().lines().next().unwrap_or("");

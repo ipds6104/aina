@@ -100,6 +100,12 @@ impl ProcessIncomingMessageUseCase {
         match decision {
             GatekeeperDecision::Ignore { reason } => {
                 info!("Ignoring message {}: {}", msg.id, reason);
+                let initial_usecase = crate::core::domain::UseCaseClassifier::classify(
+                    &msg.text,
+                    msg.has_media,
+                    msg.media_path.as_deref(),
+                    &[],
+                );
                 let audit = crate::core::domain::NewWhatsAppActionAudit {
                     message_id: msg.id.clone(),
                     chat_jid: msg.chat_jid.clone(),
@@ -117,6 +123,7 @@ impl ProcessIncomingMessageUseCase {
                     error_message: None,
                     duration_seconds: Some(0.0),
                     tools_invoked: vec![],
+                    usecase: initial_usecase.as_str().to_string(),
                     created_at_epoch: now_epoch,
                     completed_at_epoch: Some(now_epoch),
                 };
@@ -141,6 +148,12 @@ impl ProcessIncomingMessageUseCase {
                     .record_message(&msg.chat_jid, &msg.sender.jid, &record_text, false)
                     .await?;
 
+                let initial_usecase = crate::core::domain::UseCaseClassifier::classify(
+                    &record_text,
+                    msg.has_media,
+                    msg.media_path.as_deref(),
+                    &[],
+                );
                 let audit = crate::core::domain::NewWhatsAppActionAudit {
                     message_id: msg.id.clone(),
                     chat_jid: msg.chat_jid.clone(),
@@ -158,6 +171,7 @@ impl ProcessIncomingMessageUseCase {
                     error_message: None,
                     duration_seconds: Some(0.0),
                     tools_invoked: vec![],
+                    usecase: initial_usecase.as_str().to_string(),
                     created_at_epoch: now_epoch,
                     completed_at_epoch: Some(now_epoch),
                 };
@@ -184,6 +198,12 @@ impl ProcessIncomingMessageUseCase {
                     .record_message(&msg.chat_jid, &msg.sender.jid, &record_text, false)
                     .await?;
 
+                let initial_usecase = crate::core::domain::UseCaseClassifier::classify(
+                    &record_text,
+                    msg.has_media,
+                    msg.media_path.as_deref(),
+                    &[],
+                );
                 let audit = crate::core::domain::NewWhatsAppActionAudit {
                     message_id: msg.id.clone(),
                     chat_jid: msg.chat_jid.clone(),
@@ -201,6 +221,7 @@ impl ProcessIncomingMessageUseCase {
                     error_message: None,
                     duration_seconds: None,
                     tools_invoked: vec![],
+                    usecase: initial_usecase.as_str().to_string(),
                     created_at_epoch: now_epoch,
                     completed_at_epoch: None,
                 };
@@ -216,7 +237,16 @@ impl ProcessIncomingMessageUseCase {
                         let dur = start_instant.elapsed().as_secs_f64();
                         let _ = self
                             .session_store
-                            .update_action_audit_result(aid, None, Some(&reply), None, "success", Some(dur), &[])
+                            .update_action_audit_result(
+                                aid,
+                                None,
+                                Some(&reply),
+                                None,
+                                "success",
+                                Some(dur),
+                                &["builtin:media_gate".to_string()],
+                                Some("media_and_whatsapp"),
+                            )
                             .await;
                     }
                     self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
@@ -236,7 +266,16 @@ impl ProcessIncomingMessageUseCase {
                     let reply = "🔄 *Sesi Percakapan Berhasil Direset*\n\nMemori konteks percakapan untuk ruang obrolan ini telah dibersihkan. Sesi berikutnya akan dimulai sebagai percakapan baru yang segar. Silakan ajukan pertanyaan atau instruksi baru Anda!".to_string();
                     if let Some(aid) = audit_id {
                         let dur = start_instant.elapsed().as_secs_f64();
-                        let _ = self.session_store.update_action_audit_result(aid, None, Some(&reply), None, "success", Some(dur), &[]).await;
+                        let _ = self.session_store.update_action_audit_result(
+                            aid,
+                            None,
+                            Some(&reply),
+                            None,
+                            "success",
+                            Some(dur),
+                            &["builtin:reset".to_string()],
+                            Some("system_and_control"),
+                        ).await;
                     }
                     self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
                     self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
@@ -254,7 +293,16 @@ impl ProcessIncomingMessageUseCase {
                         );
                         if let Some(aid) = audit_id {
                             let dur = start_instant.elapsed().as_secs_f64();
-                            let _ = self.session_store.update_action_audit_result(aid, None, Some(&reply), None, "success", Some(dur), &[]).await;
+                            let _ = self.session_store.update_action_audit_result(
+                                aid,
+                                None,
+                                Some(&reply),
+                                None,
+                                "success",
+                                Some(dur),
+                                &["builtin:model".to_string()],
+                                Some("system_and_control"),
+                            ).await;
                         }
                         self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
                         self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
@@ -270,7 +318,16 @@ impl ProcessIncomingMessageUseCase {
                                 );
                                 if let Some(aid) = audit_id {
                                     let dur = start_instant.elapsed().as_secs_f64();
-                                    let _ = self.session_store.update_action_audit_result(aid, None, Some(&reply), None, "success", Some(dur), &[]).await;
+                                    let _ = self.session_store.update_action_audit_result(
+                                        aid,
+                                        None,
+                                        Some(&reply),
+                                        None,
+                                        "success",
+                                        Some(dur),
+                                        &["builtin:model".to_string()],
+                                        Some("system_and_control"),
+                                    ).await;
                                 }
                                 self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
                                 self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
@@ -283,7 +340,16 @@ impl ProcessIncomingMessageUseCase {
                                 );
                                 if let Some(aid) = audit_id {
                                     let dur = start_instant.elapsed().as_secs_f64();
-                                    let _ = self.session_store.update_action_audit_result(aid, None, Some(&reply), Some(&e.to_string()), "failed", Some(dur), &[]).await;
+                                    let _ = self.session_store.update_action_audit_result(
+                                        aid,
+                                        None,
+                                        Some(&reply),
+                                        Some(&e.to_string()),
+                                        "failed",
+                                        Some(dur),
+                                        &["builtin:model".to_string()],
+                                        Some("system_and_control"),
+                                    ).await;
                                 }
                                 self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
                                 self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
@@ -327,7 +393,16 @@ impl ProcessIncomingMessageUseCase {
 
                         if let Some(aid) = audit_id {
                             let dur = start_instant.elapsed().as_secs_f64();
-                            let _ = self.session_store.update_action_audit_result(aid, None, Some(&reply), None, "success", Some(dur), &[]).await;
+                            let _ = self.session_store.update_action_audit_result(
+                                aid,
+                                None,
+                                Some(&reply),
+                                None,
+                                "success",
+                                Some(dur),
+                                &["builtin:token".to_string()],
+                                Some("system_and_control"),
+                            ).await;
                         }
                         self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
                         self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
@@ -348,7 +423,16 @@ impl ProcessIncomingMessageUseCase {
                                 let reply = format!("🗑️ *Pool Akun Dikosongkan*\n\nSebanyak *{}* akun cadangan telah dihapus dari pool. Aina sekarang kembali menggunakan akun default.", count);
                                 if let Some(aid) = audit_id {
                                     let dur = start_instant.elapsed().as_secs_f64();
-                                    let _ = self.session_store.update_action_audit_result(aid, None, Some(&reply), None, "success", Some(dur), &[]).await;
+                                    let _ = self.session_store.update_action_audit_result(
+                                        aid,
+                                        None,
+                                        Some(&reply),
+                                        None,
+                                        "success",
+                                        Some(dur),
+                                        &["builtin:token".to_string()],
+                                        Some("system_and_control"),
+                                    ).await;
                                 }
                                 self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
                                 self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
@@ -376,7 +460,16 @@ impl ProcessIncomingMessageUseCase {
                                     let reply = format!("🗑️ *Akun #{} Berhasil Dihapus*\n\nSisa akun aktif di pool: *{}* akun.", id, pool.len());
                                     if let Some(aid) = audit_id {
                                         let dur = start_instant.elapsed().as_secs_f64();
-                                        let _ = self.session_store.update_action_audit_result(aid, None, Some(&reply), None, "success", Some(dur), &[]).await;
+                                        let _ = self.session_store.update_action_audit_result(
+                                            aid,
+                                            None,
+                                            Some(&reply),
+                                            None,
+                                            "success",
+                                            Some(dur),
+                                            &["builtin:token".to_string()],
+                                            Some("system_and_control"),
+                                        ).await;
                                     }
                                     self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
                                     self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
@@ -436,7 +529,16 @@ impl ProcessIncomingMessageUseCase {
                             );
                             if let Some(aid) = audit_id {
                                 let dur = start_instant.elapsed().as_secs_f64();
-                                let _ = self.session_store.update_action_audit_result(aid, None, Some(&reply), None, "success", Some(dur), &[]).await;
+                                let _ = self.session_store.update_action_audit_result(
+                                    aid,
+                                    None,
+                                    Some(&reply),
+                                    None,
+                                    "success",
+                                    Some(dur),
+                                    &["builtin:token".to_string()],
+                                    Some("system_and_control"),
+                                ).await;
                             }
                             self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
                             self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
@@ -449,7 +551,16 @@ impl ProcessIncomingMessageUseCase {
                             );
                             if let Some(aid) = audit_id {
                                 let dur = start_instant.elapsed().as_secs_f64();
-                                let _ = self.session_store.update_action_audit_result(aid, None, Some(&reply), Some(&e.to_string()), "failed", Some(dur), &[]).await;
+                                let _ = self.session_store.update_action_audit_result(
+                                    aid,
+                                    None,
+                                    Some(&reply),
+                                    Some(&e.to_string()),
+                                    "failed",
+                                    Some(dur),
+                                    &["builtin:token".to_string()],
+                                    Some("system_and_control"),
+                                ).await;
                             }
                             self.session_store.record_message(&msg.chat_jid, &self.bot_jid, &reply, true).await?;
                             self.whatsapp.send_text_with_session(&msg.chat_jid, &reply, Some(&msg.id), msg.session_role).await?;
@@ -476,7 +587,16 @@ impl ProcessIncomingMessageUseCase {
                     let reaction_note = format!("[Reaksi WhatsApp: {}]", reaction_emoji);
                     if let Some(aid) = audit_id {
                         let dur = start_instant.elapsed().as_secs_f64();
-                        let _ = self.session_store.update_action_audit_result(aid, None, Some(&reaction_note), None, "success", Some(dur), &[]).await;
+                        let _ = self.session_store.update_action_audit_result(
+                            aid,
+                            None,
+                            Some(&reaction_note),
+                            None,
+                            "success",
+                            Some(dur),
+                            &["builtin:reaction".to_string()],
+                            Some("casual_and_consultation"),
+                        ).await;
                     }
                     let _ = self
                         .session_store
@@ -633,6 +753,20 @@ impl ProcessIncomingMessageUseCase {
                         error!("Agent engine failed to execute for chat {}: {}", msg.chat_jid, e);
                         if let Some(aid) = audit_id {
                             let dur = start_instant.elapsed().as_secs_f64();
+                            let partial_tools = if let Some(ref cid) = existing_conv_id {
+                                crate::core::domain::AuditEngine::extract_tools_for_conversation(
+                                    &crate::core::domain::AuditEngine::default_brain_path(),
+                                    cid,
+                                )
+                            } else {
+                                vec![]
+                            };
+                            let refined_usecase = crate::core::domain::UseCaseClassifier::classify(
+                                &msg.text,
+                                msg.has_media,
+                                msg.media_path.as_deref(),
+                                &partial_tools,
+                            );
                             let _ = self.session_store.update_action_audit_result(
                                 aid,
                                 None,
@@ -640,7 +774,8 @@ impl ProcessIncomingMessageUseCase {
                                 Some(&e.to_string()),
                                 "failed",
                                 Some(dur),
-                                &[],
+                                &partial_tools,
+                                Some(refined_usecase.as_str()),
                             ).await;
                         }
 
@@ -800,6 +935,12 @@ impl ProcessIncomingMessageUseCase {
                     &crate::core::domain::AuditEngine::default_brain_path(),
                     &agent_res.conversation_id,
                 );
+                let refined_usecase = crate::core::domain::UseCaseClassifier::classify(
+                    &msg.text,
+                    msg.has_media,
+                    msg.media_path.as_deref(),
+                    &tools_invoked,
+                );
                 if let Some(aid) = audit_id {
                     let _ = self.session_store.update_action_audit_result(
                         aid,
@@ -809,6 +950,7 @@ impl ProcessIncomingMessageUseCase {
                         "success",
                         Some(actual_duration),
                         &tools_invoked,
+                        Some(refined_usecase.as_str()),
                     ).await;
                 }
 
@@ -818,194 +960,12 @@ impl ProcessIncomingMessageUseCase {
     }
 }
 
-/// Splits a combined AI response string into multiple WhatsApp message bubbles
-/// if explicit delimiter tokens are present.
-pub fn split_response_into_bubbles(text: &str) -> Vec<String> {
-    let delimiters = ["<<<SPLIT_CHAT>>>", "<<<NEXT_CHAT>>>", "<<<SPLIT>>>", "[SPLIT_CHAT]"];
-    for delim in &delimiters {
-        if text.contains(delim) {
-            let parts: Vec<String> = text
-                .split(delim)
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect();
-            if !parts.is_empty() {
-                return parts;
-            }
-        }
-    }
-    let trimmed = text.trim();
-    if trimmed.is_empty() {
-        vec![]
-    } else {
-        vec![trimmed.to_string()]
-    }
-}
-
-/// Detects if a message is a pure conversational closing/acknowledgment/gratitude
-/// that should receive a polite emoji reaction instead of an intimidating text reply.
-pub fn detect_conversational_closing(text: &str) -> Option<&'static str> {
-    let clean = text.trim();
-    if clean.is_empty() || clean.len() > 60 {
-        return None;
-    }
-
-    // Never auto-react if text has question mark
-    if clean.contains('?') {
-        return None;
-    }
-
-    let lower = clean.to_lowercase();
-
-    // Check for negative or request keywords that indicate a follow-up inquiry
-    let question_keywords = [
-        "kenapa", "mengapa", "bagaimana", "gimana", "kapan", "siapa", "dimana", "mana",
-        "tolong", "bisa tolong", "mohon bantuan", "jadwalkan", "kirimkan", "carikan",
-        "tapi", "namun", "tetapi", "masih ada", "belum",
-    ];
-    for kw in &question_keywords {
-        if lower.contains(kw) {
-            return None;
-        }
-    }
-
-    // Strip punctuation to normalize
-    let normalized: String = lower
-        .chars()
-        .map(|c| if c.is_alphanumeric() { c } else { ' ' })
-        .collect();
-    let words: Vec<&str> = normalized.split_whitespace().collect();
-
-    if words.is_empty() || words.len() > 6 {
-        return None;
-    }
-
-    let joined = words.join(" ");
-
-    // 1. Gratitude & polite warmth -> "🙏"
-    let gratitude_phrases = [
-        "sama sama", "samasama", "sama2", "samik samik", "sam2",
-        "terima kasih", "terimakasih", "makasih", "makasi", "makasihh", "tengkyu",
-        "thank you", "thanks", "thx", "tks", "matur nuwun", "nuhun",
-        "sukses selalu", "sehat selalu", "aamiin", "amin ya rabbal alamin",
-        "semoga lancar", "semangat", "semangat kak",
-    ];
-
-    for pat in &gratitude_phrases {
-        if joined == *pat
-            || joined.starts_with(&format!("{} ", pat))
-            || joined.ends_with(&format!(" {}", pat))
-            || joined == format!("{} kak", pat)
-            || joined == format!("{} mas", pat)
-            || joined == format!("{} mba", pat)
-            || joined == format!("{} pak", pat)
-            || joined == format!("{} bu", pat)
-            || joined == format!("{} aina", pat)
-            || joined == format!("{} ya", pat)
-            || joined == format!("{} yaa", pat)
-            || joined == format!("{} banyak", pat)
-            || joined == format!("{} infonya", pat)
-        {
-            return Some("🙏");
-        }
-    }
-
-    // 2. Acknowledgment & confirmation -> "👍"
-    let ack_phrases = [
-        "siap", "siapp", "siappp", "siap kak", "siap pak", "siap bu", "siap mba", "siap mas",
-        "oke siap", "ok siap", "oke siap kak", "ok siap kak",
-        "noted", "noted kak", "noted pak", "noted bu",
-        "oke", "ok", "okee", "okey", "sip", "sipp", "sippp", "oke sip", "ok sip", "mantap",
-        "baik", "baik kak", "baik pak", "baik bu", "baik siap", "siap laksanakan",
-        "paham", "paham kak", "mengerti", "mengerti kak", "sudah kak", "siap terima kasih",
-    ];
-
-    for pat in &ack_phrases {
-        if joined == *pat
-            || joined == format!("{} kak", pat)
-            || joined == format!("{} pak", pat)
-            || joined == format!("{} bu", pat)
-            || joined == format!("{} mba", pat)
-            || joined == format!("{} mas", pat)
-            || joined == format!("{} aina", pat)
-            || joined == format!("{} ya", pat)
-        {
-            return Some("👍");
-        }
-    }
-
-    None
-}
+// Re-export response formatting & conversational heuristics from domain layer
+pub use crate::core::domain::{detect_conversational_closing, split_response_into_bubbles};
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_split_response_single_bubble() {
-        let text = "Halo Bang, ini satu pesan utuh.";
-        let bubbles = split_response_into_bubbles(text);
-        assert_eq!(bubbles, vec!["Halo Bang, ini satu pesan utuh."]);
-    }
-
-    #[test]
-    fn test_split_response_multiple_bubbles() {
-        let text = "Ini pesan 1 untuk Abang\n<<<SPLIT_CHAT>>>\nIni pesan 2 draf siap forward";
-        let bubbles = split_response_into_bubbles(text);
-        assert_eq!(bubbles, vec![
-            "Ini pesan 1 untuk Abang",
-            "Ini pesan 2 draf siap forward"
-        ]);
-    }
-
-    #[test]
-    fn test_split_response_multiple_aliases() {
-        let text = "Bagian A<<<NEXT_CHAT>>>Bagian B<<<NEXT_CHAT>>>Bagian C";
-        let bubbles = split_response_into_bubbles(text);
-        assert_eq!(bubbles, vec!["Bagian A", "Bagian B", "Bagian C"]);
-    }
-
-    #[test]
-    fn test_split_response_empty_chunks_filtered() {
-        let text = "<<<SPLIT_CHAT>>>Pesan Tunggal<<<SPLIT_CHAT>>>   ";
-        let bubbles = split_response_into_bubbles(text);
-        assert_eq!(bubbles, vec!["Pesan Tunggal"]);
-    }
-
-    #[test]
-    fn test_detect_conversational_closing_gratitude() {
-        assert_eq!(detect_conversational_closing("Sama-sama kak"), Some("🙏"));
-        assert_eq!(detect_conversational_closing("sama2 yaa"), Some("🙏"));
-        assert_eq!(detect_conversational_closing("Terima kasih banyak!"), Some("🙏"));
-        assert_eq!(detect_conversational_closing("Makasih infonya"), Some("🙏"));
-        assert_eq!(detect_conversational_closing("tks"), Some("🙏"));
-        assert_eq!(detect_conversational_closing("Aamiin"), Some("🙏"));
-    }
-
-    #[test]
-    fn test_detect_conversational_closing_acknowledgment() {
-        assert_eq!(detect_conversational_closing("Siap kak"), Some("👍"));
-        assert_eq!(detect_conversational_closing("Oke siap!"), Some("👍"));
-        assert_eq!(detect_conversational_closing("Noted"), Some("👍"));
-        assert_eq!(detect_conversational_closing("Siap laksanakan"), Some("👍"));
-        assert_eq!(detect_conversational_closing("Mantap"), Some("👍"));
-        assert_eq!(detect_conversational_closing("Sipp"), Some("👍"));
-    }
-
-    #[test]
-    fn test_detect_conversational_closing_ignores_inquiries_and_questions() {
-        // Question mark present
-        assert_eq!(detect_conversational_closing("Kenapa SLS belum selesai?"), None);
-        assert_eq!(detect_conversational_closing("Makasih kak, tapi ada kendala?"), None);
-        // Conjunctions indicating follow-up inquiry
-        assert_eq!(detect_conversational_closing("Siap kak tapi masih ada selisih"), None);
-        assert_eq!(detect_conversational_closing("Terima kasih tolong cek kembali"), None);
-        // Long messages
-        assert_eq!(
-            detect_conversational_closing("Terima kasih banyak atas infonya, nanti saya koordinasikan lagi dengan PPL desa sebelah agar cepat tuntas"),
-            None
-        );
-    }
 
     struct MockFailingAgent;
 

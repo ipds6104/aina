@@ -170,6 +170,7 @@ impl SessionStorePort for SqliteSessionStore {
         status: &str,
         duration_seconds: Option<f64>,
         tools_invoked: &[String],
+        usecase: Option<&str>,
     ) -> anyhow::Result<()> {
         let conn = self.conn.lock().await;
         audit::update_action_audit_result(
@@ -181,6 +182,7 @@ impl SessionStorePort for SqliteSessionStore {
             status,
             duration_seconds,
             tools_invoked,
+            usecase,
         )
     }
 
@@ -332,6 +334,7 @@ mod tests {
             error_message: None,
             duration_seconds: None,
             tools_invoked: vec![],
+            usecase: "data_analysis".to_string(),
             created_at_epoch: 1774000000,
             completed_at_epoch: None,
         };
@@ -343,10 +346,12 @@ mod tests {
         let fetched = store.get_action_audit_by_id(audit_id).await.unwrap().unwrap();
         assert_eq!(fetched.message_id, "MSG_AUDIT_101");
         assert_eq!(fetched.status, "in_progress");
+        assert_eq!(fetched.usecase, "data_analysis");
 
         // Fetch by message_id
         let fetched_by_msg = store.get_action_audit_by_message_id("MSG_AUDIT_101").await.unwrap().unwrap();
         assert_eq!(fetched_by_msg.id, audit_id);
+        assert_eq!(fetched_by_msg.usecase, "data_analysis");
 
         // Update result
         store.update_action_audit_result(
@@ -357,6 +362,7 @@ mod tests {
             "success",
             Some(2.45),
             &["run_command".to_string(), "view_file".to_string()],
+            Some("data_analysis"),
         ).await.unwrap();
 
         let updated = store.get_action_audit_by_id(audit_id).await.unwrap().unwrap();
@@ -364,10 +370,13 @@ mod tests {
         assert_eq!(updated.conversation_id.as_deref(), Some("conv-uuid-12345"));
         assert_eq!(updated.duration_seconds, Some(2.45));
         assert_eq!(updated.tools_invoked, vec!["run_command".to_string(), "view_file".to_string()]);
+        assert_eq!(updated.usecase, "data_analysis");
 
-        // Query filter by status
+        // Query filter by status, usecase, and tool
         let filter = crate::core::domain::ActionAuditFilter {
             status: Some("success".to_string()),
+            usecase: Some("data_analysis".to_string()),
+            tool: Some("run_command".to_string()),
             ..Default::default()
         };
         let query_res = store.query_action_audits(&filter).await.unwrap();
@@ -381,6 +390,10 @@ mod tests {
         assert!((summary.avg_duration_seconds - 2.45).abs() < 0.01);
         assert_eq!(summary.most_active_chats.len(), 1);
         assert_eq!(summary.top_tools_used.len(), 2);
+        assert_eq!(summary.top_usecases.len(), 1);
+        assert_eq!(summary.top_usecases[0].key, "data_analysis");
+        assert_eq!(summary.top_usecases[0].count, 1);
+        assert_eq!(summary.tool_call_frequency.len(), 2);
 
         // Clean up
         let _ = std::fs::remove_dir_all(&dir);
