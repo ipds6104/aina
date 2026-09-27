@@ -214,7 +214,21 @@ aina workspace gh-create knowledge-base-tim
 
 ---
 
+> [!TIP]
+> ### 💡 Pemula / Ingin Versi Paling Minimal Dulu? (Setup ~3 Menit)
+> Aina dirancang dengan prinsip **Modular Graceful Degradation**. Anda **TIDAK DIWAJIBKAN** memasang Infisical, GitHub CLI (`gh`), atau sesi Companion untuk mulai menggunakan Aina.
+> 
+> * **Setup Paling Minimal (Hanya 4 Variabel Inti di Coolify / Docker)**:
+>   1. `WHATSMEOW_BASE_URL` & `WHATSMEOW_API_KEY` (Koneksi ke gateway WhatsApp Whatsmeow)
+>   2. `WHATSMEOW_BOT_JID` (Nomor WhatsApp bot Anda, misal: `62812xxxxxxxx@s.whatsapp.net`)
+>   3. `AINA_OAUTH_TOKEN` (Token Google Antigravity PKCE gratis dari `/setup` atau laptop)
+> * **Seluruh Fitur Lanjutan 100% Opsional**:
+>   - **Tanpa Infisical?** $\rightarrow$ Aina tetap berjalan lancar dengan skill bawaan (`tabayyun`, `ahludz-dzikri`, `whatsmeow`).
+>   - **Tanpa GitHub CLI (`gh`)?** $\rightarrow$ Aina tetap bisa merespons chat, mengeksekusi kode Python/Bash, dan menganalisis data.
+>   - **Tanpa WhatsApp sama sekali?** $\rightarrow$ Jalankan Aina secara lokal (`cargo run`) dan langsung coba berbicara lewat antarmuka grafis **Web Simulator** di browser Anda (`http://localhost:8090/simulator`)!
+
 ### Langkah 2: Deploy & Jalankan Aina
+
 
 #### Opsi 1: Deploy di Coolify (Paling Direkomendasikan untuk Produksi)
 
