@@ -1,0 +1,16 @@
+{
+  "entries": [
+    {
+      "path": "skills"
+    },
+    {
+      "path": "data/custom-skills"
+    },
+    {
+      "path": "/app/skills"
+    },
+    {
+      "path": "/app/data/custom-skills"
+    }
+  ]
+}

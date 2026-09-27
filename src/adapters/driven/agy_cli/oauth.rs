@@ -64,6 +64,112 @@ pub fn sanitize_oauth_code(raw: &str) -> String {
     s.trim().to_string()
 }
 
+/// Spawns python oauth_helper.py to generate PKCE challenge and authorization URL.
+pub async fn init_oauth_session() -> anyhow::Result<(String, String)> {
+    let session_id = format!(
+        "{}_{:08x}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0),
+        rand::random::<u32>()
+    );
+    let base_dir = get_oauth_session_dir(&session_id);
+    let _ = tokio::fs::create_dir_all(&base_dir).await;
+
+    let script_candidates = [
+        PathBuf::from("scripts/oauth_helper.py"),
+        PathBuf::from("/root/projects/aina/scripts/oauth_helper.py"),
+        PathBuf::from("/app/scripts/oauth_helper.py"),
+    ];
+    let script_path = script_candidates
+        .into_iter()
+        .find(|p| p.exists())
+        .unwrap_or_else(|| PathBuf::from("scripts/oauth_helper.py"));
+
+    let mut cmd = tokio::process::Command::new("python3");
+    cmd.arg(&script_path)
+        .arg("init")
+        .arg(&session_id);
+
+    let output = match tokio::time::timeout(std::time::Duration::from_secs(10), cmd.output()).await {
+        Ok(res) => res?,
+        Err(_) => {
+            let _ = tokio::fs::remove_dir_all(&base_dir).await;
+            anyhow::bail!("Timeout saat menginisialisasi sesi OAuth (10 detik).");
+        }
+    };
+
+    let url_file = base_dir.join("auth_url.txt");
+    if output.status.success() && tokio::fs::try_exists(&url_file).await.unwrap_or(false) {
+        let auth_url = tokio::fs::read_to_string(&url_file).await?;
+        return Ok((session_id, auth_url.trim().to_string()));
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let _ = tokio::fs::remove_dir_all(&base_dir).await;
+    anyhow::bail!("Gagal menginisialisasi sesi login OAuth: {}", stderr);
+}
+
+/// Exchanges authorization code for credentials using oauth_helper.py.
+pub async fn exchange_oauth_code(session_id: &str, code: &str) -> anyhow::Result<String> {
+    let base_dir = get_oauth_session_dir(session_id);
+    let verifier_file = base_dir.join("code_verifier.txt");
+    if !tokio::fs::try_exists(&verifier_file).await.unwrap_or(false) {
+        anyhow::bail!(
+            "Sesi login tidak valid atau sudah kedaluwarsa. Silakan klik tombol 'Mulai Login Baru'."
+        );
+    }
+
+    let clean_code = sanitize_oauth_code(code);
+
+    let script_candidates = [
+        PathBuf::from("scripts/oauth_helper.py"),
+        PathBuf::from("/root/projects/aina/scripts/oauth_helper.py"),
+        PathBuf::from("/app/scripts/oauth_helper.py"),
+    ];
+    let script_path = script_candidates
+        .into_iter()
+        .find(|p| p.exists())
+        .unwrap_or_else(|| PathBuf::from("scripts/oauth_helper.py"));
+
+    // Direct sub-second PKCE token exchange
+    let mut cmd = tokio::process::Command::new("python3");
+    cmd.arg(&script_path)
+        .arg("exchange")
+        .arg(session_id)
+        .arg(&clean_code);
+
+    let output = match tokio::time::timeout(std::time::Duration::from_secs(15), cmd.output()).await {
+        Ok(res) => res?,
+        Err(_) => {
+            let _ = tokio::fs::remove_dir_all(&base_dir).await;
+            anyhow::bail!("Timeout saat menukar kode otorisasi ke Google (15 detik). Silakan coba lagi.");
+        }
+    };
+    let token_file = base_dir.join("token.json");
+    let error_file = base_dir.join("error.txt");
+
+    if output.status.success() && tokio::fs::try_exists(&token_file).await.unwrap_or(false) {
+        let token_content = tokio::fs::read_to_string(&token_file).await?;
+        let _ = tokio::fs::remove_dir_all(&base_dir).await;
+        return Ok(token_content);
+    }
+
+    let err = if let Ok(err_str) = tokio::fs::read_to_string(&error_file).await {
+        err_str
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        if stderr.is_empty() {
+            "Verifikasi kode otorisasi gagal atau ditolak oleh Google.".to_string()
+        } else {
+            stderr
+        }
+    };
+    let _ = tokio::fs::remove_dir_all(&base_dir).await;
+    anyhow::bail!("{}", err.trim());
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -40,15 +40,53 @@ elif [ -n "$AINA_OAUTH_TOKEN_1" ]; then
     chmod 600 /root/.gemini/antigravity-cli/antigravity-oauth-token
 fi
 
-# Ensure workspace, data directories, and skills exist
+# Ensure workspace, data directories, custom skills, and Antigravity config exist
 mkdir -p "${AGENT_WORKSPACE:-/app/workspaces/default}/.agents/skills"
 mkdir -p "${AGENT_WORKSPACE:-/app/workspaces/default}/knowledge"
 mkdir -p "${AGENT_WORKSPACE:-/app/workspaces/default}/scripts"
 mkdir -p "$(dirname "${DATABASE_PATH:-/app/data/aina.db}")"
-mkdir -p /app/data/assets /app/assets
+mkdir -p /app/data/assets /app/assets /app/data/custom-skills
 mkdir -p /root/.gemini/config/skills
 
-# Mount/Sync skills from image to global config and workspace
+# Setup default Git author identity and authentication if GH_TOKEN is present
+git config --global user.name "${GIT_AUTHOR_NAME:-Aina}" 2>/dev/null || true
+git config --global user.email "${GIT_AUTHOR_EMAIL:-aina@dvlpid.my.id}" 2>/dev/null || true
+
+# If GH_TOKEN is not in environment, attempt to retrieve from Infisical vault
+if [ -z "$GH_TOKEN" ] && [ -x "/usr/local/bin/infisical" ]; then
+    GH_TOKEN=$(/usr/local/bin/infisical secrets get GH_TOKEN --projectId "${INFISICAL_PROJECT_ID:-f13379e0-9661-4f8e-81ef-0e81d1502da1}" --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
+fi
+
+if [ -n "$GH_TOKEN" ]; then
+    export GITHUB_TOKEN="$GH_TOKEN"
+    git config --global url."https://${GH_TOKEN}@github.com/".insteadOf "https://github.com/" 2>/dev/null || true
+fi
+gh auth setup-git 2>/dev/null || true
+
+
+# Sync user custom skills from dedicated Git repository if configured
+if [ -n "$USER_SKILLS_REPO" ]; then
+    echo "Syncing user custom skills from $USER_SKILLS_REPO..."
+    if [ ! -d "/app/data/custom-skills/.git" ]; then
+        git clone "$USER_SKILLS_REPO" /app/data/custom-skills 2>/dev/null || true
+    else
+        (cd /app/data/custom-skills && git pull --rebase) 2>/dev/null || true
+    fi
+fi
+
+# Multi-entry skills.json discovery bridge for Antigravity CLI
+cat << 'EOF' > "${AGENT_WORKSPACE:-/app/workspaces/default}/.agents/skills.json"
+{
+  "entries": [
+    { "path": "/app/skills" },
+    { "path": "/app/data/custom-skills" },
+    { "path": "skills" },
+    { "path": "data/custom-skills" }
+  ]
+}
+EOF
+
+# Mount/Sync built-in skills from image to global config and workspace
 if [ -d "/app/skills" ]; then
     cp -r /app/skills/* /root/.gemini/config/skills/ 2>/dev/null || true
     cp -r /app/skills/* "${AGENT_WORKSPACE:-/app/workspaces/default}/.agents/skills/" 2>/dev/null || true
@@ -61,7 +99,32 @@ if [ -d "/app/skills" ]; then
     ln -sf /app/skills/gdrive/scripts/gdrive_tool.py /usr/local/bin/gdrive_tool 2>/dev/null || true
     ln -sf /app/skills/vision-document-extractor/scripts/doc_extract.py /usr/local/bin/agy-doc-extract 2>/dev/null || true
     ln -sf /app/skills/vision-document-extractor/scripts/doc_extract.py /usr/local/bin/doc_extract 2>/dev/null || true
+    ln -sf /app/skills/infisical/scripts/secret_tool.py /usr/local/bin/secret_tool 2>/dev/null || true
 fi
+
+# Sync user custom skills into workspace discovery directory
+if [ -d "/app/data/custom-skills" ]; then
+    for skill_dir in /app/data/custom-skills/*; do
+        if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
+            skill_name=$(basename "$skill_dir")
+            cp -r "$skill_dir" "${AGENT_WORKSPACE:-/app/workspaces/default}/.agents/skills/$skill_name" 2>/dev/null || true
+            chmod -R +x "${AGENT_WORKSPACE:-/app/workspaces/default}/.agents/skills/$skill_name/scripts" 2>/dev/null || true
+        fi
+    done
+fi
+
+# Optional Infisical machine identity auto-authentication
+if [ -n "$INFISICAL_CLIENT_ID" ] && [ -n "$INFISICAL_CLIENT_SECRET" ] && [ -x "/usr/local/bin/infisical" ]; then
+    echo "Authenticating Infisical CLI with machine identity..."
+    mkdir -p /root/.infisical
+    /usr/local/bin/infisical login --domain "${INFISICAL_DOMAIN:-https://secrets.dvlpid.my.id/api}" \
+        --method=universal-auth \
+        --client-id="$INFISICAL_CLIENT_ID" \
+        --client-secret="$INFISICAL_CLIENT_SECRET" \
+        --plain > /root/.infisical/cached_token 2>/dev/null || true
+    chmod 600 /root/.infisical/cached_token 2>/dev/null || true
+fi
+
 
 
 # Optional Google OAuth client secrets or token from environment variable

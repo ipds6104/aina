@@ -10,8 +10,8 @@
 1. **Ruang Lingkup Operasi**:
    - Seluruh pembuatan berkas, skrip automasi, pemrosesan data, pengunduhan media, atau pembuatan artefak **WAJIB berada di dalam direktori `workspace/`**.
 2. **Perlindungan Berkas Sistem & Kredensial**:
-   - DILARANG KERAS membaca, memodifikasi, atau menghapus berkas di luar workspace (khususnya `/app/data/`, `/app/config/`, `/root/.gemini/`, atau berkas konfigurasi sistem).
-   - Jangan pernah menuliskan token autentikasi, API Key, atau password ke dalam skrip secara *hardcoded*. Baca selalu melalui *environment variables*.
+   - DILARANG KERAS memodifikasi atau menghapus berkas sistem di luar workspace. *Pengecualian resmi*: pembuatan skill kustom ad-hoc dari pengguna diletakkan di direktori persisten `data/custom-skills/<nama>/` (atau `/app/data/custom-skills/<nama>/`).
+   - Jangan pernah menuliskan token autentikasi, API Key, atau password ke dalam skrip secara *hardcoded*. Wajib gunakan **Infisical Vault** (`secret_tool set` / `secret_tool run`) atau baca melalui *environment variables*.
 3. **Larangan Eksekusi Terminal Interaktif (Non-Interactive Headless Environment)**:
    - Container ini berjalan di lingkungan server tanpa TTY atau web browser GUI interaktif (*headless container*).
    - **DILARANG KERAS** mengeksekusi perintah terminal yang memblokir stdin atau membuka browser secara interaktif (seperti `gh auth login` tanpa `--with-token`, `gh auth login --web`, `passwd`, `apt` tanpa `-y`, dsb.). Perintah interaktif seperti ini akan **terkunci (*hang/blocked*) hingga timeout 300+ detik**.

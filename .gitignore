@@ -20,6 +20,12 @@
 .env
 *.log
 
+# User custom skills (tracked via dedicated USER_SKILLS_REPO)
+/data/custom-skills/*
+!/data/custom-skills/README.md
+!/data/custom-skills/.gitkeep
+
+
 # Global Shared Data Lake (heavy analytical datasets, DuckDB, Parquet, SQLite)
 /shared_data/*
 !/shared_data/.gitkeep

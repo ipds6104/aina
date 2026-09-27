@@ -154,6 +154,26 @@ impl AgentCapabilityManifest {
             },
         );
 
+        // 6. secret_tool.py (Infisical Vault)
+        tools.insert(
+            "secret_tool.py".to_string(),
+            ToolContract {
+                name: "secret_tool.py".to_string(),
+                description: "Pengelolaan brankas kredensial & secret terpusat (Infisical) dengan proteksi zero-leakage".to_string(),
+                capability_tags: vec!["secrets".to_string(), "infisical".to_string(), "vault".to_string(), "security".to_string()],
+                resource_intensity: "light".to_string(),
+                timeout_seconds: 20,
+                supports_multimodal: false,
+                common_failure_modes: vec![
+                    "Token expired jika kredensial universal-auth tidak disetel".to_string(),
+                ],
+                forbidden_patterns: vec![
+                    "DILARANG menampilkan token rahasia mentah ke teks balasan chat WhatsApp".to_string(),
+                    "DILARANG menulis hardcoded API key ke dalam file skrip atau commit Git".to_string(),
+                ],
+            },
+        );
+
         Self {
             version: "2.1.0".to_string(),
             model_profile: ModelProfile {
@@ -191,6 +211,7 @@ impl AgentCapabilityManifest {
                 "software_engineering_rust_python_ts".to_string(),
                 "whatsapp_communication_and_stories".to_string(),
                 "document_and_table_extraction".to_string(),
+                "centralized_secrets_and_vault".to_string(),
                 "autonomous_persona_and_wardrobe_rhythm".to_string(),
                 "git_and_codebase_observability".to_string(),
             ],

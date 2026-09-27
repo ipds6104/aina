@@ -45,5 +45,9 @@
   - **Konversi CSV**: Bila pengguna minta tabel diubah ke file CSV/Excel, tambahkan `--csv`, lalu kirimkan file `output/doc_extract/*.csv` ke pengguna via `python3 skills/whatsmeow/scripts/wa_tool.py send-media`.
   - Setelah ekstraksi selesai, baca file `output/doc_extract/extracted_content.md` untuk menjawab pengguna.
 
-
-
+## 6. Tata Kelola Secret (Infisical Vault) & Custom Skills
+- **Skill Terkait**: `skills/infisical`
+- **Tool Resmi**: `python3 skills/infisical/scripts/secret_tool.py` (atau `secret_tool <cmd>`)
+- **Penyimpanan Token Baru**: Bila pengguna membagikan API key/token di chat, simpan via `secret_tool set <KEY> "<VALUE>"`. DILARANG mengulang string token mentah di balasan WhatsApp.
+- **Injeksi Secret Just-in-Time**: Jalankan skrip yang membutuhkan secret via `secret_tool run -- python3 ...`.
+- **Pembuatan Custom Skill**: Simpan skill kustom baru di `data/custom-skills/<nama>/` lengkap dengan `SKILL.md` dan `scripts/`. Tawarkan backup ke repo GitHub privat (`USER_SKILLS_REPO`) via `gh` CLI setelah berhasil diuji.

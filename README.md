@@ -36,6 +36,7 @@ Aina dirancang bukan sebagai bot CS yang kaku, melainkan sebagai **rekan kerja t
 - [👥 Profiling Memory & Manajemen Rekan Kerja (`aina user`)](#-profiling-memory--manajemen-rekan-kerja-aina-user)
 - [🤖 Manajemen Model AI (Gemini-First Priority & Native CLI)](#-manajemen-model-ai-gemini-first-priority--native-cli)
 - [📁 Agnostic Workspaces & Structured Knowledge Base](#-agnostic-workspaces--structured-knowledge-base)
+- [🧩 Arsitektur Skill Discovery & Tata Kelola Rahasia Terpusat (Two-Tier Skills & Infisical Vault)](#-arsitektur-skill-discovery--tata-kelola-rahasia-terpusat)
 - [⚡ Unified Native Rust CLI (`aina`)](#-unified-native-rust-cli-aina)
 - [🧹 Linter Kerapian & Closed-Loop Auto-Healing (`kb_linter.py`)](#-linter-kerapian--closed-loop-auto-healing-kb_linterpy)
 - [🛡️ Audit Trail CLI Antigravity (`audit_agent.py`)](#️-audit-trail-cli-antigravity-audit_agentpy)
@@ -482,6 +483,80 @@ workspaces/<nama_workspace>/
     ├── model_control.py         # Utilitas kontrol model
     └── workspace_manager.py     # Utilitas manajemen workspace, kegiatan, & grooming
 ```
+
+---
+
+## 🧩 Arsitektur Skill Discovery & Tata Kelola Rahasia Terpusat
+
+Aina memadukan mesin agentik **Google Antigravity CLI (`agy`)** dengan standar modern **Skill Retrieval Augmentation (SRA)** dan **Two-Tier Skill Architecture** per September 2026. Arsitektur ini memisahkan secara tegas antara kapabilitas inti platform (*Core Built-in Skills*) dengan prosedur kustom yang diminta pengguna saat runtime (*User Custom Skills*).
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                          DOCKER CONTAINER (Aina Runtime)                        │
+│                                                                                 │
+│  [Tier 1: Core Built-in Skills] (Read-Only di Container Image)                  │
+│  /app/skills/                                                                   │
+│  ├── ahludz-dzikri/            -> Verifikasi otoritatif & anti-halusinasi       │
+│  ├── tabayyun/                 -> OpSec & verifikasi kredibilitas klaim         │
+│  ├── whatsmeow/                -> Interaksi gateway pesan WhatsApp              │
+│  ├── gdrive/                   -> Otomasi Google Drive & Google Sheets v4       │
+│  ├── vision-document-extractor -> OCR tabel berpresisi tinggi via VLM           │
+│  └── infisical/                -> Brankas kredensial & secret terpusat (Vault)  │
+│                                                                                 │
+│  [Tier 2: User Custom Skills] (Persisten di Volume aina_data)                   │
+│  /app/data/custom-skills/                                                       │
+│  ├── [custom-user-skill-1]/    -> Skill ad-hoc buatan Aina saat runtime         │
+│  └── [custom-user-skill-2]/    -> Dilengkapi runbook SKILL.md & scripts/        │
+│                                                                                 │
+│  [AGY Discovery Bridge]                                                         │
+│  workspaces/default/.agents/skills.json                                         │
+│  └── Multi-entry scan: /app/skills & /app/data/custom-skills                    │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                         │
+                                         ▼ (Backup Portabilitas Eksternal)
+                        ┌─────────────────────────────────┐
+                        │   Private GitHub Repository     │
+                        │    USER_SKILLS_REPO (Plug&Play) │
+                        └─────────────────────────────────┘
+```
+
+### 1. Hierarki & Ruang Penemuan Skill (Skill Discovery Spaces)
+Antigravity CLI menemukan kemampuan Aina secara terstruktur melalui konfigurasi deklaratif `skills.json` di dalam `.agents/`:
+* **Core Built-in Skills (`/app/skills/`)**: Kumpulan skill permanen yang terikat pada image Aina. Selalu tersedia seketika tanpa konfigurasi tambahan.
+* **User Custom Skills (`/app/data/custom-skills/`)**: Kumpulan prosedur dan integrasi khusus yang dibuat oleh Aina atas instruksi langsung dari pengguna di WhatsApp (misal integrasi Tally.so, Notion, dsb.). Disimpan di dalam volume persisten `aina_data`, sehingga **tidak pernah terhapus saat kontainer di-rebuild atau di-redeploy di Coolify**.
+* **Progressive Disclosure**: AGY CLI hanya membaca YAML frontmatter (`name` dan `description`) dari file `SKILL.md` ke dalam *system prompt* awal. Instruksi langkah-demi-langkah dan skrip pembantu hanya dimuat via `view_file` jika LLM secara sadar memutuskan mengaktifkannya, menghemat **80–85% token context**.
+
+### 2. Built-in Skill: Tata Kelola Rahasia Terpusat (`skills/infisical`)
+Untuk mencegah kebocoran kredensial (API key, database password, webhook token) ke riwayat obrolan atau commit Git, Aina dilengkapi dengan skill bawaan **Infisical Centralized Vault**:
+* **Zero-Knowledge Decoupling**: Aina **TIDAK PERNAH** menghafal string token mentah di memori obrolan atau menulisnya ke `.env` lokal. Aina hanya mengingat *Key Reference* (misal `TALLY_API_KEY`).
+* **Otomasi CLI Helper (`secret_tool.py`)**:
+  ```bash
+  # Menyimpan token baru yang diberikan pengguna di WhatsApp
+  secret_tool set TALLY_API_KEY "tly-s9ydMSo2wTdxA1LxX3zQVOPZIAIo8cBp"
+
+  # Memeriksa status koneksi vault
+  secret_tool status
+
+  # Mengambil nilai mentah secara aman
+  secret_tool get TALLY_API_KEY --plain
+
+  # Menjalankan skrip dengan injeksi secret Just-in-Time (JIT)
+  secret_tool run -- python3 scripts/my_automation.py
+  ```
+* **Aturan Mutlak OpSec**: Saat mengonfirmasi ke pengguna di WhatsApp, Aina hanya menyebutkan nama kuncinya (misal: *"Token berhasil diamankan dengan kunci `TALLY_API_KEY`"*), tanpa pernah menampilkan kembali nilai rahasianya ke layar chat.
+
+### 3. Portabilitas Lintas Lingkungan (Plug-and-Play via Dedicated Git)
+Agar skill kustom yang dibuat pengguna dapat dipindahkan saat Aina berganti server (migrasi VPS, disaster recovery, atau beralih ke lingkungan lokal):
+1. **Pemisahan Repositori**: Repositori inti `aina` tetap bersih dan terisolasi dari skrip eksperimental pengguna.
+2. **Pencadangan Otomatis**: Aina dapat menawarkan untuk mencadangkan folder `/app/data/custom-skills` ke repositori privat terpisah pengguna (misal: `https://github.com/username/aina-custom-skills`) via `gh` CLI.
+3. **Auto-Restore di Coolify / Docker Baru**:
+   Cukup pasang variabel lingkungan `USER_SKILLS_REPO` di dashboard Coolify:
+   ```ini
+   USER_SKILLS_REPO=https://github.com/username/aina-custom-skills.git
+   ```
+   Entrypoint Aina (`docker-entrypoint.sh`) akan secara otomatis meng-clone dan me-mount seluruh skill kustom tersebut ke dalam ruang discovery saat kontainer pertama kali menyala!
+
+---
 
 ## ⚡ Unified Native Rust CLI (`aina`)
 
