@@ -38,16 +38,16 @@ python3 /app/workspace/.agents/skills/whatsmeow/scripts/wa_tool.py <subcommand> 
 
 ## 3. Standard Operating Procedures (SOP)
 
-### SOP 1: Sending Direct WhatsApp Text Messages & Self-Test
-When an authorized user asks to send a WhatsApp message, or test sending a message to themselves or another contact/group:
+### SOP 1: Sending Direct WhatsApp Text Messages (Proactive / Other Recipients Only)
+> ⚠️ **ATURAN MUTLAK ANTI-DOUBLE SEND**:
+> - **DILARANG** menggunakan `send-text` untuk membalas percakapan aktif yang sedang berlangsung saat ini! Cukup tuliskan teks jawabanmu secara langsung di output akhir. Backend Aina akan otomatis mengirimkannya ke WhatsApp.
+> - `send-text` **HANYA** digunakan jika user secara eksplisit memintamu mengirimkan pesan proaktif ke kontak/nomor LAIN atau grup LAIN di luar ruang obrolan saat ini.
+
+When an authorized user asks to send a proactive WhatsApp message to another contact/group:
 1. Identify the target recipient JID (e.g. `$WHATSMEOW_BOT_JID` or specific phone number JID `628xxx@s.whatsapp.net` or group `120363xxx@g.us`).
-2. Send the message immediately via `send-text`:
+2. Send the message via `send-text`:
    ```bash
-   python3 .agents/skills/whatsmeow/scripts/wa_tool.py send-text --to "<RECIPIENT_JID>" --text "<PESAN>"
-   ```
-   *Contoh tes kirim ke diri sendiri:*
-   ```bash
-   python3 .agents/skills/whatsmeow/scripts/wa_tool.py send-text --to "${WHATSMEOW_BOT_JID:-6289625345646@s.whatsapp.net}" --text "Halo! Ini pesan tes verifikasi dari Aina di WhatsApp."
+   python3 skills/whatsmeow/scripts/wa_tool.py send-text --to "<RECIPIENT_JID>" --text "<PESAN>"
    ```
 3. Konfirmasikan bahwa output JSON mengembalikan `"status": "sent"` dan sertakan ID pesan ke user.
 
@@ -102,7 +102,25 @@ When an authorized user requests a chat backup or comprehensive audit log:
 2. Verify that the file was created in `workspace/`.
 3. Inform the user that the backup has been compiled, provide summary metrics (total messages, date range), and offer to deliver or analyze the file.
 
-### SOP 5: Inspecting Group Participants & Authority
+### SOP 5: Dual-Gateway Operations & Companion Account Queries
+Sistem Aina mendukung arsitektur Dual-Gateway (Gateway Bot Utama & Gateway Akun Pribadi Companion Admin).
+Gunakan flag `--companion` ketika diminta mengakses informasi atau obrolan grup dari akun pribadi Companion Admin (misal untuk grup kerja yang akun bot Aina belum dimasukkan ke dalamnya):
+1. **Melihat daftar grup yang diikuti akun Companion**:
+   ```bash
+   python3 skills/whatsmeow/scripts/wa_tool.py groups --companion
+   ```
+2. **Membaca riwayat obrolan grup pada akun Companion**:
+   ```bash
+   python3 skills/whatsmeow/scripts/wa_tool.py recent --companion --jid "<GROUP_JID>" --limit 30
+   ```
+3. **Mencari pesan atau kata kunci tertentu di grup Companion**:
+   ```bash
+   python3 skills/whatsmeow/scripts/wa_tool.py search --companion --jid "<GROUP_JID>" --query "kata kunci" --limit 50
+   ```
+> ⚠️ **Catatan Privasi Mutlak**:
+> Dilarang membaca, mengekspor, atau menyebarluaskan riwayat obrolan pribadi (1-on-1 DM) antara pemilik akun Companion dengan kontak lain. Akses hanya untuk grup koordinasi pekerjaan.
+
+### SOP 6: Inspecting Group Participants & Authority
 To verify if someone claiming to be an admin really has admin privileges in a WhatsApp group:
 1. Run:
    ```bash
@@ -129,6 +147,84 @@ To inspect bot connection uptime or check how much daily message quota remains:
    python3 .agents/skills/whatsmeow/scripts/wa_tool.py stats
    ```
 2. Output menampilkan status koneksi device (`is_connected`, `uptime`) dan kuota anti-ban (`daily_count` vs `daily_cap`). Jika kuota mendekati batas harian (misal >280/300), hemat pengiriman pesan baru.
+
+### SOP 8: Inspecting & Updating Profile Picture
+To view or update the WhatsApp profile picture (avatar) for the bot itself or a group:
+1. **View Profile Picture**:
+   ```bash
+   # Bot profile picture (full resolution)
+   python3 skills/whatsmeow/scripts/wa_tool.py profile-picture-get
+
+   # Target user or group profile picture
+   python3 skills/whatsmeow/scripts/wa_tool.py profile-picture-get --jid "628xxx@s.whatsapp.net"
+   ```
+2. **Update Profile Picture**:
+   ```bash
+   # Update bot's own avatar
+   python3 skills/whatsmeow/scripts/wa_tool.py profile-picture-set --file "/path/to/avatar.jpg"
+
+   # Update group icon (bot must be admin)
+   python3 skills/whatsmeow/scripts/wa_tool.py profile-picture-set --file "/path/to/icon.jpg" --jid "120363xxx@g.us"
+   ```
+3. **Remove Profile Picture**:
+   ```bash
+   python3 skills/whatsmeow/scripts/wa_tool.py profile-picture-remove
+   ```
+
+### SOP 9: Updating WhatsApp About / Bio Status
+To update the bot's permanent "About" status text (e.g. "Available", "Aina AI Assistant", etc.):
+```bash
+python3 skills/whatsmeow/scripts/wa_tool.py about-set --status "Aina AI Assistant • Ready to help"
+```
+
+### SOP 10: Posting & Revoking 24-Hour Ephemeral Status Stories
+WhatsApp supports ephemeral 24-hour stories broadcasted to status contacts (`status@broadcast`):
+1. **Post Text Status Story**:
+   ```bash
+   python3 skills/whatsmeow/scripts/wa_tool.py status-send-text \
+     --text "Halo semuanya! Aina versi 2.0 kini aktif 🚀" \
+     --background "0xFF25D366" \
+     --font 2
+   ```
+2. **Post Media Status Story (Image / Video)**:
+   ```bash
+   python3 skills/whatsmeow/scripts/wa_tool.py status-send-media \
+     --file "/path/to/announcement.png" \
+     --caption "Pengumuman pemeliharaan sistem selesai."
+   ```
+3. **List Posted Status Stories**:
+   ```bash
+   # Tampilkan riwayat status story yang pernah diposting bot
+   python3 skills/whatsmeow/scripts/wa_tool.py status-list
+
+   # Hanya tampilkan status story yang masih aktif (< 24 jam)
+   python3 skills/whatsmeow/scripts/wa_tool.py status-list --active-only
+
+   # Tampilkan status story dari kontak lain
+   python3 skills/whatsmeow/scripts/wa_tool.py status-list --contacts
+   ```
+4. **Revoke / Delete Status Story or Sent Message**:
+   > ⚠️ **Catatan Protokol WhatsApp**: Story yang sudah tayang tidak bisa diedit secara in-place. Cara resmi memperbarui status story adalah dengan me-revoke status lama lalu memposting status baru.
+   ```bash
+   # Hapus status story tertentu
+   python3 skills/whatsmeow/scripts/wa_tool.py status-revoke --id "3EB0XXXXX"
+
+   # Atau revoke pesan biasa untuk semua orang (delete for everyone)
+   python3 skills/whatsmeow/scripts/wa_tool.py revoke --id "3EB0XXXXX" --chat-jid "628xxx@s.whatsapp.net"
+   ```
+
+### SOP 7: Conversational Closure & WhatsApp Emoji Reactions
+Untuk pesan penutup obrolan yang santun (seperti ucapan terima kasih *"Sama-sama kak"*, *"Makasih infonya"*, atau konfirmasi *"Siap kak"*, *"Noted"*):
+- **Hindari balasan teks panjang (wall of text)** yang mengintimidasi atau membebani lawan bicara dengan kewajiban membalas lagi.
+- Berikan reaksi emoji WhatsApp (Reaction):
+  ```bash
+  # Kirim reaksi tanda terima kasih / santun (Folded hands)
+  python3 skills/whatsmeow/scripts/wa_tool.py reaction --to "<CHAT_JID>" --id "<MSG_ID>" --emoji "🙏"
+
+  # Kirim reaksi konfirmasi / siap (Thumbs up)
+  python3 skills/whatsmeow/scripts/wa_tool.py reaction --to "<CHAT_JID>" --id "<MSG_ID>" --emoji "👍"
+  ```
+- *Catatan*: Gateway backend Aina secara cerdas mendeteksi pesan penutup singkat ini dan langsung memberikan reaksi emoji tanpa memanggil LLM (menghemat kuota dan mematuhi etika percakapan alami).
 
 ---
 
