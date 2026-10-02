@@ -82,7 +82,12 @@ ENV AGENT_WORKSPACE=/app/workspaces/default
 ENV DATABASE_PATH=/app/data/aina.db
 ENV AGENT_PERSONA_FILE=/app/config/persona.md
 ENV AGENT_ORGANIZATION_FILE=/app/config/organization.md
-ENV PATH="/app/scripts:/root/.local/bin:/usr/local/bin:${PATH}"
+ENV PYTHONUSERBASE=/app/data/python-packages
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
+ENV PATH="/app/data/python-packages/bin:/app/scripts:/root/.local/bin:/usr/local/bin:${PATH}"
+
+# Configure global pip defaults to auto-install on-demand packages to persistent storage
+RUN mkdir -p /etc/pip && printf "[global]\nbreak-system-packages = true\nuser = true\n" > /etc/pip.conf
 
 EXPOSE 8090
 

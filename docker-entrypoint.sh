@@ -53,6 +53,13 @@ mkdir -p /app/data/shared_data
 ln -sfn /app/data/shared_data /app/shared_data
 ln -sfn /app/data/shared_data "${AGENT_WORKSPACE:-/app/workspaces/default}/shared_data"
 
+# Ensure persistent Python environment across Coolify redeployments
+export PYTHONUSERBASE="/app/data/python-packages"
+mkdir -p "$PYTHONUSERBASE/bin" "$PYTHONUSERBASE/lib/python3.11/site-packages"
+export PATH="$PYTHONUSERBASE/bin:$PATH"
+export PIP_BREAK_SYSTEM_PACKAGES="1"
+mkdir -p /etc/pip && printf "[global]\nbreak-system-packages = true\nuser = true\n" > /etc/pip.conf
+
 # Setup default Git author identity and authentication if GH_TOKEN is present
 git config --global user.name "${GIT_AUTHOR_NAME:-Aina}" 2>/dev/null || true
 git config --global user.email "${GIT_AUTHOR_EMAIL:-aina@dvlpid.my.id}" 2>/dev/null || true
