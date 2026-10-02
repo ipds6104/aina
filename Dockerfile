@@ -45,6 +45,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*
 
+# Pre-install OLAP analytics engines for Parquet and tabular data
+RUN pip install --no-cache-dir --break-system-packages duckdb pyarrow
+
 
 # Install official Google Antigravity CLI (agy)
 RUN curl -fsSL https://antigravity.google/cli/install.sh | bash && \

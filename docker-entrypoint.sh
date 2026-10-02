@@ -48,6 +48,11 @@ mkdir -p "$(dirname "${DATABASE_PATH:-/app/data/aina.db}")"
 mkdir -p /app/data/assets /app/assets /app/data/custom-skills
 mkdir -p /root/.gemini/config/skills
 
+# Ensure persistent shared_data directory across Coolify redeployments
+mkdir -p /app/data/shared_data
+ln -sfn /app/data/shared_data /app/shared_data
+ln -sfn /app/data/shared_data "${AGENT_WORKSPACE:-/app/workspaces/default}/shared_data"
+
 # Setup default Git author identity and authentication if GH_TOKEN is present
 git config --global user.name "${GIT_AUTHOR_NAME:-Aina}" 2>/dev/null || true
 git config --global user.email "${GIT_AUTHOR_EMAIL:-aina@dvlpid.my.id}" 2>/dev/null || true
