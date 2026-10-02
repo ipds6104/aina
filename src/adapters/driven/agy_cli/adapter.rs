@@ -201,13 +201,22 @@ impl AgentEnginePort for AntigravityCliAdapter {
                 None
             };
 
-            cmd.arg("--json");
-            cmd.arg("--headless");
+            let is_unlimited = self.timeout_duration.is_zero() || self.timeout_duration.as_secs() >= 86400;
+            let print_timeout_str = if is_unlimited {
+                "24h".to_string()
+            } else {
+                let print_timeout_sec = self.timeout_duration.as_secs().saturating_sub(5).max(30);
+                format!("{}s", print_timeout_sec)
+            };
+
+            cmd.arg("-p").arg(prompt);
+            cmd.arg("--output-format").arg("json");
+            cmd.arg("--print-timeout").arg(&print_timeout_str);
+            cmd.arg("--dangerously-skip-permissions");
             cmd.arg("--model").arg(&active_model);
             if let Some(eff) = effort_tier {
                 cmd.arg("--effort").arg(eff);
             }
-            cmd.arg(prompt);
 
             // Injected environment variables for skills & tools
             cmd.env("WHATSMEOW_BASE_URL", &self.whatsmeow_base_url);
@@ -321,7 +330,7 @@ impl AgentEnginePort for AntigravityCliAdapter {
 
             let result = match parsed {
                 Some(p) => {
-                    if p.status == "error" {
+                    if p.status.to_lowercase() == "error" {
                         let err_text = p.error.unwrap_or_else(|| "Unknown error from CLI".to_string());
                         let is_err_quota = is_quota_error(&err_text);
                         let is_err_auth = is_auth_error(&err_text);
