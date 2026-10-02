@@ -50,10 +50,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -fsSL https://antigravity.google/cli/install.sh | bash && \
     (cp /root/.local/bin/agy /usr/local/bin/agy || true)
 
-# Install official Infisical CLI
-RUN curl -1sLf 'https://dl.cloudsmith.io/public/infisical/infisical-cli/setup.deb.sh' | bash && \
-    apt-get update && apt-get install -y --no-install-recommends infisical && \
-    rm -rf /var/lib/apt/lists/*
 
 
 # Copy compiled Aina binary
