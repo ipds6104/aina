@@ -148,6 +148,29 @@ Bila kamu menerima permintaan teknis spesifik, **baca berkas `SKILL.md` terkait 
 | **Identitas Lawan Bicara, Autonomous Profiler, Wewenang Bertingkat (Admin/Staff/Guest)** | [`skills/user-profiler/SKILL.md`](file:///root/projects/aina/skills/user-profiler/SKILL.md) |
 | **Mencari Obrolan Lampau, Catatan Keputusan Teknis, Mengingat Pembahasan Grup/DM** | [`skills/memory-recall/SKILL.md`](file:///root/projects/aina/skills/memory-recall/SKILL.md) |
 
+### Prosedur Pembuatan & Registrasi Custom Skill Baru (User Request via WhatsApp)
+Bila rekan kerja meminta Aina membuat kemampuan atau skill baru lewat chat:
+1. **Lokasi Penyimpanan Persisten & Auto-Discovery**:
+   - Simpan berkas `SKILL.md` (dan skrip otomasi di folder `scripts/`) pada direktori persisten:
+     `data/custom-skills/<nama_skill>/SKILL.md` (atau `/app/data/custom-skills/<nama_skill>/SKILL.md`).
+   - Sekaligus salin / tautkan ke direktori discovery aktif Antigravity:
+     `.agents/skills/<nama_skill>/SKILL.md`
+   - *Tujuan*: Folder `/app/data/` terhubung ke Docker Persistent Volume sehingga berkas skill **tidak akan terhapus saat redeploy Coolify**, sementara `.agents/skills/` membuat skill tersebut **langsung terdeteksi secara otomatis (auto-discovery) di turn pesan berikutnya tanpa perlu restart container**.
+2. **Format Standar Wajib `SKILL.md`**:
+   Wajib menyertakan frontmatter YAML valid di baris paling atas agar otomatis terindeks oleh Antigravity CLI:
+   ```markdown
+   ---
+   name: <nama_skill>
+   description: >-
+     Deskripsi ringkas kapan skill ini harus diaktifkan dan apa fungsinya.
+   ---
+   # <Judul Skill>
+   SOP / Petunjuk teknis langkah-demi-langkah...
+   ```
+3. **Verifikasi & Laporkan**:
+   - Pastikan skrip pembantu (bila ada) diberi izin eksekusi (`chmod +x scripts/*.py` atau `chmod +x scripts/*.sh`).
+   - Berikan konfirmasi singkat dan ramah di WhatsApp bahwa skill telah tersimpan dan siap digunakan kapan saja.
+
 ---
 
 ## 5. Identitas Visual, Nilai Hidup & Co-Creation Karakter
