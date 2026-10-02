@@ -232,11 +232,13 @@ impl ProcessIncomingMessageUseCase {
                     )
                     .await;
 
-                // 4. Retrieve existing conversation ID for this chat
+                // 4. Retrieve active conversation ID (enforcing inactivity window to prevent bloated context & compaction freeze)
+                let session_policy = crate::core::domain::SessionLifecyclePolicy::from_env();
                 let existing_conv_id = self
                     .session_store
-                    .get_conversation_id(&msg.chat_jid)
+                    .get_active_conversation_id(&msg.chat_jid, session_policy.inactivity_timeout_secs)
                     .await?;
+
 
                 let quote_id = match msg.chat_type {
                     ChatType::Group => Some(msg.id.as_str()),
@@ -326,12 +328,15 @@ impl ProcessIncomingMessageUseCase {
                     }
                 };
 
-                // 8. Update conversation mapping
+                // 8. Update conversation mapping or touch activity
                 if existing_conv_id.as_deref() != Some(&agent_res.conversation_id) {
                     self.session_store
                         .save_conversation_id(&msg.chat_jid, &agent_res.conversation_id)
                         .await?;
+                } else {
+                    let _ = self.session_store.touch_conversation_activity(&msg.chat_jid).await;
                 }
+
 
                 // 9. Deliver response (Multi-bubble WhatsApp delivery & companion media sidecar)
                 ResponseDeliverer::deliver_agent_response(

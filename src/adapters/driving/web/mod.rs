@@ -526,7 +526,12 @@ mod tests {
     #[async_trait::async_trait]
     impl crate::core::ports::SessionStorePort for DummySessionStore {
         async fn get_conversation_id(&self, _chat_jid: &str) -> anyhow::Result<Option<String>> { Ok(None) }
+        async fn get_active_conversation_id(&self, _chat_jid: &str, _max_inactivity_secs: u64) -> anyhow::Result<Option<String>> { Ok(None) }
+        async fn touch_conversation_activity(&self, _chat_jid: &str) -> anyhow::Result<()> { Ok(()) }
+        async fn search_message_history(&self, _chat_jid: &str, _sender_jid: Option<&str>, _query: &str, _limit: usize) -> anyhow::Result<Vec<crate::core::ports::ChatMessageRecord>> { Ok(vec![]) }
+        async fn get_recent_messages(&self, _chat_jid: &str, _sender_jid: Option<&str>, _limit: usize) -> anyhow::Result<Vec<crate::core::ports::ChatMessageRecord>> { Ok(vec![]) }
         async fn save_conversation_id(&self, _chat_jid: &str, _conv_uuid: &str) -> anyhow::Result<()> { Ok(()) }
+
         async fn delete_conversation_id(&self, _chat_jid: &str) -> anyhow::Result<()> { Ok(()) }
         async fn record_message(&self, _chat_jid: &str, _sender_jid: &str, _text: &str, _is_from_me: bool) -> anyhow::Result<()> { Ok(()) }
         async fn get_user_profile(&self, _sender_jid: &str) -> anyhow::Result<Option<crate::core::ports::UserProfile>> { Ok(None) }

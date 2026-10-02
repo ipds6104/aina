@@ -31,6 +31,18 @@ pub fn init_schema(conn: &Connection) -> anyhow::Result<()> {
     )?;
 
     conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_msg_history_chat 
+         ON message_history(chat_jid, id DESC)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_msg_history_sender 
+         ON message_history(sender_jid, id DESC)",
+        [],
+    )?;
+
+    conn.execute(
         "CREATE TABLE IF NOT EXISTS user_profiles (
             sender_jid TEXT PRIMARY KEY,
             name TEXT,

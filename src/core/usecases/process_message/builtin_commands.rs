@@ -107,7 +107,11 @@ pub async fn try_handle_builtin_command(
             let mut status_lines = Vec::new();
             for acc in &pool_status {
                 let state_str = if acc.is_cooldown {
-                    format!("⏳ Cooldown (sisa {})", acc.formatted_cooldown())
+                    let reason_str = match &acc.cooldown_reason {
+                        Some(r) => format!(" - _{}_", r),
+                        None => String::new(),
+                    };
+                    format!("⏳ Cooldown (sisa {}){}", acc.formatted_cooldown(), reason_str)
                 } else {
                     "🟢 Aktif & Siap".to_string()
                 };

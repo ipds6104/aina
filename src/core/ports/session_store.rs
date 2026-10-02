@@ -10,10 +10,50 @@ pub struct UserProfile {
     pub notes: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMessageRecord {
+    pub id: i64,
+    pub chat_jid: String,
+    pub sender_jid: String,
+    pub text: String,
+    pub is_from_me: bool,
+    pub created_at: String,
+}
+
 #[async_trait]
 pub trait SessionStorePort: Send + Sync {
-    /// Retrieves the active Antigravity conversation UUID mapped to the given WhatsApp chat JID.
+    /// Retrieves the active Antigravity conversation UUID mapped to the given WhatsApp chat JID (unconditionally).
     async fn get_conversation_id(&self, chat_jid: &str) -> anyhow::Result<Option<String>>;
+
+    /// Retrieves the active Antigravity conversation UUID mapped to the given WhatsApp chat JID,
+    /// returning None if the conversation has expired due to inactivity exceeding max_inactivity_secs.
+    async fn get_active_conversation_id(
+        &self,
+        chat_jid: &str,
+        max_inactivity_secs: u64,
+    ) -> anyhow::Result<Option<String>>;
+
+    /// Refreshes the last activity timestamp for the active conversation of a chat.
+    async fn touch_conversation_activity(&self, chat_jid: &str) -> anyhow::Result<()>;
+
+    /// Searches past message history for a chat matching query keywords.
+    /// If sender_jid is provided (e.g. in DM), expands search scope across conversations the sender has access to.
+    async fn search_message_history(
+        &self,
+        chat_jid: &str,
+        sender_jid: Option<&str>,
+        query: &str,
+        limit: usize,
+    ) -> anyhow::Result<Vec<ChatMessageRecord>>;
+
+    /// Retrieves recent messages for a chat.
+    /// If sender_jid is provided (e.g. in DM), expands retrieval scope across conversations the sender has access to.
+    async fn get_recent_messages(
+        &self,
+        chat_jid: &str,
+        sender_jid: Option<&str>,
+        limit: usize,
+    ) -> anyhow::Result<Vec<ChatMessageRecord>>;
 
     /// Saves the mapping of a WhatsApp chat JID to an Antigravity conversation UUID.
     async fn save_conversation_id(&self, chat_jid: &str, conv_uuid: &str) -> anyhow::Result<()>;
@@ -29,6 +69,7 @@ pub trait SessionStorePort: Send + Sync {
         text: &str,
         is_from_me: bool,
     ) -> anyhow::Result<()>;
+
 
     /// Retrieves profiling memory for a sender JID.
     async fn get_user_profile(&self, sender_jid: &str) -> anyhow::Result<Option<UserProfile>>;

@@ -21,6 +21,24 @@ pub struct AccountToken {
     pub email: Option<String>,
     pub token_json: String,
     pub cooldown_until: Arc<RwLock<Option<std::time::Instant>>>,
+    pub cooldown_reason: Arc<RwLock<Option<String>>>,
+}
+
+impl AccountToken {
+    pub fn new(id: usize, label: String, email: Option<String>, token_json: String) -> Self {
+        Self {
+            id,
+            label,
+            email,
+            token_json,
+            cooldown_until: Arc::new(RwLock::new(None)),
+            cooldown_reason: Arc::new(RwLock::new(None)),
+        }
+    }
+
+    pub fn masked_email(&self) -> Option<String> {
+        self.email.as_deref().map(mask_email)
+    }
 }
 
 pub fn extract_email_from_token(token_json: &str) -> Option<String> {
@@ -219,13 +237,12 @@ impl TokenPoolManager {
                 if let Ok(stored) = serde_json::from_str::<Vec<StoredAccountToken>>(&content) {
                     for acc in stored {
                         if !acc.token_json.trim().is_empty() {
-                            pool.push(AccountToken {
-                                id: acc.id,
-                                label: acc.label,
-                                email: acc.email,
-                                token_json: acc.token_json,
-                                cooldown_until: Arc::new(RwLock::new(None)),
-                            });
+                            pool.push(AccountToken::new(
+                                acc.id,
+                                acc.label,
+                                acc.email,
+                                acc.token_json,
+                            ));
                         }
                     }
                 }
@@ -245,13 +262,12 @@ impl TokenPoolManager {
                         };
                         if !token_str.trim().is_empty() {
                             let email = extract_email_from_token(&token_str);
-                            pool.push(AccountToken {
-                                id: idx + 1,
-                                label: format!("Account-{}", idx + 1),
+                            pool.push(AccountToken::new(
+                                idx + 1,
+                                format!("Account-{}", idx + 1),
                                 email,
-                                token_json: token_str,
-                                cooldown_until: Arc::new(RwLock::new(None)),
-                            });
+                                token_str,
+                            ));
                         }
                     }
                 }
@@ -265,13 +281,12 @@ impl TokenPoolManager {
                     let trimmed = val.trim().to_string();
                     if !trimmed.is_empty() {
                         let email = extract_email_from_token(&trimmed);
-                        pool.push(AccountToken {
-                            id: i,
-                            label: format!("Account-{}", i),
+                        pool.push(AccountToken::new(
+                            i,
+                            format!("Account-{}", i),
                             email,
-                            token_json: trimmed,
-                            cooldown_until: Arc::new(RwLock::new(None)),
-                        });
+                            trimmed,
+                        ));
                     }
                 }
             }
@@ -283,13 +298,12 @@ impl TokenPoolManager {
                 let trimmed = val.trim().to_string();
                 if !trimmed.is_empty() {
                     let email = extract_email_from_token(&trimmed);
-                    pool.push(AccountToken {
-                        id: 1,
-                        label: "Account-Primary".to_string(),
+                    pool.push(AccountToken::new(
+                        1,
+                        "Account-Primary".to_string(),
                         email,
-                        token_json: trimmed,
-                        cooldown_until: Arc::new(RwLock::new(None)),
-                    });
+                        trimmed,
+                    ));
                 }
             }
         }
@@ -311,13 +325,12 @@ impl TokenPoolManager {
                     let trimmed = content.trim().to_string();
                     if !trimmed.is_empty() {
                         let email = extract_email_from_token(&trimmed);
-                        pool.push(AccountToken {
-                            id: 1,
-                            label: "Account-Default".to_string(),
+                        pool.push(AccountToken::new(
+                            1,
+                            "Account-Default".to_string(),
                             email,
-                            token_json: trimmed,
-                            cooldown_until: Arc::new(RwLock::new(None)),
-                        });
+                            trimmed,
+                        ));
                     }
                 }
             }
@@ -405,14 +418,15 @@ impl TokenPoolManager {
         Some(chosen)
     }
 
-    pub async fn mark_cooldown(&self, account_id: usize, duration: Duration) {
+    pub async fn mark_cooldown(&self, account_id: usize, duration: Duration, reason: Option<&str>) {
         let pool = self.token_pool.read().await;
         if let Some(acc) = pool.iter().find(|a| a.id == account_id) {
             let cooldown_time = std::time::Instant::now() + duration;
             *acc.cooldown_until.write().await = Some(cooldown_time);
+            *acc.cooldown_reason.write().await = reason.map(|s| s.to_string());
             info!(
-                "Account #{} ({}) placed on cooldown for {}s",
-                acc.id, acc.label, duration.as_secs()
+                "Account #{} ({}) placed on cooldown for {}s (reason: {:?})",
+                acc.id, acc.label, duration.as_secs(), reason
             );
         }
     }
@@ -450,6 +464,7 @@ impl TokenPoolManager {
                 if let Some(existing) = pool.iter_mut().find(|a| a.email.as_ref() == Some(email)) {
                     existing.token_json = trimmed.to_string();
                     *existing.cooldown_until.write().await = None;
+                    *existing.cooldown_reason.write().await = None;
                     info!("Account {} ({}) updated in pool with refreshed token", existing.label, email);
                     merged = true;
                 }
@@ -458,6 +473,7 @@ impl TokenPoolManager {
             if !merged {
                 if let Some(existing) = pool.iter_mut().find(|a| a.token_json == trimmed) {
                     *existing.cooldown_until.write().await = None;
+                    *existing.cooldown_reason.write().await = None;
                     if existing.email.is_none() {
                         existing.email = new_email.clone();
                     }
@@ -468,13 +484,12 @@ impl TokenPoolManager {
 
             if !merged {
                 let next_id = pool.len() + 1;
-                pool.push(AccountToken {
-                    id: next_id,
-                    label: format!("Account-{}", next_id),
-                    email: new_email.clone(),
-                    token_json: trimmed.to_string(),
-                    cooldown_until: Arc::new(RwLock::new(None)),
-                });
+                pool.push(AccountToken::new(
+                    next_id,
+                    format!("Account-{}", next_id),
+                    new_email.clone(),
+                    trimmed.to_string(),
+                ));
                 info!("New account added to pool: Account-{} (email: {:?})", next_id, new_email);
             }
         }
@@ -529,14 +544,15 @@ impl TokenPoolManager {
         let mut res = Vec::new();
         for acc in pool.iter() {
             let cd = acc.cooldown_until.read().await;
-            let (is_cooldown, remaining) = if let Some(until) = *cd {
+            let (is_cooldown, remaining, reason) = if let Some(until) = *cd {
                 if now < until {
-                    (true, (until - now).as_secs())
+                    let r = acc.cooldown_reason.read().await.clone();
+                    (true, (until - now).as_secs(), r)
                 } else {
-                    (false, 0)
+                    (false, 0, None)
                 }
             } else {
-                (false, 0)
+                (false, 0, None)
             };
             res.push(crate::core::ports::AccountPoolStatus {
                 id: acc.id,
@@ -544,6 +560,7 @@ impl TokenPoolManager {
                 email: acc.email.clone(),
                 is_cooldown,
                 cooldown_remaining_secs: remaining,
+                cooldown_reason: reason,
             });
         }
         res
@@ -558,34 +575,10 @@ mod tests {
     #[tokio::test]
     async fn test_token_pool_round_robin_rotation_and_cooldown() {
         let pool = vec![
-            AccountToken {
-                id: 1,
-                label: "Account-1".to_string(),
-                email: None,
-                token_json: "tok1".to_string(),
-                cooldown_until: Arc::new(RwLock::new(None)),
-            },
-            AccountToken {
-                id: 2,
-                label: "Account-2".to_string(),
-                email: None,
-                token_json: "tok2".to_string(),
-                cooldown_until: Arc::new(RwLock::new(None)),
-            },
-            AccountToken {
-                id: 3,
-                label: "Account-3".to_string(),
-                email: None,
-                token_json: "tok3".to_string(),
-                cooldown_until: Arc::new(RwLock::new(None)),
-            },
-            AccountToken {
-                id: 4,
-                label: "Account-4".to_string(),
-                email: None,
-                token_json: "tok4".to_string(),
-                cooldown_until: Arc::new(RwLock::new(None)),
-            },
+            AccountToken::new(1, "Account-1".to_string(), None, "tok1".to_string()),
+            AccountToken::new(2, "Account-2".to_string(), None, "tok2".to_string()),
+            AccountToken::new(3, "Account-3".to_string(), None, "tok3".to_string()),
+            AccountToken::new(4, "Account-4".to_string(), None, "tok4".to_string()),
         ];
 
         let rr_counter = Arc::new(AtomicUsize::new(0));
@@ -693,5 +686,25 @@ mod tests {
         let auth_err = "Eligibility check failed: Your account is not eligible for Antigravity.";
         assert!(is_auth_error(auth_err));
         assert!(!is_transient_error(auth_err));
+    }
+
+    #[tokio::test]
+    async fn test_cooldown_reason_tracking() {
+        let pool = vec![
+            AccountToken::new(1, "Account-1".to_string(), Some("user1@gmail.com".to_string()), "tok1".to_string()),
+            AccountToken::new(2, "Account-2".to_string(), Some("user2@gmail.com".to_string()), "tok2".to_string()),
+        ];
+        let manager = TokenPoolManager::with_pool(pool);
+
+        // Initially no cooldown
+        let status = manager.get_account_pool_status().await;
+        assert_eq!(status[0].is_cooldown, false);
+        assert_eq!(status[0].cooldown_reason, None);
+
+        // Mark account 2 with auth error cooldown
+        manager.mark_cooldown(2, Duration::from_secs(3600), Some("Eligibility Check / Auth Required")).await;
+        let status_after = manager.get_account_pool_status().await;
+        assert_eq!(status_after[1].is_cooldown, true);
+        assert_eq!(status_after[1].cooldown_reason.as_deref(), Some("Eligibility Check / Auth Required"));
     }
 }

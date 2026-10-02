@@ -45,6 +45,42 @@ impl SessionStorePort for SqliteSessionStore {
         session::get_conversation_id(&conn, chat_jid)
     }
 
+    async fn get_active_conversation_id(
+        &self,
+        chat_jid: &str,
+        max_inactivity_secs: u64,
+    ) -> anyhow::Result<Option<String>> {
+        let conn = self.conn.lock().await;
+        session::get_active_conversation_id(&conn, chat_jid, max_inactivity_secs)
+    }
+
+    async fn touch_conversation_activity(&self, chat_jid: &str) -> anyhow::Result<()> {
+        let conn = self.conn.lock().await;
+        session::touch_conversation_activity(&conn, chat_jid)
+    }
+
+    async fn search_message_history(
+        &self,
+        chat_jid: &str,
+        sender_jid: Option<&str>,
+        query: &str,
+        limit: usize,
+    ) -> anyhow::Result<Vec<crate::core::ports::ChatMessageRecord>> {
+        let conn = self.conn.lock().await;
+        session::search_message_history(&conn, chat_jid, sender_jid, query, limit)
+    }
+
+    async fn get_recent_messages(
+        &self,
+        chat_jid: &str,
+        sender_jid: Option<&str>,
+        limit: usize,
+    ) -> anyhow::Result<Vec<crate::core::ports::ChatMessageRecord>> {
+        let conn = self.conn.lock().await;
+        session::get_recent_messages(&conn, chat_jid, sender_jid, limit)
+    }
+
+
     async fn save_conversation_id(&self, chat_jid: &str, conv_uuid: &str) -> anyhow::Result<()> {
         let conn = self.conn.lock().await;
         session::save_conversation_id(&conn, chat_jid, conv_uuid)
@@ -398,4 +434,57 @@ mod tests {
         // Clean up
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    #[tokio::test]
+    async fn test_active_session_lifecycle_and_message_retrieval() {
+        let dir = std::env::temp_dir().join(format!("aina_test_active_sess_{}", rand::random::<u32>()));
+        let db_file = dir.join("test.db");
+        let store = SqliteSessionStore::new(&db_file).unwrap();
+
+        let chat = "6289999999@s.whatsapp.net";
+
+        // Initially no conversation
+        assert_eq!(store.get_active_conversation_id(chat, 7200).await.unwrap(), None);
+
+        // Save conversation
+        store.save_conversation_id(chat, "conv-active-uuid-1").await.unwrap();
+
+        // Immediately active within 7200s window
+        let active = store.get_active_conversation_id(chat, 7200).await.unwrap();
+        assert_eq!(active.as_deref(), Some("conv-active-uuid-1"));
+
+        // Touch activity
+        store.touch_conversation_activity(chat).await.unwrap();
+        let active2 = store.get_active_conversation_id(chat, 7200).await.unwrap();
+        assert_eq!(active2.as_deref(), Some("conv-active-uuid-1"));
+
+        // Test with 0 seconds window (or simulate expiration)
+        // With 0 max_inactivity_secs, elapsed is >= 0 so immediately expires if elapsed > 0
+        // Record message history
+        store.record_message(chat, chat, "Halo Aina, tolong bantu setting coolify", false).await.unwrap();
+        store.record_message(chat, "bot@s.whatsapp.net", "Halo! Tentu, coolify sudah siap", true).await.unwrap();
+        store.record_message(chat, chat, "Berapa port default coolify?", false).await.unwrap();
+
+        // Search message history
+        let search_results = store.search_message_history(chat, None, "coolify", 5).await.unwrap();
+        assert_eq!(search_results.len(), 3);
+        assert!(search_results.iter().any(|m| m.text.contains("setting coolify")));
+
+        assert!(search_results.iter().any(|m| m.text.contains("default coolify")));
+
+        // Search message history empty query
+        let empty_search = store.search_message_history(chat, None, "", 5).await.unwrap();
+        assert!(empty_search.is_empty());
+
+        // Get recent messages
+        let recent = store.get_recent_messages(chat, None, 2).await.unwrap();
+        assert_eq!(recent.len(), 2);
+        // Chronological order: first is bot, then user
+        assert_eq!(recent[0].text, "Halo! Tentu, coolify sudah siap");
+        assert_eq!(recent[1].text, "Berapa port default coolify?");
+
+        // Clean up
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
+

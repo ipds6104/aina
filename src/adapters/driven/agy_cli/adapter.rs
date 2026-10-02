@@ -189,9 +189,24 @@ impl AgentEnginePort for AntigravityCliAdapter {
                 }
             }
 
+            let effort_tier = if active_model.ends_with("-high") || active_model.contains("-high") {
+                Some("high")
+            } else if active_model.ends_with("-low") || active_model.contains("-low") {
+                Some("low")
+            } else if active_model.ends_with("-medium") || active_model.contains("-medium") {
+                Some("medium")
+            } else if active_model.contains("thinking") {
+                Some("high")
+            } else {
+                None
+            };
+
             cmd.arg("--json");
             cmd.arg("--headless");
             cmd.arg("--model").arg(&active_model);
+            if let Some(eff) = effort_tier {
+                cmd.arg("--effort").arg(eff);
+            }
             cmd.arg(prompt);
 
             // Injected environment variables for skills & tools
@@ -205,7 +220,12 @@ impl AgentEnginePort for AntigravityCliAdapter {
             }
 
             let start_instant = std::time::Instant::now();
-            let output_res = tokio::time::timeout(self.timeout_duration, cmd.output()).await;
+            let output_res: Result<std::io::Result<std::process::Output>, tokio::time::error::Elapsed> =
+                if self.timeout_duration.is_zero() {
+                    Ok(cmd.output().await)
+                } else {
+                    tokio::time::timeout(self.timeout_duration, cmd.output()).await
+                };
 
             let output = match output_res {
                 Ok(Ok(out)) => out,
@@ -214,20 +234,28 @@ impl AgentEnginePort for AntigravityCliAdapter {
                     anyhow::bail!("Failed to execute Antigravity CLI binary: {}", e);
                 }
                 Err(_) => {
+                    let acc_desc = active_acc.as_ref()
+                        .map(|a| format!("#{} ({})", a.id, a.masked_email().unwrap_or_else(|| a.label.clone())))
+                        .unwrap_or_else(|| "unknown".to_string());
                     error!(
-                        "Antigravity CLI timed out after {}s (attempt {}/{})",
+                        "Antigravity CLI timed out after {}s on {} (attempt {}/{})",
                         self.timeout_duration.as_secs(),
+                        acc_desc,
                         attempt + 1,
                         max_attempts
                     );
                     if let Some(ref acc) = active_acc {
-                        self.pool_manager.mark_cooldown(acc.id, Duration::from_secs(300)).await;
+                        self.pool_manager.mark_cooldown(acc.id, Duration::from_secs(300), Some("CLI Execution Timeout (300s)")).await;
                     }
                     if attempt + 1 < max_attempts {
                         continue;
                     }
+                    let acc_tag = active_acc.as_ref()
+                        .map(|a| format!("[Akun #{} ({})] ", a.id, a.masked_email().unwrap_or_else(|| a.label.clone())))
+                        .unwrap_or_default();
                     anyhow::bail!(
-                        "Agent engine timed out after {} seconds.",
+                        "{}Agent engine timed out after {} seconds.",
+                        acc_tag,
                         self.timeout_duration.as_secs()
                     );
                 }
@@ -253,24 +281,30 @@ impl AgentEnginePort for AntigravityCliAdapter {
                 if let Some(ref acc) = active_acc {
                     if is_quota {
                         let cooldown = extract_quota_cooldown_duration(&err_msg);
-                        self.pool_manager.mark_cooldown(acc.id, cooldown).await;
+                        self.pool_manager.mark_cooldown(acc.id, cooldown, Some("Quota / Rate Limit Exceeded")).await;
                     } else if is_auth {
-                        self.pool_manager.mark_cooldown(acc.id, Duration::from_secs(72 * 3600)).await;
+                        self.pool_manager.mark_cooldown(acc.id, Duration::from_secs(72 * 3600), Some("Eligibility Check / Auth Required")).await;
                     } else if is_transient {
-                        self.pool_manager.mark_cooldown(acc.id, Duration::from_secs(60)).await;
+                        self.pool_manager.mark_cooldown(acc.id, Duration::from_secs(60), Some("Transient Network / Stream Interruption")).await;
                     }
                 }
 
-                if (is_transient || is_quota) && attempt + 1 < max_attempts {
+                if (is_transient || is_quota || is_auth) && attempt + 1 < max_attempts {
+                    let acc_desc = active_acc.as_ref()
+                        .map(|a| format!("#{} ({})", a.id, a.masked_email().unwrap_or_else(|| a.label.clone())))
+                        .unwrap_or_else(|| "unknown".to_string());
                     warn!(
-                        "Attempt {}/{} failed with recoverable error (quota={}, transient={}). Retrying with next account...",
-                        attempt + 1, max_attempts, is_quota, is_transient
+                        "Attempt {}/{} failed on {} with recoverable error (quota={}, auth={}, transient={}). Retrying with next account...",
+                        attempt + 1, max_attempts, acc_desc, is_quota, is_auth, is_transient
                     );
                     tokio::time::sleep(Duration::from_millis(500)).await;
                     continue;
                 }
 
-                anyhow::bail!("Antigravity CLI failed: {}", err_msg);
+                let acc_tag = active_acc.as_ref()
+                    .map(|a| format!("[Akun #{} ({})] ", a.id, a.masked_email().unwrap_or_else(|| a.label.clone())))
+                    .unwrap_or_default();
+                anyhow::bail!("{}Antigravity CLI failed: {}", acc_tag, err_msg);
             }
 
             // Find JSON line from output
@@ -289,16 +323,35 @@ impl AgentEnginePort for AntigravityCliAdapter {
                 Some(p) => {
                     if p.status == "error" {
                         let err_text = p.error.unwrap_or_else(|| "Unknown error from CLI".to_string());
+                        let is_err_quota = is_quota_error(&err_text);
+                        let is_err_auth = is_auth_error(&err_text);
+                        let is_err_transient = is_transient_error(&err_text);
+
                         if let Some(ref acc) = active_acc {
-                            if is_quota_error(&err_text) {
+                            if is_err_quota {
                                 let cooldown = extract_quota_cooldown_duration(&err_text);
-                                self.pool_manager.mark_cooldown(acc.id, cooldown).await;
+                                self.pool_manager.mark_cooldown(acc.id, cooldown, Some("Quota / Rate Limit Exceeded")).await;
+                            } else if is_err_auth {
+                                self.pool_manager.mark_cooldown(acc.id, Duration::from_secs(72 * 3600), Some("Eligibility Check / Auth Required")).await;
+                            } else if is_err_transient {
+                                self.pool_manager.mark_cooldown(acc.id, Duration::from_secs(60), Some("Transient Service Error")).await;
                             }
                         }
-                        if attempt + 1 < max_attempts && (is_quota_error(&err_text) || is_transient_error(&err_text)) {
+                        if attempt + 1 < max_attempts && (is_err_quota || is_err_auth || is_err_transient) {
+                            let acc_desc = active_acc.as_ref()
+                                .map(|a| format!("#{} ({})", a.id, a.masked_email().unwrap_or_else(|| a.label.clone())))
+                                .unwrap_or_else(|| "unknown".to_string());
+                            warn!(
+                                "Attempt {}/{} returned error payload on {}. Retrying with next account...",
+                                attempt + 1, max_attempts, acc_desc
+                            );
+                            tokio::time::sleep(Duration::from_millis(500)).await;
                             continue;
                         }
-                        anyhow::bail!("Antigravity CLI execution error: {}", err_text);
+                        let acc_tag = active_acc.as_ref()
+                            .map(|a| format!("[Akun #{} ({})] ", a.id, a.masked_email().unwrap_or_else(|| a.label.clone())))
+                            .unwrap_or_default();
+                        anyhow::bail!("{}Antigravity CLI execution error: {}", acc_tag, err_text);
                     }
                     AgentResponse {
                         conversation_id: p.conversation_id,
@@ -377,32 +430,14 @@ impl AgentEnginePort for AntigravityCliAdapter {
 pub mod tests {
     use super::*;
     use crate::adapters::driven::agy_cli::account_pool::AccountToken;
-    use tokio::sync::RwLock;
+
 
     #[tokio::test]
     async fn test_pool_remove_and_clear() {
         let pool = vec![
-            AccountToken {
-                id: 1,
-                label: "Account-Default".to_string(),
-                email: Some("default@gmail.com".to_string()),
-                token_json: "tok1".to_string(),
-                cooldown_until: Arc::new(RwLock::new(None)),
-            },
-            AccountToken {
-                id: 2,
-                label: "Account-2".to_string(),
-                email: Some("second@gmail.com".to_string()),
-                token_json: "tok2".to_string(),
-                cooldown_until: Arc::new(RwLock::new(None)),
-            },
-            AccountToken {
-                id: 3,
-                label: "Account-3".to_string(),
-                email: Some("third@gmail.com".to_string()),
-                token_json: "tok3".to_string(),
-                cooldown_until: Arc::new(RwLock::new(None)),
-            },
+            AccountToken::new(1, "Account-Default".to_string(), Some("default@gmail.com".to_string()), "tok1".to_string()),
+            AccountToken::new(2, "Account-2".to_string(), Some("second@gmail.com".to_string()), "tok2".to_string()),
+            AccountToken::new(3, "Account-3".to_string(), Some("third@gmail.com".to_string()), "tok3".to_string()),
         ];
 
         let pool_manager = Arc::new(TokenPoolManager::with_pool(pool));
@@ -436,4 +471,54 @@ pub mod tests {
         assert_eq!(status[0].id, 1);
         assert_eq!(status[0].label, "Account-Default");
     }
+
+    #[tokio::test]
+    async fn test_unlimited_zero_timeout_does_not_timeout_immediately() {
+        let pool = vec![
+            AccountToken::new(1, "Account-Default".to_string(), Some("default@gmail.com".to_string()), "tok1".to_string()),
+        ];
+        let pool_manager = Arc::new(TokenPoolManager::with_pool(pool));
+        // Using /bin/echo to simulate a successful CLI call returning valid JSON
+        let adapter = AntigravityCliAdapter::with_pool_manager(
+            "/bin/echo",
+            "gemini-2.5-flash",
+            "/tmp",
+            0, // 0 = unlimited
+            "http://localhost:8080",
+            "secret",
+            pool_manager,
+        );
+
+        // When timeout is 0, execution must not fail with timeout
+        let res = adapter.execute(Some("c1"), "{\"conversation_id\":\"c1\",\"status\":\"DONE\",\"response\":\"hello\"}").await;
+        // Even if echo doesn't parse full prompt flags as real agy, it shouldn't fail with "timed out after 0 seconds"
+        if let Err(e) = res {
+            assert!(!e.to_string().contains("timed out after 0 seconds"), "Must not time out immediately on zero timeout: {}", e);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_error_attribution_contains_account_info() {
+        let pool = vec![
+            AccountToken::new(1, "Account-Primary".to_string(), Some("testuser@gmail.com".to_string()), "tok1".to_string()),
+        ];
+        let pool_manager = Arc::new(TokenPoolManager::with_pool(pool));
+        // Using /bin/false to simulate a failed CLI process
+        let adapter = AntigravityCliAdapter::with_pool_manager(
+            "/bin/false",
+            "gemini-2.5-flash",
+            "/tmp",
+            10,
+            "http://localhost:8080",
+            "secret",
+            pool_manager,
+        );
+
+        let res = adapter.execute(None, "hello").await;
+        assert!(res.is_err());
+        let err_msg = res.unwrap_err().to_string();
+        // The error must explicitly contain the account tag [Akun #1 (tes***@gmail.com)]
+        assert!(err_msg.contains("[Akun #1 (tes***@gmail.com)]"), "Expected account attribution tag in error, got: {}", err_msg);
+    }
 }
+

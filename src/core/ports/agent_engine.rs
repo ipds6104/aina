@@ -8,6 +8,8 @@ pub struct AccountPoolStatus {
     pub email: Option<String>,
     pub is_cooldown: bool,
     pub cooldown_remaining_secs: u64,
+    #[serde(default)]
+    pub cooldown_reason: Option<String>,
 }
 
 impl AccountPoolStatus {

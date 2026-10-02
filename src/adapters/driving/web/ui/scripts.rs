@@ -34,6 +34,7 @@ pub fn get_scripts() -> &'static str {
                     } else {
                         listEl.innerHTML = data.accounts.map(a => {
                             const badgeColor = a.is_cooldown ? '#f59e0b' : '#10b981';
+                            const reasonText = (a.is_cooldown && a.cooldown_reason) ? (' <span style="color: #f87171; font-size: 0.75rem;">[' + a.cooldown_reason + ']</span>') : '';
                             const statusText = a.is_cooldown ? ('Cooldown (' + a.cooldown_remaining_secs + 's)') : '🟢 Aktif';
                             const emailText = a.email ? (' <span style="color: #94a3b8; font-size: 0.78rem;">(' + a.email + ')</span>') : '';
                             const deleteBtn = (a.id > 1 || data.accounts.length > 1) ? 
@@ -42,6 +43,7 @@ pub fn get_scripts() -> &'static str {
                                 '<span style="font-weight: 600; color: #f8fafc;">#' + a.id + ' ' + a.label + '</span>' +
                                 emailText +
                                 '<span style="color: ' + badgeColor + '; font-size: 0.8rem;">' + statusText + '</span>' +
+                                reasonText +
                                 deleteBtn +
                             '</div>';
                         }).join('');
