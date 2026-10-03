@@ -6,10 +6,19 @@ pub async fn handle_schedule(args: &[String]) -> anyhow::Result<()> {
             r#"Manajemen Tugas & Riset Terjadwal (Aina Scheduled Wake-up & Reminders):
     aina schedule list [--all] [--json]
     aina schedule get <id> [--json]
-    aina schedule add --title <judul> --type <agent|notify> --target <jid> --when <once|daily|interval> --time <waktu> --payload <isi>
+    aina schedule add --title <judul> --type <agent|notify> --target <jid> --when <once|daily|workdays|monthly|last_workday|last_workday_minus_1|interval> --time <waktu> --payload <isi>
     aina schedule delete <id>
     aina schedule runs [--limit <n>] [--json]
     aina schedule diag [--json]
+
+Pilihan --when & --time:
+    once                 : Satu kali. Contoh --time "22:30", "+15m", "2026-10-30 08:00"
+    daily                : Setiap hari. Contoh --time "08:00"
+    workdays             : Hari kerja Senin–Jumat (skip weekend). Contoh --time "08:00"
+    monthly              : Bulanan. Contoh --time "25 08:00", "last 08:00", "last_workday 08:00"
+    last_workday         : Hari kerja terakhir bulan berjalan. Contoh --time "08:00"
+    last_workday_minus_1 : H-1 hari kerja terakhir bulan berjalan. Contoh --time "08:00"
+    interval             : Berkala. Contoh --time "1h", "604800"
 "#
         );
         return Ok(());

@@ -39,15 +39,25 @@ Activate this skill whenever:
 ### SOP 1: Menjadwalkan Pesan ke Chat / DM / Grup
 Gunakan sintaks native CLI `aina schedule add` (CUKUP 1 KALI, DILARANG DOUBLE ADD):
 ```bash
-aina schedule add --title "<judul>" --type notify --target "<sender_jid>" --when <once|daily|interval> --time "<waktu>" --payload "<pesan_pengingat>"
+aina schedule add --title "<judul>" --type <notify|agent> --target "<sender_jid>" --when <once|daily|workdays|monthly|last_workday|last_workday_minus_1|interval> --time "<waktu>" --payload "<pesan_atau_prompt>"
 ```
 * **Pilihan `--type`**:
-  * `notify`: Mengirimkan pesan teks langsung persis seperti yang tertulis di `--payload`. Cocok untuk pengingat sederhana (*"Waktunya minum obat yaa"*).
-  * `agent`: Memicu LLM Aina untuk berpikir dan mengerjakan prompt di `--payload` pada jam tersebut sebelum mengirimkan hasilnya. Cocok untuk riset/analisis.
-* **Pilihan `--when` & `--time`**:
+  * `notify`: Mengirimkan pesan teks langsung persis seperti yang tertulis di `--payload` (0 beban komputasi/LLM). Sangat direkomendasikan untuk alarm/pengingat terjadwal.
+  * `agent`: Memicu LLM Aina untuk menganalisis dan berpikir pada jam tersebut sebelum mengirimkan hasilnya. Cocok untuk riset/rekapitulasi otomatis.
+* **Pilihan `--when` & `--time` (Gunakan yang Paling Efisien Sesuai Kebutuhan)**:
   * `--when once --time "22:30"` (pukul 22:30 hari ini/terdekat).
+  * `--when once --time "2026-10-30 08:00"` (spesifik tanggal dan jam tertentu di masa depan).
   * `--when daily --time "07:00"` (rutin setiap hari pukul 07:00).
-  * `--when interval --time "1h"` atau `"30m"` (berkala setiap selang waktu).
+  * `--when workdays --time "08:00"` (rutin hari kerja Senin–Jumat saja, otomatis melompati Sabtu & Minggu).
+  * `--when last_workday --time "08:00"` (otomatis hari kerja terakhir setiap akhir bulan, misal penutupan presensi bulanan).
+  * `--when last_workday_minus_1 --time "08:00"` (otomatis H-1 hari kerja terakhir setiap akhir bulan).
+  * `--when monthly --time "25 08:00"` (rutin bulanan pada tanggal tertentu pukul 08:00).
+  * `--when interval --time "1h"` atau `"30m"` atau `"604800"` (berkala setiap selang waktu).
+
+* **Protokol NO-OP / Silent Skip untuk Tugas Agent (`[NO_SEND]`)**:
+  * Jika tugas bertipe `agent` dijalankan dan agen menyimpulkan bahwa kondisi tidak terpenuhi (misal tidak ada alert baru, atau tidak perlu mengirim pesan), agen cukup merespons dengan:
+    `[NO_SEND]`
+  * Backend scheduler otomatis menahan pesan agar tidak terkirim sebagai spam ke WhatsApp.
 
 ### SOP 2: Menjadwalkan Pembuatan Status WhatsApp (Story 24 Jam)
 Daftarkan tugas bertipe `agent` dengan target khusus `status@broadcast`:

@@ -43,29 +43,17 @@ impl TaskExecutor {
             );
 
             // 1. Lock/update the task state immediately to prevent duplicate burst execution
-            let (next_run, is_active) = match task.schedule_type.as_str() {
-                "once" => (None, false),
-                "daily" => {
-                    let next = ScheduleParser::compute_next_run(
-                        "daily",
-                        &task.schedule_expr,
-                        timezone_offset_hours,
-                        now_epoch + 60,
-                    )
-                    .unwrap_or(now_epoch + 86400);
-                    (Some(next), true)
-                }
-                "interval" => {
-                    let next = ScheduleParser::compute_next_run(
-                        "interval",
-                        &task.schedule_expr,
-                        timezone_offset_hours,
-                        now_epoch,
-                    )
-                    .unwrap_or(now_epoch + 3600);
-                    (Some(next), true)
-                }
-                _ => (None, false),
+            let (next_run, is_active) = if task.schedule_type.eq_ignore_ascii_case("once") {
+                (None, false)
+            } else {
+                let next = ScheduleParser::compute_next_run(
+                    &task.schedule_type,
+                    &task.schedule_expr,
+                    timezone_offset_hours,
+                    now_epoch + 60,
+                )
+                .unwrap_or(now_epoch + 86400);
+                (Some(next), true)
             };
 
             if let Err(e) = session_store
@@ -242,6 +230,7 @@ impl TaskExecutor {
             1. EFISIENSI KUOTA: Lakukan maksimal 1 hingga 2 kali pencarian web (search_web) yang paling esensial. DILARANG KERAS melakukan pencarian berulang-ulang tanpa henti!\n\
             2. Susun hasil akhir secara rapi, padat, dan ramah ponsel (format WhatsApp: *tebal*, bullet points •).\n\
             3. {}\
+            4. PROTOKOL NO-OP / SILENT SKIP: Jika kondisi tugas tidak terpenuhi (misalnya data tidak ada, atau hasil analisis/pengecekan kalender menunjukkan tidak perlu mengirim pesan), Anda WAJIB menjawab HANYA dengan kata '[NO_SEND]' tanpa teks lain, agar sistem tidak mengirimkan pesan yang tidak perlu ke chat WhatsApp.\n\
             5. DILARANG KERAS menyertakan laporan status teknis internal seperti 'Status: Terkirim', 'Pesan berhasil dikirim', 'Memproses pengunggahan...', dsb.\n\
             6. Berikan langsung teks hasil riset atau informasi akhir yang siap dibaca oleh penerima.",
             task.title,
@@ -340,6 +329,22 @@ impl TaskExecutor {
                         info!(
                             "AgentAction task #{} for status@broadcast completed successfully. Suppressed sending conversational text to status@broadcast. Preview: {}",
                             task.id, preview
+                        );
+                        return;
+                    }
+
+                    // Check for Silent Skip / No-Op protocol: [NO_SEND], [SKIP], [SILENT], [SKIP_MESSAGE]
+                    let is_silent_skip = clean_res.starts_with("[NO_SEND]")
+                        || clean_res.starts_with("[SKIP]")
+                        || clean_res.starts_with("[SILENT]")
+                        || clean_res.starts_with("[SKIP_MESSAGE]")
+                        || clean_res.eq_ignore_ascii_case("NO_SEND")
+                        || clean_res.eq_ignore_ascii_case("SKIP");
+
+                    if is_silent_skip {
+                        info!(
+                            "AgentAction task #{} requested silent skip ([NO_SEND]). Suppressed sending message to {}. Output: {}",
+                            task.id, actual_target, preview
                         );
                         return;
                     }
