@@ -74,3 +74,48 @@ pub fn is_admin_authorized(headers: &HeaderMap, expected_code: &str) -> bool {
 
     false
 }
+
+pub fn is_events_authorized(
+    headers: &HeaderMap,
+    query_key: Option<&str>,
+    state: &WebhookServerState,
+) -> bool {
+    // 1. If explicit events_api_key is configured:
+    if let Some(ref configured) = state.events_api_key {
+        let expected = configured.trim();
+        if !expected.is_empty() {
+            let is_match = |cand: &str| -> bool { cand.trim() == expected };
+
+            if let Some(key) = query_key {
+                if is_match(key) {
+                    return true;
+                }
+            }
+            if let Some(key) = headers.get("X-Events-Key").and_then(|v| v.to_str().ok()) {
+                if is_match(key) {
+                    return true;
+                }
+            }
+            if let Some(key) = headers.get("X-API-Key").and_then(|v| v.to_str().ok()) {
+                if is_match(key) {
+                    return true;
+                }
+            }
+            if let Some(auth) = headers.get("Authorization").and_then(|v| v.to_str().ok()) {
+                if let Some(bearer) = auth.strip_prefix("Bearer ") {
+                    if is_match(bearer) {
+                        return true;
+                    }
+                }
+            }
+            // Allow admin key / setup code as fallback even when events_api_key is explicitly set
+            if is_admin_authorized(headers, &state.setup_code) {
+                return true;
+            }
+            return false;
+        }
+    }
+
+    // 2. Fallback to general API authorization (setup_code, whatsmeow_api_key, companion_api_key)
+    is_api_authorized(headers, query_key, state)
+}

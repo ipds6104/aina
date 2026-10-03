@@ -23,6 +23,7 @@
 - **Pencarian Riwayat Chat**: Jalankan `aina archive search "<query>" --since 7d` (atau `--from YYYY-MM-DD --to YYYY-MM-DD`).
 - **Profil & Otoritas Rekan Kerja**: Jalankan `aina user get <sender_jid>` dan `aina user set <sender_jid> ...` untuk mengelola hak wewenang.
 - **Kontrol Model AI**: Jalankan `aina model get`, `aina model list`, atau `aina model set <model>`.
+- **Manajemen Persona & Rollback**: Jalankan `aina persona status`, `aina persona backup [target] -m "..."`, `aina persona history [target]`, `aina persona rollback [target]`, atau `aina persona reset [target]` (mendukung: persona, character, activities, organization).
 
 ## 4. Eksekusi Perintah Non-Interaktif & GitHub Auth
 - Dilarang keras mengeksekusi perintah CLI interaktif yang memblokir stdin (seperti `gh auth login` interaktif/web, `passwd`, `apt` tanpa `-y`, dll.) karena akan hang hingga timeout 300+ detik.

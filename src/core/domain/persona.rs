@@ -1,9 +1,21 @@
 use super::message::{ChatType, IncomingMessage};
 use crate::core::ports::UserProfile;
+use std::path::PathBuf;
+use std::sync::RwLock;
+use std::time::SystemTime;
+
+#[derive(Debug)]
+struct DynamicFileCache {
+    path: PathBuf,
+    last_modified: Option<SystemTime>,
+    content: String,
+}
 
 pub struct PersonaEngine {
-    persona_text: String,
-    organization_text: String,
+    persona_cache: Option<RwLock<DynamicFileCache>>,
+    org_cache: Option<RwLock<DynamicFileCache>>,
+    fallback_persona_text: String,
+    fallback_org_text: String,
     admin_jid: String,
     pub timezone: String,
     pub timezone_offset_hours: i32,
@@ -14,6 +26,7 @@ pub struct PersonaEngine {
 }
 
 impl PersonaEngine {
+    #[allow(dead_code)]
     pub fn new(
         persona_text: String,
         organization_text: String,
@@ -25,9 +38,57 @@ impl PersonaEngine {
         bot_jid: String,
         workspace_dir: Option<String>,
     ) -> Self {
-        Self {
+        Self::with_file_paths(
             persona_text,
             organization_text,
+            None,
+            None,
+            admin_jid,
+            timezone,
+            timezone_offset_hours,
+            locale,
+            whatsmeow_url,
+            bot_jid,
+            workspace_dir,
+        )
+    }
+
+    pub fn with_file_paths(
+        persona_text: String,
+        organization_text: String,
+        persona_file: Option<PathBuf>,
+        organization_file: Option<PathBuf>,
+        admin_jid: String,
+        timezone: String,
+        timezone_offset_hours: i32,
+        locale: String,
+        whatsmeow_url: String,
+        bot_jid: String,
+        workspace_dir: Option<String>,
+    ) -> Self {
+        let persona_cache = persona_file.map(|path| {
+            let mtime = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
+            RwLock::new(DynamicFileCache {
+                path,
+                last_modified: mtime,
+                content: persona_text.clone(),
+            })
+        });
+
+        let org_cache = organization_file.map(|path| {
+            let mtime = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
+            RwLock::new(DynamicFileCache {
+                path,
+                last_modified: mtime,
+                content: organization_text.clone(),
+            })
+        });
+
+        Self {
+            persona_cache,
+            org_cache,
+            fallback_persona_text: persona_text,
+            fallback_org_text: organization_text,
             admin_jid,
             timezone,
             timezone_offset_hours,
@@ -36,6 +97,74 @@ impl PersonaEngine {
             bot_jid,
             workspace_dir,
         }
+    }
+
+    /// Dynamically returns the active persona text, hot-reloading from disk if mtime has changed.
+    pub fn get_persona_text(&self) -> String {
+        if let Some(ref cache_lock) = self.persona_cache {
+            if let Ok(guard) = cache_lock.read() {
+                let path = guard.path.clone();
+                let current_mtime = guard.last_modified;
+                drop(guard);
+
+                if let Ok(meta) = std::fs::metadata(&path) {
+                    if let Ok(new_mtime) = meta.modified() {
+                        if Some(new_mtime) != current_mtime {
+                            if let Ok(new_content) = std::fs::read_to_string(&path) {
+                                let trimmed = new_content.trim();
+                                if !trimmed.is_empty() {
+                                    if let Ok(mut write_guard) = cache_lock.write() {
+                                        write_guard.last_modified = Some(new_mtime);
+                                        write_guard.content = trimmed.to_string();
+                                        tracing::info!("Persona reloaded dynamically from disk: {}", path.display());
+                                        return write_guard.content.clone();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if let Ok(read_guard) = cache_lock.read() {
+                    return read_guard.content.clone();
+                }
+            }
+        }
+        self.fallback_persona_text.clone()
+    }
+
+    /// Dynamically returns the active organization context text, hot-reloading from disk if mtime has changed.
+    pub fn get_organization_text(&self) -> String {
+        if let Some(ref cache_lock) = self.org_cache {
+            if let Ok(guard) = cache_lock.read() {
+                let path = guard.path.clone();
+                let current_mtime = guard.last_modified;
+                drop(guard);
+
+                if let Ok(meta) = std::fs::metadata(&path) {
+                    if let Ok(new_mtime) = meta.modified() {
+                        if Some(new_mtime) != current_mtime {
+                            if let Ok(new_content) = std::fs::read_to_string(&path) {
+                                let trimmed = new_content.trim();
+                                if !trimmed.is_empty() {
+                                    if let Ok(mut write_guard) = cache_lock.write() {
+                                        write_guard.last_modified = Some(new_mtime);
+                                        write_guard.content = trimmed.to_string();
+                                        tracing::info!("Organization context reloaded dynamically from disk: {}", path.display());
+                                        return write_guard.content.clone();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if let Ok(read_guard) = cache_lock.read() {
+                    return read_guard.content.clone();
+                }
+            }
+        }
+        self.fallback_org_text.clone()
     }
 
     pub fn admin_jid(&self) -> &str {
@@ -383,8 +512,8 @@ impl PersonaEngine {
             - Balaslah secara langsung sebagai Aina kepada {sender_name} dengan memperhatikan platform, waktu lokal, preferensi profil, dan batasan wewenang pengirim di atas.\n\
             - Ingat: ramah, cekatan, solutif, basa-basi seperlunya. JANGAN gunakan frasa robotik 'ada yang bisa saya bantu'—gunakan sapaan rekan kerja alami seperti 'yaa, gimana gimanaa..'.\n\
             - Jika permintaan pengirim kurang jelas, kurang spesifikasi/parameter, ambigu, atau berpotensi destruktif/permanen, tanyakan klarifikasi dan konfirmasi secara sopan dan terarah.",
-            persona = self.persona_text,
-            organization = self.organization_text,
+            persona = self.get_persona_text(),
+            organization = self.get_organization_text(),
             current_time_str = current_time_str,
             timezone = self.timezone,
             tz_offset_sign = tz_offset_sign,
@@ -617,5 +746,47 @@ mod tests {
         assert!(prompt.contains("partner kerja utama (Bang Doni)"));
         assert!(prompt.contains("Catatan Profil & Preferensi: Preferensi panggilan resmi: Bang Doni"));
         assert!(!prompt.contains("partner kerja utama (Doni Karunia)"));
+    }
+
+    #[test]
+    fn test_persona_engine_hot_reload_on_mtime_change() {
+        let temp_dir = std::env::temp_dir().join(format!("aina_test_persona_reload_{}", rand::random::<u32>()));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let persona_file = temp_dir.join("persona.md");
+        let org_file = temp_dir.join("org.md");
+
+        std::fs::write(&persona_file, "Persona V1: Kasual santai").unwrap();
+        std::fs::write(&org_file, "Org V1: Tim Alpha").unwrap();
+
+        let engine = PersonaEngine::with_file_paths(
+            "Persona V1: Kasual santai".to_string(),
+            "Org V1: Tim Alpha".to_string(),
+            Some(persona_file.clone()),
+            Some(org_file.clone()),
+            "6281234567890@s.whatsapp.net".to_string(),
+            "Asia/Jakarta".to_string(),
+            7,
+            "id-ID".to_string(),
+            "https://aina-wa.test".to_string(),
+            "628999888777@s.whatsapp.net".to_string(),
+            None,
+        );
+
+        assert_eq!(engine.get_persona_text(), "Persona V1: Kasual santai");
+        assert_eq!(engine.get_organization_text(), "Org V1: Tim Alpha");
+
+        // Wait a tiny fraction to guarantee mtime differs on filesystems with 1s resolution
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+
+        // Update file on disk
+        std::fs::write(&persona_file, "Persona V2: Formal puitis").unwrap();
+        std::fs::write(&org_file, "Org V2: Tim Beta").unwrap();
+
+        // Hot-reload should immediately reflect the change
+        assert_eq!(engine.get_persona_text(), "Persona V2: Formal puitis");
+        assert_eq!(engine.get_organization_text(), "Org V2: Tim Beta");
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }

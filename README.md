@@ -37,6 +37,7 @@ Aina dirancang bukan sebagai bot CS yang kaku, melainkan sebagai **rekan kerja t
 - [🤖 Manajemen Model AI (Gemini-First Priority & Native CLI)](#-manajemen-model-ai-gemini-first-priority--native-cli)
 - [📁 Agnostic Workspaces & Structured Knowledge Base](#-agnostic-workspaces--structured-knowledge-base)
 - [🧩 Arsitektur Skill Discovery & Tata Kelola Rahasia Terpusat (Two-Tier Skills & Infisical Vault)](#-arsitektur-skill-discovery--tata-kelola-rahasia-terpusat)
+- [🚨 Event Ingress & Observability Multi-Repo (API `/api/v1/events`)](#-event-ingress--observability-multi-repo)
 - [⚡ Unified Native Rust CLI (`aina`)](#-unified-native-rust-cli-aina)
 - [🧹 Linter Kerapian & Closed-Loop Auto-Healing (`kb_linter.py`)](#-linter-kerapian--closed-loop-auto-healing-kb_linterpy)
 - [🛡️ Audit Trail CLI Antigravity (`audit_agent.py`)](#️-audit-trail-cli-antigravity-audit_agentpy)
@@ -538,6 +539,7 @@ Aina memadukan mesin agentik **Google Antigravity CLI (`agy`)** dengan standar m
 Antigravity CLI menemukan kemampuan Aina secara terstruktur melalui konfigurasi deklaratif `skills.json` di dalam `.agents/`:
 * **Core Built-in Skills (`/app/skills/`)**: Kumpulan skill permanen yang terikat pada image Aina. Selalu tersedia seketika tanpa konfigurasi tambahan.
 * **User Custom Skills (`/app/data/custom-skills/`)**: Kumpulan prosedur dan integrasi khusus yang dibuat oleh Aina atas instruksi langsung dari pengguna di WhatsApp (misal integrasi Tally.so, Notion, dsb.). Disimpan di dalam volume persisten `aina_data`, sehingga **tidak pernah terhapus saat kontainer di-rebuild atau di-redeploy di Coolify**.
+* **Autonomous Skill Builder (`skills/skill-builder`)**: Aina dibekali meta-skill otonom bawaan untuk men-scaffold (`skill_scaffolder init`), memvalidasi kepatuhan OpSec & format YAML (`skill_scaffolder validate`), dan mem-backup skill kustom ke GitHub (`skill_scaffolder sync`). Aina dapat mengembangkan dan memperluas kapabilitasnya sendiri secara mandiri dan persisten.
 * **Progressive Disclosure**: AGY CLI hanya membaca YAML frontmatter (`name` dan `description`) dari file `SKILL.md` ke dalam *system prompt* awal. Instruksi langkah-demi-langkah dan skrip pembantu hanya dimuat via `view_file` jika LLM secara sadar memutuskan mengaktifkannya, menghemat **80–85% token context**.
 
 ### 2. Built-in Skill: Tata Kelola Rahasia Terpusat (`skills/infisical`)
@@ -569,6 +571,40 @@ Agar skill kustom yang dibuat pengguna dapat dipindahkan saat Aina berganti serv
    USER_SKILLS_REPO=https://github.com/username/aina-custom-skills.git
    ```
    Entrypoint Aina (`docker-entrypoint.sh`) akan secara otomatis meng-clone dan me-mount seluruh skill kustom tersebut ke dalam ruang discovery saat kontainer pertama kali menyala!
+
+---
+
+## 🚨 Event Ingress & Observability Multi-Repo (API `/api/v1/events`)
+
+Untuk mendukung peran Aina sebagai **rekan kerja teknis dan asisten observability** bagi puluhan repositori produksi (Sentry, Prometheus Alertmanager, Datadog, GitHub Actions, ArgoCD):
+
+1. **Context-Agnostic Ingress API (`POST /api/v1/events` & `POST /api/events`)**:
+   Menerima payload alert atau event sistem secara bebas, memformat konteks terstruktur, dan mengembalikan respon instan HTTP `202 Accepted` (<5ms) ke antrean investigasi otonom Aina.
+2. **Model Autentikasi Fleksibel**:
+   Mendukung env `AINA_EVENTS_API_KEY` (dengan fallback ke `ADMIN_KEY` / `WHATSMEOW_API_KEY`) via header `X-API-Key`, `Authorization: Bearer`, atau query parameter `?api_key=...`.
+3. **Zero-Bloat Secret Management (JIT Vault Injection)**:
+   Aina mengakses brankas rahasia terpusat (Infisical / Vault) tanpa menanam SDK berat di binary Rust core. Menggunakan pola sub-process CLI `secret_tool run -- ...` yang menyuntikkan kredensial repositori langsung ke proses investigasi tanpa pernah menulis secret ke file disk.
+4. **Skill Bawaan Triase Insiden (`skills/event-triage`)**:
+   Dilengkapi SOP Root Cause Analysis (RCA), klasifikasi tingkat keparahan (*Critical/Error/Warning/Info*), dan mitigasi otomatis.
+
+```bash
+# Contoh pengiriman event alert dari sistem monitoring atau CI/CD:
+curl -X POST http://localhost:8080/api/v1/events \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_EVENTS_API_KEY" \
+  -d '{
+    "source": "sentry",
+    "event": "alert",
+    "severity": "critical",
+    "service": "billing-service",
+    "repository": "my-org/billing-service",
+    "title": "Payment gateway timeout spike > 15%",
+    "details": "Connection pool exhausted on postgres-replica-02",
+    "suggested_actions": ["check_active_connections", "verify_replica_health"]
+  }'
+```
+
+> 📖 **Panduan Lengkap & Dokumentasi Arsitektur**: Baca [Dokumentasi Lengkap Event Ingress & Observability](docs/EVENTS_AND_OBSERVABILITY.md).
 
 ---
 

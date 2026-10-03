@@ -53,6 +53,32 @@ mkdir -p /app/data/shared_data
 ln -sfn /app/data/shared_data /app/shared_data
 ln -sfn /app/data/shared_data "${AGENT_WORKSPACE:-/app/workspaces/default}/shared_data"
 
+# Ensure persistent config directory (persona, character, activities, organization) across Coolify redeployments
+mkdir -p /app/data/config /app/data/config/history
+mkdir -p "${AGENT_WORKSPACE:-/app/workspaces/default}/data"
+ln -sfn /app/data/custom-skills "${AGENT_WORKSPACE:-/app/workspaces/default}/data/custom-skills" 2>/dev/null || true
+
+for cfg in persona.md character.md activities.md organization.md; do
+    # 1. Always keep pristine default template from image available for factory reset
+    if [ -f "/app/config/${cfg}.default.md" ]; then
+        cp "/app/config/${cfg}.default.md" "/app/data/config/${cfg}.default.md" 2>/dev/null || true
+    elif [ -f "/app/config/${cfg}.default" ]; then
+        cp "/app/config/${cfg}.default" "/app/data/config/${cfg}.default.md" 2>/dev/null || true
+    elif [ -f "/app/config/${cfg}" ] && [ ! -f "/app/data/config/${cfg}.default.md" ]; then
+        cp "/app/config/${cfg}" "/app/data/config/${cfg}.default.md" 2>/dev/null || true
+    fi
+
+    # 2. Initialize active config in persistent volume on first deployment if not yet present
+    if [ ! -f "/app/data/config/${cfg}" ] && [ -f "/app/config/${cfg}" ]; then
+        cp "/app/config/${cfg}" "/app/data/config/${cfg}" 2>/dev/null || true
+    fi
+
+    # 3. Symlink /app/config file to persistent storage in /app/data/config
+    if [ -f "/app/data/config/${cfg}" ]; then
+        ln -sfn "/app/data/config/${cfg}" "/app/config/${cfg}" 2>/dev/null || true
+    fi
+done
+
 # Ensure persistent Python environment across Coolify redeployments
 export PYTHONUSERBASE="/app/data/python-packages"
 mkdir -p "$PYTHONUSERBASE/bin" "$PYTHONUSERBASE/lib/python3.11/site-packages"
@@ -112,6 +138,8 @@ if [ -d "/app/skills" ]; then
     ln -sf /app/skills/vision-document-extractor/scripts/doc_extract.py /usr/local/bin/agy-doc-extract 2>/dev/null || true
     ln -sf /app/skills/vision-document-extractor/scripts/doc_extract.py /usr/local/bin/doc_extract 2>/dev/null || true
     ln -sf /app/skills/infisical/scripts/secret_tool.py /usr/local/bin/secret_tool 2>/dev/null || true
+    ln -sf /app/skills/event-triage/scripts/event_triage_tool.py /usr/local/bin/event_triage_tool 2>/dev/null || true
+    ln -sf /app/skills/skill-builder/scripts/skill_scaffolder.py /usr/local/bin/skill_scaffolder 2>/dev/null || true
 fi
 
 # Sync user custom skills into workspace discovery directory

@@ -1,4 +1,4 @@
-use crate::core::domain::VersionEngine;
+use crate::core::domain::{PersonaLifecycleManager, VersionEngine};
 use crate::core::ports::SessionStorePort;
 use std::path::PathBuf;
 
@@ -198,18 +198,66 @@ pub async fn handle_update(args: &[String]) -> anyhow::Result<()> {
 pub async fn handle_persona(args: &[String]) -> anyhow::Result<()> {
     if args.is_empty() || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
         println!(
-            r#"Manajemen Observabilitas & Status WhatsApp Persona Aina:
-    aina persona diag [--json]           Diagnostik & observabilitas Persona Status Engine
-    aina persona journal [--limit <n>]   Riwayat jurnal publikasi status WhatsApp
-    aina persona check [--slot <slot>]   Periksa kuota & evaluasi posting slot waktu saat ini
-    aina persona post [--slot <slot>]    Eksekusi pembuatan & publikasi status WhatsApp
-    aina persona inspire                 Panduan konteks ruang imajinasi kreatif Aina
+            r#"Manajemen Persona, Konfigurasi & Status WhatsApp Aina:
+
+  Konfigurasi, Persistensi & Rollback:
+    aina persona status [--json]                Periksa status file persona, ukuran & ketersediaan backup
+    aina persona backup [target] [-m "alasan"]  Buat titik pemulihan (snapshot) sebelum melakukan perubahan
+    aina persona history [target] [--json]      Daftar seluruh riwayat snapshot dan titik rollback
+    aina persona rollback [target] [id]         Batalkan perubahan dan kembali ke snapshot sebelumnya
+    aina persona reset [target]                 Kembalikan konfigurasi ke template bawaan pabrik (Default)
+    aina persona set [target] "<isi_teks>"      Perbarui konfigurasi secara aman (otomatis membuat backup)
+
+    Target yang didukung: persona (default), character, activities, organization
+
+  Observabilitas & Status WhatsApp (Story):
+    aina persona diag [--json]                  Diagnostik & observabilitas Persona Status Engine
+    aina persona journal [--limit <n>]          Riwayat jurnal publikasi status WhatsApp
+    aina persona check [--slot <slot>]          Periksa kuota & evaluasi posting slot waktu saat ini
+    aina persona post [--slot <slot>]           Eksekusi pembuatan & publikasi status WhatsApp
+    aina persona inspire                        Panduan konteks ruang imajinasi kreatif Aina
 "#
         );
         return Ok(());
     }
 
     let subcmd = args[0].as_str();
+    let is_json = args.iter().any(|a| a == "--json");
+
+    // 1. Direct Rust Persona Configuration Lifecycle Subcommands
+    match subcmd {
+        "status" => {
+            let mgr = PersonaLifecycleManager::from_env();
+            return handle_persona_status(&mgr, is_json).await;
+        }
+        "backup" | "snapshot" => {
+            let mgr = PersonaLifecycleManager::from_env();
+            return handle_persona_backup(&mgr, &args[1..]).await;
+        }
+        "history" | "backups" | "snapshots" | "history-config" => {
+            // If the user specified a config target or passed flags, or if subcmd is explicitly backups/snapshots
+            if subcmd == "backups" || subcmd == "snapshots" || subcmd == "history-config" || (args.len() > 1 && !args[1].starts_with("--limit")) {
+                let mgr = PersonaLifecycleManager::from_env();
+                return handle_persona_history(&mgr, &args[1..], is_json).await;
+            }
+            // Otherwise, fall through to python persona_status.py history for WhatsApp status publication journal
+        }
+        "rollback" | "undo" | "revert" => {
+            let mgr = PersonaLifecycleManager::from_env();
+            return handle_persona_rollback(&mgr, &args[1..]).await;
+        }
+        "reset" | "restore-default" | "factory-reset" => {
+            let mgr = PersonaLifecycleManager::from_env();
+            return handle_persona_reset(&mgr, &args[1..]).await;
+        }
+        "set" | "update" => {
+            let mgr = PersonaLifecycleManager::from_env();
+            return handle_persona_set(&mgr, &args[1..]).await;
+        }
+        _ => {}
+    }
+
+    // 2. Python-based WhatsApp Status Publication Subcommands
     let script_candidates = [
         std::env::current_dir()
             .unwrap_or_else(|_| PathBuf::from("."))
@@ -280,6 +328,187 @@ pub async fn handle_persona(args: &[String]) -> anyhow::Result<()> {
         std::process::exit(status.code().unwrap_or(1));
     }
 
+    Ok(())
+}
+
+async fn handle_persona_status(mgr: &PersonaLifecycleManager, is_json: bool) -> anyhow::Result<()> {
+    let statuses = mgr.get_status()?;
+    if is_json {
+        println!("{}", serde_json::to_string_pretty(&statuses)?);
+        return Ok(());
+    }
+
+    println!("🌸 Status Konfigurasi & Persistensi Persona Aina:");
+    println!("Direktori Konfigurasi: {}", mgr.config_dir.display());
+    println!("{:-<78}", "");
+    println!("{:<18} | {:<8} | {:<10} | {:<10} | {:<22}", "Target", "Status", "Ukuran", "Snapshots", "Update Terakhir");
+    println!("{:-<78}", "");
+    for s in &statuses {
+        let status_str = if s.exists { "Aktif" } else { "Kosong" };
+        let size_str = if s.exists { format!("{} B", s.byte_size) } else { "-".to_string() };
+        let default_badge = if s.default_template_exists { "✓ Default" } else { "✗" };
+        let time_str = s.last_modified.as_deref().unwrap_or("-");
+        println!(
+            "{:<18} | {:<8} | {:<10} | {:<10} | {:<22}",
+            s.target_file,
+            status_str,
+            size_str,
+            format!("{} ({})", s.snapshot_count, default_badge),
+            time_str
+        );
+    }
+    println!("{:-<78}", "");
+    println!("💡 Perintah Rollback & Restore:");
+    println!("   • Buat snapshot   : `aina persona backup [target] [-m \"alasan\"]`");
+    println!("   • Lihat riwayat   : `aina persona history [target]`");
+    println!("   • Rollback versi  : `aina persona rollback [target] [id]`");
+    println!("   • Reset ke pabrik : `aina persona reset [target]`");
+    Ok(())
+}
+
+async fn handle_persona_backup(mgr: &PersonaLifecycleManager, args: &[String]) -> anyhow::Result<()> {
+    let mut target = "persona";
+    let mut reason = "Manual CLI snapshot".to_string();
+
+    let mut i = 0;
+    while i < args.len() {
+        if (args[i] == "--reason" || args[i] == "-m") && i + 1 < args.len() {
+            reason = args[i + 1].clone();
+            i += 2;
+        } else if !args[i].starts_with('-') {
+            target = args[i].as_str();
+            i += 1;
+        } else {
+            i += 1;
+        }
+    }
+
+    let snap = mgr.create_snapshot(target, &reason)?;
+    println!("✅ Snapshot konfigurasi berhasil dibuat!");
+    println!("   • Target       : {}", snap.target_file);
+    println!("   • Snapshot ID  : {}", snap.id);
+    println!("   • Waktu        : {}", snap.created_at_formatted);
+    println!("   • Ukuran       : {} byte ({} baris)", snap.byte_size, snap.line_count);
+    println!("   • Keterangan   : {}", snap.reason);
+    println!("   • Berkas Backup: history/{}", snap.backup_filename);
+    println!("\n💡 Untuk membatalkan perubahan kapan saja: `aina persona rollback {} {}`", target, snap.id);
+    Ok(())
+}
+
+async fn handle_persona_history(
+    mgr: &PersonaLifecycleManager,
+    args: &[String],
+    is_json: bool,
+) -> anyhow::Result<()> {
+    let target = args.iter().find(|a| !a.starts_with('-')).map(|s| s.as_str()).unwrap_or("persona");
+    let snapshots = mgr.list_snapshots(target)?;
+
+    if is_json {
+        println!("{}", serde_json::to_string_pretty(&snapshots)?);
+        return Ok(());
+    }
+
+    println!("📜 Riwayat Snapshot & Titik Rollback ({}):", PersonaLifecycleManager::normalize_target(target));
+    if snapshots.is_empty() {
+        println!("   (Belum ada snapshot untuk {}. Buat dengan `aina persona backup {}`)", target, target);
+        return Ok(());
+    }
+
+    println!("{:-<78}", "");
+    println!("{:<18} | {:<22} | {:<8} | {}", "ID Snapshot", "Waktu Pembuatan", "Ukuran", "Keterangan");
+    println!("{:-<78}", "");
+    for s in &snapshots {
+        println!(
+            "{:<18} | {:<22} | {:<8} | {}",
+            s.id,
+            s.created_at_formatted,
+            format!("{} B", s.byte_size),
+            s.reason
+        );
+    }
+    println!("{:-<78}", "");
+    println!("💡 Untuk rollback ke salah satu versi: `aina persona rollback {} <ID>`", target);
+    println!("💡 Untuk kembali ke versi sebelumnya secara instan: `aina persona rollback {}`", target);
+    Ok(())
+}
+
+async fn handle_persona_rollback(mgr: &PersonaLifecycleManager, args: &[String]) -> anyhow::Result<()> {
+    let mut target = "persona";
+    let mut snapshot_id = None;
+
+    for arg in args {
+        if !arg.starts_with('-') {
+            if target == "persona" && (arg == "character" || arg == "activities" || arg == "organization" || arg == "persona") {
+                target = arg.as_str();
+            } else if snapshot_id.is_none() {
+                snapshot_id = Some(arg.as_str());
+            }
+        }
+    }
+
+    let outcome = mgr.rollback(target, snapshot_id)?;
+    println!("🔄 Berhasil melakukan rollback konfigurasi!");
+    println!("   • Target            : {}", outcome.target_file);
+    println!("   • Dipulihkan Dari   : {}", outcome.restored_from_snapshot_id);
+    println!("   • Ukuran Setelahnya : {} byte", outcome.restored_byte_size);
+    println!("   • Safety Backup ID  : {} (Keadaan sebelum rollback disimpan aman)", outcome.safety_snapshot_id);
+    println!("\n✨ Perubahan langsung aktif seketika pada giliran percakapan berikutnya (hot-reloaded)!");
+    Ok(())
+}
+
+async fn handle_persona_reset(mgr: &PersonaLifecycleManager, args: &[String]) -> anyhow::Result<()> {
+    let target = args.iter().find(|a| !a.starts_with('-')).map(|s| s.as_str()).unwrap_or("persona");
+
+    let outcome = mgr.restore_default(target)?;
+    println!("🏭 Konfigurasi berhasil direset ke template bawaan pabrik (Default)!");
+    println!("   • Target            : {}", outcome.target_file);
+    println!("   • Template Rujukan  : {}", outcome.template_path);
+    println!("   • Ukuran Dipulihkan : {} byte", outcome.restored_byte_size);
+    println!("   • Safety Backup ID  : {} (Keadaan sebelum reset tersimpan aman)", outcome.safety_snapshot_id);
+    println!("\n✨ Perubahan langsung aktif seketika pada giliran percakapan berikutnya (hot-reloaded)!");
+    Ok(())
+}
+
+async fn handle_persona_set(mgr: &PersonaLifecycleManager, args: &[String]) -> anyhow::Result<()> {
+    if args.is_empty() {
+        eprintln!("Penggunaan: aina persona set [target] \"<konten_baru>\" [-m \"alasan\"]");
+        std::process::exit(1);
+    }
+
+    let mut target = "persona";
+    let mut content = None;
+    let mut reason = "Updated via CLI aina persona set".to_string();
+
+    let mut i = 0;
+    while i < args.len() {
+        if (args[i] == "--reason" || args[i] == "-m") && i + 1 < args.len() {
+            reason = args[i + 1].clone();
+            i += 2;
+        } else if content.is_none() && (args[i] == "persona" || args[i] == "character" || args[i] == "activities" || args[i] == "organization") {
+            target = args[i].as_str();
+            i += 1;
+        } else if content.is_none() {
+            content = Some(args[i].clone());
+            i += 1;
+        } else {
+            i += 1;
+        }
+    }
+
+    let new_content = match content {
+        Some(c) => c,
+        None => {
+            eprintln!("Teks konten baru belum ditentukan. Contoh: `aina persona set \"Gaya baru...\"`");
+            std::process::exit(1);
+        }
+    };
+
+    let snap = mgr.set_content(target, &new_content, &reason)?;
+    println!("✅ Konfigurasi {} berhasil diperbarui!", snap.target_file);
+    println!("   • Pre-update Safety Snapshot ID: {}", snap.id);
+    println!("   • Ukuran Baru                  : {} byte", new_content.len());
+    println!("\n✨ Perubahan langsung aktif seketika pada giliran percakapan berikutnya (hot-reloaded)!");
+    println!("💡 Untuk membatalkan kapan saja: `aina persona rollback {}`", target);
     Ok(())
 }
 

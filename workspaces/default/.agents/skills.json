@@ -7,6 +7,9 @@
       "path": "data/custom-skills"
     },
     {
+      "path": "../../data/custom-skills"
+    },
+    {
       "path": "/app/skills"
     },
     {

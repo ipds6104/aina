@@ -59,6 +59,8 @@ pub fn create_router(state: Arc<WebhookServerState>) -> Router {
         .route("/api/audit/presence", get(api_audit_presence_handler))
         .route("/api/audit/presence/stop", post(api_audit_presence_stop_handler))
         .route("/webhook", post(webhook_handler))
+        .route("/api/v1/events", post(events_ingress_handler))
+        .route("/api/events", post(events_ingress_handler))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
         .with_state(state)
 }
@@ -689,6 +691,7 @@ mod tests {
             companion_base_url: None,
             companion_api_key: None,
             setup_code: "SECRET123".to_string(),
+            events_api_key: None,
             timezone: "Asia/Jakarta".to_string(),
             locale: "id".to_string(),
             sim_jobs: Arc::new(RwLock::new(HashMap::new())),
@@ -801,6 +804,7 @@ mod tests {
             companion_base_url: None,
             companion_api_key: None,
             setup_code: "SETUP_SECRET_777".to_string(),
+            events_api_key: None,
             timezone: "Asia/Jakarta".to_string(),
             locale: "id".to_string(),
             sim_jobs: Arc::new(RwLock::new(HashMap::new())),
@@ -922,6 +926,85 @@ mod tests {
         let clear_data: serde_json::Value = clear_resp.json().await.unwrap();
         assert_eq!(clear_data["success"], true);
 
+        // 9. Test /api/v1/events and /api/events endpoint
+        // 9a. Unauthorized without key -> 401
+        let unauth_evt = client
+            .post(format!("http://{}/api/v1/events", aina_addr))
+            .json(&json!({
+                "source": "sentry",
+                "title": "Payment gateway timeout spike",
+                "severity": "critical"
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(unauth_evt.status(), StatusCode::UNAUTHORIZED);
+
+        // 9b. Authorized with X-API-Key matching setup_code -> 202 Accepted
+        let auth_evt_resp = client
+            .post(format!("http://{}/api/v1/events", aina_addr))
+            .header("X-API-Key", "SETUP_SECRET_777")
+            .json(&json!({
+                "source": "sentry",
+                "event": "alert",
+                "severity": "critical",
+                "service": "billing-service",
+                "repository": "org/billing-service",
+                "title": "Payment gateway timeout spike > 15%",
+                "details": "Connection pool exhausted on postgres-replica-02",
+                "metadata": { "env": "production", "region": "ap-southeast-1" },
+                "target_chat": "628999888777@s.whatsapp.net",
+                "suggested_actions": ["check_logs", "restart_replica"]
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(auth_evt_resp.status(), StatusCode::ACCEPTED);
+        let auth_evt_data: serde_json::Value = auth_evt_resp.json().await.unwrap();
+        assert_eq!(auth_evt_data["status"], "accepted");
+        assert!(auth_evt_data["event_id"].as_str().unwrap().starts_with("evt_"));
+        assert_eq!(auth_evt_data["source"], "sentry");
+        assert_eq!(auth_evt_data["severity"], "critical");
+        assert_eq!(auth_evt_data["service"], "billing-service");
+        assert_eq!(auth_evt_data["target_chat"], "628999888777@s.whatsapp.net");
+
+        // 9c. Authorized alias /api/events with Bearer token -> 202 Accepted
+        let alias_evt_resp = client
+            .post(format!("http://{}/api/events", aina_addr))
+            .header("Authorization", "Bearer SETUP_SECRET_777")
+            .json(&json!({
+                "source": "github-actions",
+                "event": "pipeline_failed",
+                "severity": "error",
+                "service": "auth-service",
+                "title": "CI build failed on main branch",
+                "details": "Unit tests failed on cargo test --lib"
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(alias_evt_resp.status(), StatusCode::ACCEPTED);
+        let alias_evt_data: serde_json::Value = alias_evt_resp.json().await.unwrap();
+        assert_eq!(alias_evt_data["status"], "accepted");
+        assert_eq!(alias_evt_data["service"], "auth-service");
+
+        // 9d. Authorized via query param ?api_key=... with arbitrary vendor JSON -> 202 Accepted
+        let query_evt_resp = client
+            .post(format!("http://{}/api/v1/events?api_key=SETUP_SECRET_777", aina_addr))
+            .json(&json!({
+                "alerts": [
+                    { "status": "firing", "labels": { "alertname": "HighCPUUsage", "job": "node_exporter" } }
+                ],
+                "commonAnnotations": { "summary": "Node 04 CPU > 95% for 5m" }
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(query_evt_resp.status(), StatusCode::ACCEPTED);
+        let query_evt_data: serde_json::Value = query_evt_resp.json().await.unwrap();
+        assert_eq!(query_evt_data["status"], "accepted");
+
         let _ = tokio::fs::remove_dir_all(&temp_dir).await;
     }
 }
+

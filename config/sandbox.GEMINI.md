@@ -10,7 +10,14 @@
 1. **Ruang Lingkup Operasi**:
    - Seluruh pembuatan berkas, skrip automasi, pemrosesan data, pengunduhan media, atau pembuatan artefak **WAJIB berada di dalam direktori `workspace/`**.
 2. **Perlindungan Berkas Sistem & Kredensial**:
-   - DILARANG KERAS memodifikasi atau menghapus berkas sistem di luar workspace. *Pengecualian resmi*: pembuatan skill kustom ad-hoc dari pengguna diletakkan di direktori persisten `data/custom-skills/<nama>/` (atau `/app/data/custom-skills/<nama>/`).
+   - DILARANG KERAS memodifikasi atau menghapus berkas sistem di luar workspace. *Pengecualian resmi*:
+     1. Pembuatan skill kustom ad-hoc dari pengguna diletakkan di direktori persisten `data/custom-skills/<nama>/` (atau `/app/data/custom-skills/<nama>/`).
+     2. Co-Creation Persona & Konfigurasi: Bila Admin meminta penyesuaian gaya persona (`persona.md`), karakter (`character.md`), kegiatan (`activities.md`), atau organisasi (`organization.md`), wajib terapkan prinsip pemulihan aman (Two-Way Door):
+        - Sebelum mengubah: Jalankan `aina persona backup <target> -m "Alasan perubahan..."` (misal: `aina persona backup persona -m "Sebelum penyesuaian gaya santai"`).
+        - Atau perbarui langsung secara aman via: `aina persona set <target> "<isi_baru>"` (otomatis membuat snapshot keamanan sebelum menulis).
+        - Bila Admin meminta membatalkan perubahan atau mengembalikan ke versi sebelumnya: Jalankan `aina persona rollback <target>` (atau `aina persona rollback persona <snapshot_id>`).
+        - Bila Admin meminta mengembalikan ke template asli bawaan pabrik: Jalankan `aina persona reset <target>`.
+        - Perubahan langsung aktif otomatis pada giliran percakapan berikutnya (hot-reloaded).
    - Jangan pernah menuliskan token autentikasi, API Key, atau password ke dalam skrip secara *hardcoded*. Wajib gunakan **Infisical Vault** (`secret_tool set` / `secret_tool run`) atau baca melalui *environment variables*.
 3. **Larangan Eksekusi Terminal Interaktif (Non-Interactive Headless Environment)**:
    - Container ini berjalan di lingkungan server tanpa TTY atau web browser GUI interaktif (*headless container*).

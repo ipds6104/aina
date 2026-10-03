@@ -57,6 +57,7 @@ pub struct WebhookServerState {
     pub companion_base_url: Option<String>,
     pub companion_api_key: Option<String>,
     pub setup_code: String,
+    pub events_api_key: Option<String>,
     pub timezone: String,
     pub locale: String,
     pub sim_jobs: Arc<RwLock<HashMap<String, SimulationJob>>>,

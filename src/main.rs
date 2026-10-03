@@ -70,9 +70,14 @@ async fn main() -> anyhow::Result<()> {
         config.whatsmeow.companion_api_key.clone(),
     ).with_presence_tracker(Arc::clone(&presence_tracker)));
 
-    let persona_engine = Arc::new(PersonaEngine::new(
+    let persona_path = std::path::PathBuf::from(&config.agent.persona_file);
+    let org_path = std::path::PathBuf::from(&config.agent.organization_file);
+
+    let persona_engine = Arc::new(PersonaEngine::with_file_paths(
         persona_text,
         org_text,
+        Some(persona_path),
+        Some(org_path),
         config.agent.admin_jid.clone(),
         config.app.timezone.clone(),
         config.app.timezone_offset_hours,
@@ -142,6 +147,7 @@ async fn main() -> anyhow::Result<()> {
         companion_base_url: config.whatsmeow.companion_base_url.clone(),
         companion_api_key: config.whatsmeow.companion_api_key.clone(),
         setup_code,
+        events_api_key: std::env::var("AINA_EVENTS_API_KEY").or_else(|_| std::env::var("EVENTS_API_KEY")).ok(),
         timezone: config.app.timezone.clone(),
         locale: config.app.locale.clone(),
         sim_jobs: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
