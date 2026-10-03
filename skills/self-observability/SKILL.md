@@ -55,6 +55,20 @@ Jalankan:
 python3 skills/self-observability/scripts/analyze_telemetry.py recommendations
 ```
 
+### SOP 5: Deep Dive Latar Belakang Percakapan & Jejak Nalar (Conversational Trace)
+Untuk menelusuri percakapan WhatsApp apa atau instruksi apa yang melatarbelakangi pemanggilan suatu tool tertentu:
+```bash
+python3 skills/self-observability/scripts/analyze_telemetry.py trace <tool_name_or_keyword> [--limit 5] [--chat <chat_jid>]
+# Contoh:
+python3 skills/self-observability/scripts/analyze_telemetry.py trace "curl"
+python3 skills/self-observability/scripts/analyze_telemetry.py trace "search_web"
+python3 skills/self-observability/scripts/analyze_telemetry.py trace "git status"
+```
+*Script ini otomatis menghubungkan:*
+1. **Pesan & Riwayat WhatsApp**: Menampilkan prompt pengguna, respons Aina, serta dialog obrolan sebelum dan sesudahnya (`message_history`).
+2. **Jejak Nalar AI (`thinking`)**: Menampilkan proses berpikir internal (*chain-of-thought*) mengapa tool tersebut diputuskan untuk dipanggil.
+3. **Detail Argumen & Parameter**: Menampilkan parameter teknis yang dieksekusi tool.
+
 ---
 
 ## 3. Matriks Keputusan: Built-in (Rust Core) vs Custom Skill

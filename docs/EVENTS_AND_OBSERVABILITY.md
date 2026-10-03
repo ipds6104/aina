@@ -312,6 +312,12 @@ Aina memiliki kemampuan **self-introspection** empiris dengan sumber data teleme
    - `python3 skills/self-observability/scripts/analyze_telemetry.py tools`
    - `python3 skills/self-observability/scripts/analyze_telemetry.py bottlenecks`
    - `python3 skills/self-observability/scripts/analyze_telemetry.py recommendations`
+   - `python3 skills/self-observability/scripts/analyze_telemetry.py trace <tool_or_query>` (Deep-dive latar belakang percakapan WhatsApp, jejak nalar *thinking*, dan parameter alat).
+
+4. **Penelusuran Ulang Multi-Sumber (Deep-Dive Cross-Exploration)**:
+   - **WhatsApp Message History**: Menampilkan 5 percakapan sebelum & sesudah aksi terkait di tabel `message_history` atau arsip FTS5 `aina archive search`.
+   - **AI Reasoning Trace**: Menampilkan blok `thinking` asli saat AI memutuskan memanggil tool tersebut di AGY transcript.
+   - **Episodic Memory Recall**: `python3 skills/memory-recall/scripts/recall.py search "<kata_kunci>"` untuk melacak riwayat obrolan topik terkait.
 
 ---
 

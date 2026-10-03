@@ -201,9 +201,122 @@ def generate_recommendations(sql_data: Dict[str, Any], trans_data: Dict[str, Any
     return recs
 
 
+def trace_tool_context(
+    query: str,
+    db_path: str = DEFAULT_DB_PATH,
+    brain_dir: str = DEFAULT_BRAIN_DIR,
+    limit: int = 5,
+    chat_filter: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Deep-dives into past WhatsApp interactions and AGY transcripts to uncover the exact
+    conversations, user prompts, surrounding chat dialogue, and AI thinking traces
+    that prompted the tool invocations.
+    """
+    whatsapp_matches = []
+    transcript_matches = []
+
+    # 1. Search SQLite whatsapp_action_audits & message_history
+    if os.path.isfile(db_path):
+        try:
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+
+            sql = """
+                SELECT id, message_id, chat_jid, sender_jid, decision,
+                       conversation_id, status, input_text, response_text,
+                       duration_seconds, tools_invoked, usecase, created_at_epoch
+                FROM whatsapp_action_audits
+                WHERE (tools_invoked LIKE ? OR input_text LIKE ? OR usecase LIKE ?)
+            """
+            params = [f"%{query}%", f"%{query}%", f"%{query}%"]
+            if chat_filter:
+                sql += " AND (chat_jid = ? OR sender_jid = ?)"
+                params.extend([chat_filter, chat_filter])
+            sql += " ORDER BY id DESC LIMIT ?"
+            params.append(limit)
+
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+
+            for r in rows:
+                row_dict = dict(r)
+                chat_jid = row_dict["chat_jid"]
+                surrounding = []
+                try:
+                    cur.execute(
+                        "SELECT id, sender_jid, text, is_from_me, created_at FROM message_history WHERE chat_jid = ? ORDER BY id DESC LIMIT 5",
+                        [chat_jid]
+                    )
+                    surrounding = [dict(sr) for sr in reversed(cur.fetchall())]
+                except Exception:
+                    pass
+
+                row_dict["surrounding_chat"] = surrounding
+                whatsapp_matches.append(row_dict)
+
+            conn.close()
+        except Exception:
+            pass
+
+    # 2. Search AGY Brain Transcripts
+    transcripts = glob.glob(os.path.join(brain_dir, "*", ".system_generated", "logs", "transcript.jsonl"))
+    q_lower = query.lower()
+
+    for t_path in transcripts:
+        if len(transcript_matches) >= limit:
+            break
+        try:
+            session_id = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(t_path))))
+            with open(t_path, "r", encoding="utf-8") as f:
+                current_user_prompt = ""
+                for line in f:
+                    if not line.strip():
+                        continue
+                    data = json.loads(line)
+                    if data.get("type") == "USER_INPUT":
+                        current_user_prompt = data.get("content", "").strip()
+
+                    tool_calls = data.get("tool_calls", [])
+                    matched_call = None
+                    for tc in tool_calls:
+                        tname = tc.get("name", "")
+                        args_str = json.dumps(tc.get("args", {})).lower()
+                        if q_lower in tname.lower() or q_lower in args_str:
+                            matched_call = tc
+                            break
+
+                    if matched_call:
+                        thinking = data.get("thinking", "").strip()
+                        transcript_matches.append({
+                            "session_id": session_id,
+                            "user_prompt": current_user_prompt,
+                            "thinking_trace": thinking[:300] + ("..." if len(thinking) > 300 else ""),
+                            "matched_tool": matched_call.get("name"),
+                            "tool_action": (matched_call.get("args") or {}).get("toolAction"),
+                            "tool_summary": (matched_call.get("args") or {}).get("toolSummary"),
+                            "arguments": matched_call.get("args"),
+                            "timestamp": data.get("created_at"),
+                        })
+                        if len(transcript_matches) >= limit:
+                            break
+        except Exception:
+            continue
+
+    return {
+        "query": query,
+        "whatsapp_audit_matches": whatsapp_matches,
+        "transcript_deep_dive_matches": transcript_matches,
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description="Aina Telemetry & Tool Usage Analyzer")
-    parser.add_argument("command", choices=["summary", "tools", "bottlenecks", "recommendations"], help="Analysis mode")
+    parser.add_argument("command", choices=["summary", "tools", "bottlenecks", "recommendations", "trace"], help="Analysis mode")
+    parser.add_argument("query", nargs="?", default="", help="Query or tool name for 'trace' deep-dive")
+    parser.add_argument("--limit", type=int, default=5, help="Result limit for trace")
+    parser.add_argument("--chat", default=None, help="Filter WhatsApp chat JID")
     parser.add_argument("--json", action="store_true", help="Output raw JSON")
     parser.add_argument("--db", default=DEFAULT_DB_PATH, help="Path to SQLite database")
     parser.add_argument("--brain", default=DEFAULT_BRAIN_DIR, help="Path to AGY brain directory")
@@ -285,6 +398,55 @@ def main():
                 print(f"   Alasan                     : {r['rationale']}")
                 print(f"   Aksi Konkret               : {r['action']}\n")
 
+    elif args.command == "trace":
+        if not args.query:
+            print("Error: query/tool_name wajib diberikan untuk perintah 'trace'. Contoh: analyze_telemetry.py trace curl")
+            sys.exit(1)
+
+        trace_data = trace_tool_context(args.query, args.db, args.brain, args.limit, args.chat)
+        if args.json:
+            print(json.dumps(trace_data, indent=2, default=str))
+        else:
+            print(f"🔍 DEEP DIVE: LATAR BELAKANG PERCAKAPAN UNTUK '{args.query}'\n" + "="*60)
+            wa_matches = trace_data.get("whatsapp_audit_matches", [])
+            trans_matches = trace_data.get("transcript_deep_dive_matches", [])
+
+            if not wa_matches and not trans_matches:
+                print(f"Tidak ditemukan jejak pemanggilan alat atau percakapan yang cocok dengan query '{args.query}'.")
+                return
+
+            if wa_matches:
+                print(f"📱 Temuan di WhatsApp Action Audits ({len(wa_matches)} kejadian):")
+                for i, m in enumerate(wa_matches, 1):
+                    print(f"\n[{i}] ID Aksi: #{m.get('id')} | Chat: {m.get('chat_jid')}")
+                    print(f"    • Pesan User : {m.get('input_text')}")
+                    print(f"    • Alat       : {m.get('tools_invoked')}")
+                    print(f"    • Respons AI : {(m.get('response_text') or '')[:120]}...")
+                    if m.get("surrounding_chat"):
+                        print("    💬 Konteks Obrolan Terkait (Message History):")
+                        for sc in m["surrounding_chat"]:
+                            role = "Aina" if sc.get("is_from_me") else "User"
+                            print(f"       - [{role}]: {sc.get('text', '')[:100]}")
+
+            if trans_matches:
+                print(f"\n🧠 Temuan di AGY Brain Transcripts ({len(trans_matches)} sesi):")
+                for i, tm in enumerate(trans_matches, 1):
+                    print(f"\n[{i}] Sesi: {tm.get('session_id')[:18]}... | Waktu: {tm.get('timestamp')}")
+                    clean_prompt = tm.get('user_prompt', '').replace('\n', ' ')
+                    if len(clean_prompt) > 140:
+                        clean_prompt = clean_prompt[:137] + "..."
+                    print(f"    • User Prompt  : {clean_prompt}")
+                    if tm.get('thinking_trace'):
+                        clean_th = tm.get('thinking_trace', '').replace('\n', ' ')
+                        print(f"    • Nalar/Alasan : {clean_th}")
+                    print(f"    • Alat & Action: {tm.get('matched_tool')} ({tm.get('tool_action') or '-'})")
+                    if tm.get('arguments'):
+                        arg_preview = json.dumps(tm.get('arguments'))
+                        if len(arg_preview) > 120:
+                            arg_preview = arg_preview[:117] + "..."
+                        print(f"    • Argumen Tool : {arg_preview}")
+
 
 if __name__ == "__main__":
     main()
+
