@@ -100,12 +100,21 @@ pub fn is_intermediate_agent_status(line: &str) -> bool {
         return true;
     }
 
-    // 3. Task transition patterns
+    // 3. Task transition patterns and background status messages
     if lower.starts_with("the task has almost completed")
         || lower.starts_with("let me inspect the final output")
         || lower.starts_with("tool is running as a background task")
         || lower.starts_with("task logs are available at:")
         || lower.starts_with("you must take one of the following two actions:")
+        || lower.starts_with("the background task is")
+        || lower.starts_with("the task is currently")
+        || lower.starts_with("the command is currently")
+        || lower.starts_with("a background task has been")
+        || lower.starts_with("background task is currently")
+        || (lower.contains("background task") && (lower.contains("as soon as it finishes") || lower.contains("as soon as it completes") || lower.contains("is currently querying") || lower.contains("is currently running")))
+        || (lower.starts_with("i will review") && lower.contains("as soon as it finishes"))
+        || (lower.starts_with("i will inspect") && lower.contains("as soon as it finishes"))
+        || (lower.starts_with("i will check") && lower.contains("as soon as it finishes"))
     {
         return true;
     }
@@ -193,5 +202,21 @@ Tangkapan layar tersebut diambil langsung menggunakan browser headless bawaan pa
         assert!(!cleaned.contains("term_chrome"));
         assert!(cleaned.starts_with("Ini yaa Bang Ihza @Ihza Karunia!"));
         assert!(cleaned.contains("Tangkapan layar tersebut diambil langsung"));
+    }
+
+    #[test]
+    fn test_sanitize_agent_response_strips_background_task_status_leakage() {
+        let raw = r#"The background task is currently querying the GitHub API for pull requests on `ihkaru/sipedas`. I will review the results as soon as it finishes.
+*[TRIAGE OBSERVABILITY] Hasil Investigasi Alert `evt_1791070042_240`*
+
+Halo Tim SRE / OpenObserve, berikut hasil analisis akar masalah (*Root Cause Analysis*) untuk event yang masuk:
+
+• *Layanan:* `sipedas` (https://github.com/ihkaru/sipedas)"#;
+
+        let cleaned = sanitize_agent_response(raw);
+        assert!(!cleaned.contains("The background task is currently querying"));
+        assert!(!cleaned.contains("as soon as it finishes"));
+        assert!(cleaned.starts_with("*[TRIAGE OBSERVABILITY]"));
+        assert!(cleaned.contains("Halo Tim SRE / OpenObserve"));
     }
 }
