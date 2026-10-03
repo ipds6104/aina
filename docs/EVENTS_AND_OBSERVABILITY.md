@@ -296,3 +296,32 @@ Setiap event yang masuk dicatat secara transparan di sistem audit Aina:
    - `GET /api/audit/actions`
    - `GET /api/audit/actions/{id}`
    - `GET /api/audit/summary`
+
+---
+
+## 9. Metakognisi & Self-Observability: Audit Penggunaan Tools (`skills/self-observability`)
+
+Ketika operator atau pengguna di WhatsApp bertanya:
+> *"Aina, dari berbagai tools yang kamu panggil sebelumnya, apa yang sering digunakan dan perlu mekanisme khusus agar lebih cepat? Apakah lebih baik di-built-in ke repo atau cukup custom skill?"*
+
+Aina memiliki kemampuan **self-introspection** empiris dengan sumber data telemetri nyata:
+1. **SQLite Database `whatsapp_action_audits`**: Menyimpan volume aksi, waktu eksekusi (`duration_seconds`), status kegagalan, dan daftar `tools_invoked` per percakapan (membedakan chat owner vs orang lain).
+2. **Antigravity Brain Transcripts (`transcript.jsonl`)**: Menyimpan riwayat jejak langkah sub-detik per pemanggilan tool, parameter command, dan frekuensi riil.
+3. **Skill Helper `analyze_telemetry.py`**:
+   - `python3 skills/self-observability/scripts/analyze_telemetry.py summary`
+   - `python3 skills/self-observability/scripts/analyze_telemetry.py tools`
+   - `python3 skills/self-observability/scripts/analyze_telemetry.py bottlenecks`
+   - `python3 skills/self-observability/scripts/analyze_telemetry.py recommendations`
+
+---
+
+## 10. Matriks Keputusan: Built-in (Rust Core) vs Custom Skill
+
+| Parameter Evaluasi | Pilih **Built-in (Rust Core Daemon)** | Pilih **Custom Skill (`skills/` / Git)** |
+| :--- | :--- | :--- |
+| **Karakteristik Latensi** | Critical Path / Latensi mikrodetik (<10ms, non-blocking I/O) | Toleransi latensi standar (50ms - 2s via subprocess/API) |
+| **Domain Beban Kerja** | Socket protokol (Whatsmeow), routing HTTP API, indexing FTS5, crypto/auth, in-memory cache | Integrasi SaaS/API pihak ketiga (GitHub, Sentry, Notion, Supabase, Infisical) |
+| **Siklus Pembaruan** | Stabil, jarang berubah, memerlukan type-safety compile-time Rust | Dinamis, sering iterasi, domain logic spesifik user |
+| **Blast Radius (Kegagalan)**| Risiko tinggi: Crash pada Rust daemon menghentikan bot | Terisolasi: Script subprocess gagal tidak merusak daemon |
+| **Mekanisme Deployment** | Harus compile binary native & deploy container baru | Cukup hot-reload folder skill / sync repo Git (`USER_SKILLS_REPO`) |
+

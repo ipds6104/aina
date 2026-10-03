@@ -16,6 +16,7 @@ impl Default for SessionLifecyclePolicy {
     }
 }
 
+#[allow(dead_code)]
 impl SessionLifecyclePolicy {
     /// Creates a new policy with explicit inactivity timeout.
     pub fn new(inactivity_timeout_secs: u64) -> Self {

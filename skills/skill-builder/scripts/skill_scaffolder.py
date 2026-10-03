@@ -188,17 +188,22 @@ def cmd_validate(args):
     skill_dir = custom_dir / skill_name
 
     if not skill_dir.is_dir():
-        # Check relative or direct path
-        cand = Path(args.name)
-        if cand.is_dir():
-            skill_dir = cand
-            skill_name = skill_dir.name
+        # Check in project skills/
+        repo_skill = PROJECT_ROOT / "skills" / skill_name
+        if repo_skill.is_dir():
+            skill_dir = repo_skill
         else:
-            print(json.dumps({
-                "status": "error",
-                "message": f"Skill directory not found at {skill_dir}"
-            }))
-            sys.exit(1)
+            # Check relative or direct path
+            cand = Path(args.name)
+            if cand.is_dir():
+                skill_dir = cand
+                skill_name = skill_dir.name
+            else:
+                print(json.dumps({
+                    "status": "error",
+                    "message": f"Skill directory not found at {skill_dir} or {repo_skill}"
+                }))
+                sys.exit(1)
 
     errors = []
     warnings = []
@@ -278,6 +283,27 @@ def cmd_list(args):
                     "path": str(item)
                 })
 
+    # Repo skills
+    repo_skills = []
+    repo_dir = PROJECT_ROOT / "skills"
+    if repo_dir.is_dir():
+        for item in sorted(repo_dir.iterdir()):
+            if item.is_dir() and (item / "SKILL.md").is_file():
+                try:
+                    content = (item / "SKILL.md").read_text(encoding="utf-8")
+                    desc_match = re.search(r"description:\s*(?:>-\s*)?([^\n]+)", content)
+                    desc = desc_match.group(1).strip() if desc_match else "-"
+                    scripts = [f.name for f in (item / "scripts").iterdir() if f.is_file()] if (item / "scripts").is_dir() else []
+                    repo_skills.append({
+                        "name": item.name,
+                        "description": desc,
+                        "scripts_count": len(scripts),
+                        "scripts": scripts,
+                        "path": str(item)
+                    })
+                except Exception:
+                    pass
+
     # Check Git repository status
     git_dir = custom_dir / ".git"
     git_status = {
@@ -295,8 +321,10 @@ def cmd_list(args):
     print(json.dumps({
         "status": "success",
         "custom_skills_dir": str(custom_dir),
-        "skills_count": len(skills),
-        "skills": skills,
+        "custom_skills_count": len(skills),
+        "custom_skills": skills,
+        "repo_skills_count": len(repo_skills),
+        "repo_skills": repo_skills,
         "git_status": git_status
     }, indent=2))
 
