@@ -63,7 +63,65 @@ impl ContextPreparer {
         // 3. Build prompt incorporating persona, organization context, and profiling
         let mut prompt = persona_engine.build_prompt(msg, Some(&profile));
 
-        // 4. Smart On-Demand Episodic Memory Recall (Retrospective Intent Gate)
+        // 4. Group Chat Auto Rolling Ambient Context (up to 10 preceding messages)
+        if msg.chat_type == crate::core::domain::ChatType::Group {
+            let limit = 11; // 10 prior messages + 1 current message (if already recorded)
+            let mut recent = session_store
+                .get_recent_messages(&msg.chat_jid, None, limit)
+                .await
+                .unwrap_or_default();
+
+            // Exclude the current incoming message if it was already recorded in SQLite
+            if let Some(last) = recent.last() {
+                if !last.is_from_me && (last.sender_jid == msg.sender.jid || last.text == msg.text) {
+                    recent.pop();
+                }
+            }
+
+            // Keep up to 10 prior messages
+            if recent.len() > 10 {
+                recent = recent.split_off(recent.len() - 10);
+            }
+
+            if !recent.is_empty() {
+                prompt.push_str("\n\n---\n[KONTEKS OBROLAN TERAKHIR DI GRUP (10 PESAN SEBELUMNYA)]:\n");
+                prompt.push_str("Berikut alur percakapan rekan-rekan di grup sebelum pesan/tag ini. Gunakan untuk memahami konteks jika pengirim merujuk, melanjutkan, atau menimpali obrolan sebelumnya:\n");
+
+                for r in recent {
+                    let sender_display = if r.is_from_me {
+                        "Aina (Bot)".to_string()
+                    } else if r.sender_jid == msg.sender.jid {
+                        msg.sender.name.clone().unwrap_or_else(|| {
+                            r.sender_jid.split('@').next().unwrap_or(&r.sender_jid).to_string()
+                        })
+                    } else {
+                        match session_store.get_user_profile(&r.sender_jid).await {
+                            Ok(Some(p)) if p.name.as_ref().map(|n| !n.trim().is_empty()).unwrap_or(false) => {
+                                let n = p.name.unwrap();
+                                let num = r.sender_jid.split('@').next().unwrap_or(&r.sender_jid);
+                                format!("{} ({})", n, num)
+                            }
+                            _ => {
+                                let num = r.sender_jid.split('@').next().unwrap_or(&r.sender_jid);
+                                format!("Rekan ({})", num)
+                            }
+                        }
+                    };
+
+                    let display_text = if r.text.chars().count() > 300 {
+                        let truncated: String = r.text.chars().take(300).collect();
+                        format!("{}...", truncated)
+                    } else {
+                        r.text
+                    };
+
+                    prompt.push_str(&format!("• [{}] {}: \"{}\"\n", r.created_at, sender_display, display_text));
+                }
+                prompt.push_str("(Pahami alur di atas agar tanggapan Aina nyambung, cerdas, dan luwes dengan apa yang baru saja dibahas di grup).\n");
+            }
+        }
+
+        // 5. Smart On-Demand Episodic Memory Recall (Retrospective Intent Gate)
         let retrospective = crate::core::domain::RetrospectiveDetector::analyze(&msg.text);
         if retrospective.is_retrospective {
             let search_sender = if msg.chat_type == crate::core::domain::ChatType::DirectMessage {
@@ -78,7 +136,7 @@ impl ContextPreparer {
                 Vec::new()
             };
 
-            if recalled_msgs.is_empty() {
+            if recalled_msgs.is_empty() && msg.chat_type == crate::core::domain::ChatType::DirectMessage {
                 recalled_msgs = session_store.get_recent_messages(&msg.chat_jid, search_sender, 3).await.unwrap_or_default();
             }
 
@@ -408,6 +466,109 @@ mod tests {
                 assert!(!prompt.contains("[di Grup]"));
             }
             _ => panic!("Expected Ready for Charlie DM"),
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_context_preparer_group_chat_auto_rolling_context() {
+        let dir = std::env::temp_dir().join(format!("aina_test_group_rolling_{}", rand::random::<u32>()));
+        let db_file = dir.join("test.db");
+        let store: Arc<dyn SessionStorePort> = Arc::new(SqliteSessionStore::new(&db_file).unwrap());
+
+        let engine = PersonaEngine::new(
+            "Persona test".to_string(),
+            "Org test".to_string(),
+            "6281234567890@s.whatsapp.net".to_string(),
+            "Asia/Jakarta".to_string(),
+            7,
+            "id-ID".to_string(),
+            "https://aina-wa.test".to_string(),
+            "628999888777@s.whatsapp.net".to_string(),
+            None,
+        );
+
+        let group_jid = "12036300998877@g.us";
+        let adwin_jid = "628111222333@s.whatsapp.net";
+        let syihab_jid = "628222333444@s.whatsapp.net";
+        let safira_jid = "628333444555@s.whatsapp.net";
+
+        // Seed user profiles for colleagues
+        let adwin_prof = UserProfile {
+            sender_jid: adwin_jid.to_string(),
+            name: Some("Adwin Haithay".to_string()),
+            role: Some("Pegawai Senior".to_string()),
+            authority_level: "staff".to_string(),
+            notes: None,
+        };
+        store.save_user_profile(&adwin_prof).await.unwrap();
+
+        let syihab_prof = UserProfile {
+            sender_jid: syihab_jid.to_string(),
+            name: Some("Syihab Alhaq".to_string()),
+            role: Some("Rekan Tim".to_string()),
+            authority_level: "staff".to_string(),
+            notes: None,
+        };
+        store.save_user_profile(&syihab_prof).await.unwrap();
+
+        // 1. Prior chat history in group
+        store.record_message(group_jid, "bot@s.whatsapp.net", "PENGUMUMAN: PEMBUATAN SPK & BAST DOKTER V LEWAT AINA", true).await.unwrap();
+        store.record_message(group_jid, adwin_jid, "Ini siape aina nih", false).await.unwrap();
+        store.record_message(group_jid, syihab_jid, "Pegawai terbaik bulan ini bg aina", false).await.unwrap();
+        store.record_message(group_jid, safira_jid, "Wkwkwk kenalan dululah aina", false).await.unwrap();
+
+        // 2. Incoming message from Safira: "Jawab tuh aii 😂" (already recorded in store before prepare)
+        let incoming_text = "Jawab tuh aii 😂";
+        store.record_message(group_jid, safira_jid, incoming_text, false).await.unwrap();
+
+        let safira_msg = IncomingMessage {
+            id: "msg_safira_tag".to_string(),
+            platform: Platform::WhatsApp,
+            session_role: SessionRole::PrimaryBot,
+            chat_jid: group_jid.to_string(),
+            chat_type: ChatType::Group,
+            sender: Sender {
+                jid: safira_jid.to_string(),
+                name: Some("Safira 57".to_string()),
+            },
+            text: incoming_text.to_string(),
+            timestamp: 1726000300,
+            quoted_message: None,
+            mentioned_jids: vec!["bot@s.whatsapp.net".to_string()],
+            is_bot_mentioned: true,
+            bot_lid: None,
+            is_from_me: false,
+            has_media: false,
+            media_type: None,
+            media_path: None,
+        };
+
+        let prep = ContextPreparer::prepare(&safira_msg, &engine, &store).await.unwrap();
+        match prep {
+            ContextPreparation::Ready { prompt } => {
+                // Must contain rolling ambient context header
+                assert!(prompt.contains("[KONTEKS OBROLAN TERAKHIR DI GRUP (10 PESAN SEBELUMNYA)]"));
+                // Must contain prior messages from colleagues with names
+                assert!(prompt.contains("Adwin Haithay"));
+                assert!(prompt.contains("Ini siape aina nih"));
+                assert!(prompt.contains("Syihab Alhaq"));
+                assert!(prompt.contains("Pegawai terbaik bulan ini bg aina"));
+                assert!(prompt.contains("Aina (Bot)"));
+                assert!(prompt.contains("PENGUMUMAN: PEMBUATAN SPK & BAST DOKTER V LEWAT AINA"));
+                assert!(prompt.contains("Wkwkwk kenalan dululah aina"));
+
+                // The rolling context section must NOT contain the incoming message itself as a historical message
+                let rolling_section = prompt.split("[KONTEKS OBROLAN TERAKHIR DI GRUP (10 PESAN SEBELUMNYA)]")
+                    .nth(1)
+                    .unwrap_or("")
+                    .split("(Pahami alur di atas")
+                    .next()
+                    .unwrap_or("");
+                assert!(!rolling_section.contains(incoming_text));
+            }
+            _ => panic!("Expected Ready for Safira group message"),
         }
 
         let _ = std::fs::remove_dir_all(&dir);

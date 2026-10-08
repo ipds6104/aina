@@ -118,6 +118,31 @@ impl ProcessIncomingMessageUseCase {
                     .record_message(&msg.chat_jid, &msg.sender.jid, &record_text, false)
                     .await?;
 
+                if let Some(ref name) = msg.sender.name {
+                    let clean_name = name.trim();
+                    if !clean_name.is_empty() {
+                        let existing = self.session_store.get_user_profile(&msg.sender.jid).await.ok().flatten();
+                        match existing {
+                            Some(mut p) => {
+                                if p.name.as_deref().unwrap_or("").trim().is_empty() {
+                                    p.name = Some(clean_name.to_string());
+                                    let _ = self.session_store.save_user_profile(&p).await;
+                                }
+                            }
+                            None => {
+                                let new_profile = crate::core::ports::UserProfile {
+                                    sender_jid: msg.sender.jid.clone(),
+                                    name: Some(clean_name.to_string()),
+                                    role: Some("Rekan Tim".to_string()),
+                                    authority_level: "staff".to_string(),
+                                    notes: Some("Terdaftar otomatis dari obrolan grup".to_string()),
+                                };
+                                let _ = self.session_store.save_user_profile(&new_profile).await;
+                            }
+                        }
+                    }
+                }
+
                 AuditTracker::record_terminal_event(
                     &self.session_store,
                     msg.id,
