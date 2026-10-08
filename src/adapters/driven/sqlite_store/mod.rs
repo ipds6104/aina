@@ -277,6 +277,32 @@ impl SessionStorePort for SqliteSessionStore {
         let conn = self.conn.lock().await;
         metacog::get_metacognitive_calibration_stats(&conn)
     }
+
+    async fn record_group_membership(
+        &self,
+        group_jid: &str,
+        user_jid: &str,
+        user_name: Option<&str>,
+        role_in_group: Option<&str>,
+    ) -> anyhow::Result<()> {
+        let conn = self.conn.lock().await;
+        session::record_group_membership(&conn, group_jid, user_jid, user_name, role_in_group)
+    }
+
+    async fn get_user_groups(&self, user_jid: &str) -> anyhow::Result<Vec<String>> {
+        let conn = self.conn.lock().await;
+        session::get_user_groups(&conn, user_jid)
+    }
+
+    async fn get_group_members(&self, group_jid: &str) -> anyhow::Result<Vec<crate::core::ports::GroupMemberRecord>> {
+        let conn = self.conn.lock().await;
+        session::get_group_members(&conn, group_jid)
+    }
+
+    async fn is_user_in_group(&self, user_jid: &str, group_jid: &str) -> anyhow::Result<bool> {
+        let conn = self.conn.lock().await;
+        session::is_user_in_group(&conn, user_jid, group_jid)
+    }
 }
 
 #[cfg(test)]
@@ -484,6 +510,39 @@ mod tests {
         assert_eq!(recent[1].text, "Berapa port default coolify?");
 
         // Clean up
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_group_memberships_crud_and_cross_channel_resolution() {
+        let dir = std::env::temp_dir().join(format!("aina_test_group_mem_{}", rand::random::<u32>()));
+        let db_file = dir.join("test.db");
+        let store = SqliteSessionStore::new(&db_file).unwrap();
+
+        let group_jid = "120363253842861469@g.us";
+        let user_jid = "628111222333@s.whatsapp.net";
+
+        // Initially no group
+        let groups_init = store.get_user_groups(user_jid).await.unwrap();
+        assert!(groups_init.is_empty());
+        assert!(!store.is_user_in_group(user_jid, group_jid).await.unwrap());
+
+        // Record membership
+        store.record_group_membership(group_jid, user_jid, Some("Adwin Haithay"), Some("member")).await.unwrap();
+
+        // Check user groups
+        let groups = store.get_user_groups(user_jid).await.unwrap();
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0], group_jid);
+        assert!(store.is_user_in_group(user_jid, group_jid).await.unwrap());
+
+        // Check group members
+        let members = store.get_group_members(group_jid).await.unwrap();
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].user_jid, user_jid);
+        assert_eq!(members[0].user_name.as_deref(), Some("Adwin Haithay"));
+        assert_eq!(members[0].role_in_group, "member");
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

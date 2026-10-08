@@ -1,6 +1,7 @@
 pub mod archive;
 pub mod audit;
 pub mod github;
+pub mod group;
 pub mod kb;
 pub mod schedule;
 pub mod system;
@@ -11,6 +12,7 @@ pub mod workspace;
 pub use archive::*;
 pub use audit::*;
 pub use github::*;
+pub use group::*;
 pub use kb::*;
 pub use schedule::*;
 pub use system::*;

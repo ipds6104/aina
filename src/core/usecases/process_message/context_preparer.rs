@@ -24,27 +24,66 @@ impl ContextPreparer {
         persona_engine: &PersonaEngine,
         session_store: &Arc<dyn SessionStorePort>,
     ) -> anyhow::Result<ContextPreparation> {
-        // 1. Retrieve or auto-seed sender profile with Strict OpSec guest default
+        // 1. Retrieve cross-channel WhatsApp group memberships for sender
+        let user_groups = session_store.get_user_groups(&msg.sender.jid).await.unwrap_or_default();
+
+        // Retrieve or auto-seed sender profile
         let mut profile = match session_store.get_user_profile(&msg.sender.jid).await {
-            Ok(Some(p)) => p,
+            Ok(Some(mut p)) => {
+                // Seamless promotion: if user was previously a guest, but now has confirmed group memberships,
+                // automatically verify them as staff!
+                if p.authority_level == "guest" && !user_groups.is_empty() {
+                    p.authority_level = "staff".to_string();
+                    if p.role.as_deref().unwrap_or("Tamu") == "Tamu" {
+                        p.role = Some("Rekan Tim".to_string());
+                    }
+                    p.notes = Some(format!(
+                        "Otomatis diverifikasi sebagai rekan internal melalui keanggotaan {} grup WhatsApp",
+                        user_groups.len()
+                    ));
+                    let _ = session_store.save_user_profile(&p).await;
+                }
+                p
+            }
             Ok(None) => {
+                let (authority_level, role, notes) = if !user_groups.is_empty() {
+                    (
+                        "staff".to_string(),
+                        Some("Rekan Tim".to_string()),
+                        Some(format!(
+                            "Terdaftar otomatis dari keanggotaan {} grup WhatsApp",
+                            user_groups.len()
+                        )),
+                    )
+                } else {
+                    (
+                        "guest".to_string(),
+                        Some("Tamu".to_string()),
+                        Some("Terdaftar otomatis saat interaksi pertama (status: guest)".to_string()),
+                    )
+                };
                 let new_profile = UserProfile {
                     sender_jid: msg.sender.jid.clone(),
                     name: msg.sender.name.clone(),
-                    role: Some("Tamu".to_string()),
-                    authority_level: "guest".to_string(),
-                    notes: Some("Terdaftar otomatis saat interaksi pertama (status: guest)".to_string()),
+                    role,
+                    authority_level,
+                    notes,
                 };
                 let _ = session_store.save_user_profile(&new_profile).await;
                 new_profile
             }
             Err(e) => {
                 warn!("Failed to fetch user profile for {}: {}", msg.sender.jid, e);
+                let (authority_level, role) = if !user_groups.is_empty() {
+                    ("staff".to_string(), Some("Rekan Tim".to_string()))
+                } else {
+                    ("guest".to_string(), Some("Tamu".to_string()))
+                };
                 UserProfile {
                     sender_jid: msg.sender.jid.clone(),
                     name: msg.sender.name.clone(),
-                    role: Some("Tamu".to_string()),
-                    authority_level: "guest".to_string(),
+                    role,
+                    authority_level,
                     notes: None,
                 }
             }
@@ -60,8 +99,8 @@ impl ContextPreparer {
             }
         }
 
-        // 3. Build prompt incorporating persona, organization context, and profiling
-        let mut prompt = persona_engine.build_prompt(msg, Some(&profile));
+        // 3. Build prompt incorporating persona, organization context, profiling, and group memberships
+        let mut prompt = persona_engine.build_prompt_full(msg, Some(&profile), &user_groups);
 
         // 4. Group Chat Auto Rolling Ambient Context (up to 10 preceding messages)
         if msg.chat_type == crate::core::domain::ChatType::Group {
@@ -570,6 +609,52 @@ mod tests {
             }
             _ => panic!("Expected Ready for Safira group message"),
         }
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_context_preparer_cross_channel_dm_recognizes_group_member() {
+        let dir = std::env::temp_dir().join(format!("aina_test_group_member_dm_{}", rand::random::<u32>()));
+        let db_file = dir.join("test.db");
+        let store: Arc<dyn SessionStorePort> = Arc::new(SqliteSessionStore::new(&db_file).unwrap());
+
+        let engine = PersonaEngine::new(
+            "Persona test".to_string(),
+            "Org test".to_string(),
+            "6281234567890@s.whatsapp.net".to_string(),
+            "Asia/Jakarta".to_string(),
+            7,
+            "id-ID".to_string(),
+            "https://aina-wa.test".to_string(),
+            "628999888777@s.whatsapp.net".to_string(),
+            None,
+        );
+
+        let group_jid = "120363253842861469@g.us";
+        let adwin_jid = "628111222333@s.whatsapp.net";
+
+        // Seed group membership for Adwin
+        store.record_group_membership(group_jid, adwin_jid, Some("Adwin Haithay"), Some("member")).await.unwrap();
+
+        // Adwin sends a private DM to Aina
+        let adwin_dm_msg = make_test_message(adwin_jid, Some("Adwin Haithay"), "Aina bisa bantu saya di dokter-V?");
+
+        let prep = ContextPreparer::prepare(&adwin_dm_msg, &engine, &store).await.unwrap();
+        match prep {
+            ContextPreparation::Ready { prompt } => {
+                // Adwin must be recognized as STAFF / Rekan Tim, NOT a guest with Strict OpSec!
+                assert!(prompt.contains("Tingkat Otoritas: STAFF"));
+                assert!(!prompt.contains("Strict OpSec"));
+                assert!(prompt.contains("Keanggotaan Grup WhatsApp Terdaftar"));
+                assert!(prompt.contains("120363253842861469@g.us"));
+            }
+            _ => panic!("Expected Ready for Adwin DM"),
+        }
+
+        // Verify stored profile in SQLite is now promoted to staff
+        let profile = store.get_user_profile(adwin_jid).await.unwrap().unwrap();
+        assert_eq!(profile.authority_level, "staff");
 
         let _ = std::fs::remove_dir_all(&dir);
     }

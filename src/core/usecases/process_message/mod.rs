@@ -118,6 +118,15 @@ impl ProcessIncomingMessageUseCase {
                     .record_message(&msg.chat_jid, &msg.sender.jid, &record_text, false)
                     .await?;
 
+                if msg.chat_type == ChatType::Group {
+                    let _ = self.session_store.record_group_membership(
+                        &msg.chat_jid,
+                        &msg.sender.jid,
+                        msg.sender.name.as_deref(),
+                        Some("member"),
+                    ).await;
+                }
+
                 if let Some(ref name) = msg.sender.name {
                     let clean_name = name.trim();
                     if !clean_name.is_empty() {
@@ -175,6 +184,15 @@ impl ProcessIncomingMessageUseCase {
                 self.session_store
                     .record_message(&msg.chat_jid, &msg.sender.jid, &record_text, false)
                     .await?;
+
+                if msg.chat_type == ChatType::Group {
+                    let _ = self.session_store.record_group_membership(
+                        &msg.chat_jid,
+                        &msg.sender.jid,
+                        msg.sender.name.as_deref(),
+                        Some("member"),
+                    ).await;
+                }
 
                 let audit_tracker = AuditTracker::start_tracking(
                     Arc::clone(&self.session_store),

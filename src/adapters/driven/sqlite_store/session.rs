@@ -320,3 +320,68 @@ pub fn save_user_profile(conn: &Connection, profile: &UserProfile) -> anyhow::Re
     )?;
     Ok(())
 }
+
+pub fn record_group_membership(
+    conn: &Connection,
+    group_jid: &str,
+    user_jid: &str,
+    user_name: Option<&str>,
+    role_in_group: Option<&str>,
+) -> anyhow::Result<()> {
+    conn.execute(
+        "INSERT INTO group_memberships (group_jid, user_jid, user_name, role_in_group, last_synced_at)
+         VALUES (?1, ?2, ?3, COALESCE(?4, 'member'), CURRENT_TIMESTAMP)
+         ON CONFLICT(group_jid, user_jid) DO UPDATE SET
+            user_name = COALESCE(excluded.user_name, group_memberships.user_name),
+            role_in_group = COALESCE(excluded.role_in_group, group_memberships.role_in_group),
+            last_synced_at = CURRENT_TIMESTAMP",
+        params![group_jid, user_jid, user_name, role_in_group],
+    )?;
+    Ok(())
+}
+
+pub fn get_user_groups(conn: &Connection, user_jid: &str) -> anyhow::Result<Vec<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT group_jid FROM group_memberships WHERE user_jid = ?1 ORDER BY last_synced_at DESC"
+    )?;
+    let rows = stmt.query_map(params![user_jid], |row| row.get(0))?;
+    let mut groups = Vec::new();
+    for r in rows {
+        groups.push(r?);
+    }
+    Ok(groups)
+}
+
+pub fn get_group_members(
+    conn: &Connection,
+    group_jid: &str,
+) -> anyhow::Result<Vec<crate::core::ports::GroupMemberRecord>> {
+    let mut stmt = conn.prepare(
+        "SELECT group_jid, user_jid, user_name, role_in_group, last_synced_at
+         FROM group_memberships
+         WHERE group_jid = ?1
+         ORDER BY user_name ASC, user_jid ASC"
+    )?;
+    let rows = stmt.query_map(params![group_jid], |row| {
+        Ok(crate::core::ports::GroupMemberRecord {
+            group_jid: row.get(0)?,
+            user_jid: row.get(1)?,
+            user_name: row.get(2)?,
+            role_in_group: row.get(3)?,
+            last_synced_at: row.get(4)?,
+        })
+    })?;
+    let mut members = Vec::new();
+    for r in rows {
+        members.push(r?);
+    }
+    Ok(members)
+}
+
+pub fn is_user_in_group(conn: &Connection, user_jid: &str, group_jid: &str) -> anyhow::Result<bool> {
+    let mut stmt = conn.prepare(
+        "SELECT 1 FROM group_memberships WHERE user_jid = ?1 AND group_jid = ?2 LIMIT 1"
+    )?;
+    let exists = stmt.exists(params![user_jid, group_jid])?;
+    Ok(exists)
+}

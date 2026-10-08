@@ -597,6 +597,10 @@ mod tests {
                 domain_brier_scores: std::collections::HashMap::new(),
             })
         }
+        async fn record_group_membership(&self, _group_jid: &str, _user_jid: &str, _user_name: Option<&str>, _role_in_group: Option<&str>) -> anyhow::Result<()> { Ok(()) }
+        async fn get_user_groups(&self, _user_jid: &str) -> anyhow::Result<Vec<String>> { Ok(vec![]) }
+        async fn get_group_members(&self, _group_jid: &str) -> anyhow::Result<Vec<crate::core::ports::GroupMemberRecord>> { Ok(vec![]) }
+        async fn is_user_in_group(&self, _user_jid: &str, _group_jid: &str) -> anyhow::Result<bool> { Ok(false) }
     }
 
     struct DummyAgentEngine;

@@ -222,6 +222,7 @@ PENGGUNAAN:
             "whatsapp" | "wa" => commands::handle_whatsapp(&args[2..]),
             "status" => commands::handle_whatsapp(&args[1..]),
             "user" | "profile" => commands::handle_user(&args[2..]),
+            "group" | "groups" => commands::handle_group(&args[2..]),
             "schedule" | "cron" => commands::handle_schedule(&args[2..]).await,
             "persona" => commands::handle_persona(&args[2..]).await,
             "model" => commands::handle_model(&args[2..]).await,

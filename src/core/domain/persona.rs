@@ -201,6 +201,16 @@ impl PersonaEngine {
 
     /// Prepares the complete prompt injected into the Antigravity agent CLI.
     pub fn build_prompt(&self, msg: &IncomingMessage, profile: Option<&UserProfile>) -> String {
+        self.build_prompt_full(msg, profile, &[])
+    }
+
+    /// Prepares the complete prompt injected into the Antigravity agent CLI, incorporating cross-channel group memberships.
+    pub fn build_prompt_full(
+        &self,
+        msg: &IncomingMessage,
+        profile: Option<&UserProfile>,
+        user_groups: &[String],
+    ) -> String {
         // Prioritize custom name/callsign stored in profile if available
         let sender_name = profile
             .and_then(|p| p.name.as_deref())
@@ -268,6 +278,12 @@ impl PersonaEngine {
         let profile_notes_str = match profile.and_then(|p| p.notes.as_deref()) {
             Some(notes) if !notes.trim().is_empty() => format!("\n- Catatan Profil & Preferensi: {}", notes),
             _ => String::new(),
+        };
+
+        let groups_context_str = if !user_groups.is_empty() {
+            format!("\n- Keanggotaan Grup WhatsApp Terdaftar: Terdaftar di {} grup (ID: {})\n- Status Afiliasi: Pengirim teridentifikasi sebagai anggota sah grup internal di atas. Layanilah tugas-tugas koordinasi kegiatan dengan ramah dan solutif.", user_groups.len(), user_groups.join(", "))
+        } else {
+            String::new()
         };
         
         let chat_context_str = match msg.chat_type {
@@ -391,7 +407,8 @@ impl PersonaEngine {
             - Ruang Obrolan: {chat_context}\n\
             - Pengirim: {sender_name} ({sender_jid})\n\
             - Profil Pengirim: {role_title} (Tingkat Otoritas: {authority_level})\
-            {profile_notes}\n\
+            {profile_notes}\
+            {groups_context}\n\
             - Panduan Wewenang: {authority_guidance}\n\
             {quoted_context}\
             \n\
@@ -531,6 +548,7 @@ impl PersonaEngine {
             role_title = role_title,
             authority_level = authority_level,
             profile_notes = profile_notes_str,
+            groups_context = groups_context_str,
             authority_guidance = authority_guidance,
             quoted_context = quoted_context,
             text = msg.text,

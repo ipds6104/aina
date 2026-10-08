@@ -8,6 +8,6 @@ pub use agent_engine::{AccountPoolStatus, AgentEnginePort, AgentResponse};
 #[allow(unused_imports)]
 pub use ingestion::*;
 pub use knowledge::KnowledgePort;
-pub use session_store::{ChatMessageRecord, SessionStorePort, UserProfile};
+pub use session_store::{ChatMessageRecord, GroupMemberRecord, SessionStorePort, UserProfile};
 pub use whatsapp::WhatsAppPort;
 

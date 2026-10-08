@@ -20,6 +20,15 @@ pub struct ChatMessageRecord {
     pub created_at: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GroupMemberRecord {
+    pub group_jid: String,
+    pub user_jid: String,
+    pub user_name: Option<String>,
+    pub role_in_group: String,
+    pub last_synced_at: String,
+}
+
 #[async_trait]
 pub trait SessionStorePort: Send + Sync {
     /// Retrieves the active Antigravity conversation UUID mapped to the given WhatsApp chat JID (unconditionally).
@@ -180,4 +189,22 @@ pub trait SessionStorePort: Send + Sync {
 
     /// Calculates aggregate metacognitive calibration statistics (Brier score, BSS, reliability buckets).
     async fn get_metacognitive_calibration_stats(&self) -> anyhow::Result<crate::core::domain::MetacognitiveCalibrationStats>;
+
+    /// Records or updates a user's membership in a WhatsApp group.
+    async fn record_group_membership(
+        &self,
+        group_jid: &str,
+        user_jid: &str,
+        user_name: Option<&str>,
+        role_in_group: Option<&str>,
+    ) -> anyhow::Result<()>;
+
+    /// Retrieves all group JIDs where the given user is known to be a member.
+    async fn get_user_groups(&self, user_jid: &str) -> anyhow::Result<Vec<String>>;
+
+    /// Retrieves all members of a specific WhatsApp group.
+    async fn get_group_members(&self, group_jid: &str) -> anyhow::Result<Vec<GroupMemberRecord>>;
+
+    /// Checks if a user is a member of a specific WhatsApp group.
+    async fn is_user_in_group(&self, user_jid: &str, group_jid: &str) -> anyhow::Result<bool>;
 }

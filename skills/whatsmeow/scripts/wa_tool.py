@@ -148,6 +148,72 @@ def cmd_group_info(args):
     res = make_request("GET", endpoint)
     print(json.dumps(res, indent=2, ensure_ascii=False))
 
+def cmd_sync_members(args):
+    jid = args.jid.strip()
+    endpoint = f"/api/v1/groups/{urllib.parse.quote(jid)}"
+    res = make_request("GET", endpoint)
+    if res.get("error"):
+        print(json.dumps(res, indent=2, ensure_ascii=False))
+        return
+
+    data = res.get("data") or {}
+    participants = data.get("participants") or []
+    group_name = data.get("name") or data.get("subject") or jid
+
+    db_path = os.environ.get("DATABASE_PATH")
+    if not db_path:
+        for cand in ["data/aina.db", "/app/data/aina.db", "../data/aina.db", "../../data/aina.db"]:
+            if os.path.exists(cand):
+                db_path = cand
+                break
+    if not db_path:
+        db_path = "data/aina.db"
+
+    synced_count = 0
+    try:
+        import sqlite3
+        conn = sqlite3.connect(db_path)
+        c = conn.cursor()
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS group_memberships (
+                group_jid TEXT NOT NULL,
+                user_jid TEXT NOT NULL,
+                user_name TEXT,
+                role_in_group TEXT NOT NULL DEFAULT 'member',
+                last_synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (group_jid, user_jid)
+            )
+        """)
+        for p in participants:
+            user_jid = p.get("jid") or p.get("id")
+            if not user_jid:
+                continue
+            user_name = p.get("name") or p.get("display_name")
+            role = "admin" if p.get("is_admin") or p.get("is_super_admin") else "member"
+            c.execute("""
+                INSERT INTO group_memberships (group_jid, user_jid, user_name, role_in_group, last_synced_at)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(group_jid, user_jid) DO UPDATE SET
+                    user_name = COALESCE(excluded.user_name, group_memberships.user_name),
+                    role_in_group = excluded.role_in_group,
+                    last_synced_at = CURRENT_TIMESTAMP
+            """, (jid, user_jid, user_name, role))
+            synced_count += 1
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(json.dumps({"error": True, "message": f"Database sync error: {e}"}, indent=2))
+        return
+
+    out = {
+        "success": True,
+        "group_jid": jid,
+        "group_name": group_name,
+        "synced_participants": synced_count,
+        "database": db_path
+    }
+    print(json.dumps(out, indent=2, ensure_ascii=False))
+
 def cmd_export_backup(args):
     jid = args.jid.strip()
     endpoint = f"/api/v1/groups/{urllib.parse.quote(jid)}/backup"
@@ -539,6 +605,11 @@ def main():
     p_ginfo = subparsers.add_parser("group-info", help="Get metadata and participants of a group", parents=[common_parser])
     p_ginfo.add_argument("--jid", required=True, help="Group JID (ends with @g.us)")
     p_ginfo.set_defaults(func=cmd_group_info)
+
+    # sync-members
+    p_sync = subparsers.add_parser("sync-members", help="Synchronize participants of a group into local SQLite group_memberships", parents=[common_parser])
+    p_sync.add_argument("--jid", required=True, help="Group JID (ends with @g.us)")
+    p_sync.set_defaults(func=cmd_sync_members)
 
     # export-backup
     p_backup = subparsers.add_parser("export-backup", help="Export chat backup of a group", parents=[common_parser])

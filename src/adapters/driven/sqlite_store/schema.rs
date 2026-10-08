@@ -211,5 +211,30 @@ pub fn init_schema(conn: &Connection) -> anyhow::Result<()> {
         [],
     )?;
 
+    // Group Memberships Table (Cross-channel Group to DM Identity Bridge)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS group_memberships (
+            group_jid TEXT NOT NULL,
+            user_jid TEXT NOT NULL,
+            user_name TEXT,
+            role_in_group TEXT NOT NULL DEFAULT 'member',
+            last_synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (group_jid, user_jid)
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_group_memberships_user 
+         ON group_memberships(user_jid)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_group_memberships_group 
+         ON group_memberships(group_jid)",
+        [],
+    )?;
+
     Ok(())
 }
