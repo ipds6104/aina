@@ -35,11 +35,13 @@ pub trait SessionStorePort: Send + Sync {
     async fn get_conversation_id(&self, chat_jid: &str) -> anyhow::Result<Option<String>>;
 
     /// Retrieves the active Antigravity conversation UUID mapped to the given WhatsApp chat JID,
-    /// returning None if the conversation has expired due to inactivity exceeding max_inactivity_secs.
+    /// returning None if the conversation has expired due to inactivity exceeding max_inactivity_secs
+    /// or turn count exceeding max_turns.
     async fn get_active_conversation_id(
         &self,
         chat_jid: &str,
         max_inactivity_secs: u64,
+        max_turns: u32,
     ) -> anyhow::Result<Option<String>>;
 
     /// Refreshes the last activity timestamp for the active conversation of a chat.

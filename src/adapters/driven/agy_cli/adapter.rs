@@ -176,6 +176,8 @@ impl AgentEnginePort for AntigravityCliAdapter {
         let pool_len = self.pool_manager.len().await;
         let max_attempts = if pool_len == 0 { 2 } else { pool_len.max(2) };
 
+        let mut target_conv_id = conversation_id;
+
         for attempt in 0..max_attempts {
             let active_acc = self.pool_manager.select_next_token(attempt).await;
 
@@ -183,7 +185,7 @@ impl AgentEnginePort for AntigravityCliAdapter {
             cmd.kill_on_drop(true);
             cmd.current_dir(&self.workspace_dir);
 
-            if let Some(conv_id) = conversation_id {
+            if let Some(conv_id) = target_conv_id {
                 if !conv_id.trim().is_empty() {
                     cmd.arg("--conversation").arg(conv_id);
                 }
@@ -336,6 +338,24 @@ impl AgentEnginePort for AntigravityCliAdapter {
                         let is_err_auth = is_auth_error(&err_text);
                         let is_err_transient = is_transient_error(&err_text);
 
+                        // If model already produced a valid, non-empty response before stream interrupted, salvage it!
+                        let sanitized_candidate = sanitize_agent_response(&p.response);
+                        if !sanitized_candidate.is_empty() && (is_err_transient || err_text.to_lowercase().contains("stream")) {
+                            warn!(
+                                "Antigravity CLI stream interrupted, but model produced a valid response ({} chars). Gracefully returning response.",
+                                sanitized_candidate.len()
+                            );
+                            return Ok(AgentResponse {
+                                conversation_id: p.conversation_id,
+                                response_text: sanitized_candidate,
+                                duration_seconds: if p.duration_seconds > 0.0 {
+                                    p.duration_seconds
+                                } else {
+                                    duration
+                                },
+                            });
+                        }
+
                         if let Some(ref acc) = active_acc {
                             if is_err_quota {
                                 let cooldown = extract_quota_cooldown_duration(&err_text);
@@ -354,6 +374,10 @@ impl AgentEnginePort for AntigravityCliAdapter {
                                 "Attempt {}/{} returned error payload on {}. Retrying with next account...",
                                 attempt + 1, max_attempts, acc_desc
                             );
+                            if is_err_transient && target_conv_id.is_some() {
+                                warn!("Transient error on session {:?}. Dropping bloated session and retrying with fresh session.", target_conv_id);
+                                target_conv_id = None;
+                            }
                             tokio::time::sleep(Duration::from_millis(500)).await;
                             continue;
                         }

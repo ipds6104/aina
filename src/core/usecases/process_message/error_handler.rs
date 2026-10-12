@@ -107,15 +107,17 @@ impl ErrorHandler {
                     .send_text_with_session(&msg.chat_jid, &admin_alert, quote_id, msg.session_role)
                     .await;
             }
-        } else if !admin_jid.trim().is_empty() {
-            // Non-admin DM or Group/Status: send private alert to admin
-            let _ = whatsapp
-                .send_text_with_session(admin_jid, &admin_alert, None, SessionRole::PrimaryBot)
-                .await;
+        } else {
+            // Non-admin DM or Group/Status: send private alert to admin if configured
+            if !admin_jid.trim().is_empty() {
+                let _ = whatsapp
+                    .send_text_with_session(admin_jid, &admin_alert, None, SessionRole::PrimaryBot)
+                    .await;
+            }
 
-            // In non-admin private DM: provide a polite, non-technical reassurance
+            // In non-admin private DM: provide a polite, non-technical reassurance so user never faces radio silence
             if msg.chat_type == ChatType::DirectMessage && !is_target_group_or_status && !is_quota {
-                let friendly_apology = "Maaf yaa, Aina sedang mengalami kendala teknis internal pada sistem. Pesan ini sudah otomatis dilaporkan ke admin untuk diperiksa. Mohon coba lagi beberapa saat lagi yaa 🙏";
+                let friendly_apology = "Maaf yaa, Aina sedang mengalami kendala teknis internal pada sistem. Sesi obrolan telah otomatis direset agar kembali segar. Silakan kirimkan kembali pertanyaan atau instruksimu yaa 🙏";
                 let _ = whatsapp
                     .send_text_with_session(&msg.chat_jid, friendly_apology, quote_id, msg.session_role)
                     .await;

@@ -23,6 +23,7 @@ impl ContextPreparer {
         msg: &IncomingMessage,
         persona_engine: &PersonaEngine,
         session_store: &Arc<dyn SessionStorePort>,
+        is_resumed: bool,
     ) -> anyhow::Result<ContextPreparation> {
         // 1. Retrieve cross-channel WhatsApp group memberships for sender
         let user_groups = session_store.get_user_groups(&msg.sender.jid).await.unwrap_or_default();
@@ -100,7 +101,11 @@ impl ContextPreparer {
         }
 
         // 3. Build prompt incorporating persona, organization context, profiling, and group memberships
-        let mut prompt = persona_engine.build_prompt_full(msg, Some(&profile), &user_groups);
+        let mut prompt = if is_resumed {
+            persona_engine.build_prompt_resumed(msg, Some(&profile))
+        } else {
+            persona_engine.build_prompt_full(msg, Some(&profile), &user_groups)
+        };
 
         // 4. Group Chat Auto Rolling Ambient Context (up to 10 preceding messages)
         if msg.chat_type == crate::core::domain::ChatType::Group {
@@ -298,7 +303,7 @@ mod tests {
         let unknown_jid = "6289912345678@s.whatsapp.net";
         let msg = make_test_message(unknown_jid, Some("Orang Baru"), "Halo apa kabar?");
 
-        let prep = ContextPreparer::prepare(&msg, &engine, &store)
+        let prep = ContextPreparer::prepare(&msg, &engine, &store, false)
             .await
             .unwrap();
 
@@ -343,7 +348,7 @@ mod tests {
             "Halo Aina, perkenalkan saya Hendra Kusuma dari tim IPDS. Panggil saja Mas Hendra ya",
         );
 
-        let prep = ContextPreparer::prepare(&msg, &engine, &store)
+        let prep = ContextPreparer::prepare(&msg, &engine, &store, false)
             .await
             .unwrap();
 
@@ -389,7 +394,7 @@ mod tests {
 
         // 1. Retrospective message asking about database
         let msg = make_test_message(chat_jid, Some("User"), "kemarin kita bahas soal database apa ya?");
-        let prep = ContextPreparer::prepare(&msg, &engine, &store).await.unwrap();
+        let prep = ContextPreparer::prepare(&msg, &engine, &store, false).await.unwrap();
         match prep {
             ContextPreparation::Ready { prompt } => {
                 assert!(prompt.contains("[RELEVANSI RIWAYAT MASA LALU (ON-DEMAND RECALL)]"));
@@ -401,7 +406,7 @@ mod tests {
 
         // 2. Pure greeting message: must NOT inject history
         let greeting_msg = make_test_message(chat_jid, Some("User"), "Ainaa");
-        let greeting_prep = ContextPreparer::prepare(&greeting_msg, &engine, &store).await.unwrap();
+        let greeting_prep = ContextPreparer::prepare(&greeting_msg, &engine, &store, false).await.unwrap();
         match greeting_prep {
             ContextPreparation::Ready { prompt } => {
                 assert!(!prompt.contains("[RELEVANSI RIWAYAT MASA LALU (ON-DEMAND RECALL)]"));
@@ -463,7 +468,7 @@ mod tests {
             media_path: None,
         };
 
-        let alice_prep = ContextPreparer::prepare(&alice_dm_msg, &engine, &store).await.unwrap();
+        let alice_prep = ContextPreparer::prepare(&alice_dm_msg, &engine, &store, false).await.unwrap();
         match alice_prep {
             ContextPreparation::Ready { prompt } => {
                 // Must recall the group discussion since Alice is a member of that group
@@ -497,7 +502,7 @@ mod tests {
             media_path: None,
         };
 
-        let charlie_prep = ContextPreparer::prepare(&charlie_dm_msg, &engine, &store).await.unwrap();
+        let charlie_prep = ContextPreparer::prepare(&charlie_dm_msg, &engine, &store, false).await.unwrap();
         match charlie_prep {
             ContextPreparation::Ready { prompt } => {
                 // Charlie has no access to group_project, so Redis history must NOT leak to Charlie!
@@ -584,7 +589,7 @@ mod tests {
             media_path: None,
         };
 
-        let prep = ContextPreparer::prepare(&safira_msg, &engine, &store).await.unwrap();
+        let prep = ContextPreparer::prepare(&safira_msg, &engine, &store, false).await.unwrap();
         match prep {
             ContextPreparation::Ready { prompt } => {
                 // Must contain rolling ambient context header
@@ -640,7 +645,7 @@ mod tests {
         // Adwin sends a private DM to Aina
         let adwin_dm_msg = make_test_message(adwin_jid, Some("Adwin Haithay"), "Aina bisa bantu saya di dokter-V?");
 
-        let prep = ContextPreparer::prepare(&adwin_dm_msg, &engine, &store).await.unwrap();
+        let prep = ContextPreparer::prepare(&adwin_dm_msg, &engine, &store, false).await.unwrap();
         match prep {
             ContextPreparation::Ready { prompt } => {
                 // Adwin must be recognized as STAFF / Rekan Tim, NOT a guest with Strict OpSec!
@@ -655,6 +660,50 @@ mod tests {
         // Verify stored profile in SQLite is now promoted to staff
         let profile = store.get_user_profile(adwin_jid).await.unwrap().unwrap();
         assert_eq!(profile.authority_level, "staff");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_context_preparer_resumed_session_lean_prompt() {
+        let dir = std::env::temp_dir().join(format!("aina_test_resumed_lean_{}", rand::random::<u32>()));
+        let db_file = dir.join("test.db");
+        let store: Arc<dyn SessionStorePort> = Arc::new(SqliteSessionStore::new(&db_file).unwrap());
+
+        let engine = PersonaEngine::new(
+            "Persona test master document that is very long".to_string(),
+            "Org test master document that is also very long".to_string(),
+            "6281234567890@s.whatsapp.net".to_string(),
+            "Asia/Jakarta".to_string(),
+            7,
+            "id-ID".to_string(),
+            "https://aina-wa.test".to_string(),
+            "628999888777@s.whatsapp.net".to_string(),
+            None,
+        );
+
+        let user_jid = "6289911223344@s.whatsapp.net";
+        let msg = make_test_message(user_jid, Some("Ihza"), "Bisa tolong cek status server?");
+
+        // 1. Initial turn: full prompt containing persona documents
+        let initial_prep = ContextPreparer::prepare(&msg, &engine, &store, false).await.unwrap();
+        if let ContextPreparation::Ready { prompt } = initial_prep {
+            assert!(prompt.contains("Persona test master document"));
+            assert!(prompt.contains("Org test master document"));
+        } else {
+            panic!("Expected Ready for initial prompt");
+        }
+
+        // 2. Resumed turn: lean prompt MUST NOT repeat persona & org master documents
+        let resumed_prep = ContextPreparer::prepare(&msg, &engine, &store, true).await.unwrap();
+        if let ContextPreparation::Ready { prompt } = resumed_prep {
+            assert!(!prompt.contains("Persona test master document"));
+            assert!(!prompt.contains("Org test master document"));
+            assert!(prompt.contains("Pesan Lanjutan dari Ihza"));
+            assert!(prompt.contains("Bisa tolong cek status server?"));
+        } else {
+            panic!("Expected Ready for resumed prompt");
+        }
 
         let _ = std::fs::remove_dir_all(&dir);
     }

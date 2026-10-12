@@ -557,6 +557,80 @@ impl PersonaEngine {
             metacog_context = crate::core::domain::metacognition::AgentCapabilityManifest::default_manifest().to_prompt_context()
         )
     }
+
+    /// Builds a lean, follow-up prompt for an already active Antigravity session.
+    /// This prevents massive context duplication by sending ONLY the new turn details
+    /// without repeating the multi-thousand token static persona & formatting documents.
+    pub fn build_prompt_resumed(
+        &self,
+        msg: &IncomingMessage,
+        profile: Option<&UserProfile>,
+    ) -> String {
+        let sender_name = profile
+            .and_then(|p| p.name.as_deref())
+            .filter(|n| !n.trim().is_empty())
+            .or_else(|| msg.sender.name.as_deref())
+            .unwrap_or("Rekan Kerja");
+        let sender_jid = &msg.sender.jid;
+
+        let is_admin_jid = !self.admin_jid.trim().is_empty()
+            && (sender_jid == &self.admin_jid
+                || sender_jid.replace("@s.whatsapp.net", "") == self.admin_jid.replace("@s.whatsapp.net", ""));
+
+        let authority_level = if is_admin_jid {
+            "ADMIN"
+        } else if let Some(p) = profile {
+            match p.authority_level.to_uppercase().as_str() {
+                "ADMIN" => "ADMIN",
+                "STAFF" | "MEMBER" => "STAFF",
+                _ => "GUEST",
+            }
+        } else {
+            "STAFF"
+        };
+
+        let current_time_str = self.current_local_time_string();
+        let platform_name = msg.platform.to_string();
+
+        let media_context = if msg.has_media {
+            if let Some(ref path) = msg.media_path {
+                format!(
+                    "\n[Lampiran Media Baru]: Pengguna melampirkan berkas {} di: {}\n",
+                    msg.media_type.as_deref().unwrap_or("media"),
+                    path
+                )
+            } else {
+                format!(
+                    "\n[Lampiran Media Baru]: Pengguna melampirkan media ({}), namun berkas sedang tidak tersedia secara lokal.\n",
+                    msg.media_type.as_deref().unwrap_or("media")
+                )
+            }
+        } else {
+            String::new()
+        };
+
+        format!(
+            "<USER_REQUEST>\n\
+             [Pesan Lanjutan dari {sender_name} ({sender_jid}) | Otoritas: {authority_level} | Platform: {platform_name} | Waktu: {current_time_str}]:\n\
+             {text}\
+             {media_context}\n\
+             \n\
+             [Instruksi Respons]:\n\
+             - Tetap konsisten dengan persona Aina yang ramah, santai, cekatan, dan hangat sesama rekan kerja (hindari basa-basi panjang & frasa robotik CS).\n\
+             - Gunakan format teks WhatsApp yang sesuai (*tebal*, _miring_, ```kode```, dilarang tabel/heading markdown).\n\
+             </USER_REQUEST>\n\
+             <ADDITIONAL_METADATA>\n\
+             The current local time is: {current_time_str}.\n\
+             </ADDITIONAL_METADATA>",
+            sender_name = sender_name,
+            sender_jid = sender_jid,
+            authority_level = authority_level,
+            platform_name = platform_name,
+            current_time_str = current_time_str,
+            text = msg.text.trim(),
+            media_context = media_context,
+        )
+    }
 }
 
 /// Formats unix epoch seconds into Indonesian formatted date and time string.

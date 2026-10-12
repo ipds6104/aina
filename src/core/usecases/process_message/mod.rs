@@ -275,13 +275,16 @@ impl ProcessIncomingMessageUseCase {
                     )
                     .await;
 
-                // 4. Retrieve active conversation ID (enforcing inactivity window to prevent bloated context & compaction freeze)
+                // 4. Retrieve active conversation ID (enforcing inactivity window and turn limits to prevent context bloat)
                 let session_policy = crate::core::domain::SessionLifecyclePolicy::from_env();
                 let existing_conv_id = self
                     .session_store
-                    .get_active_conversation_id(&msg.chat_jid, session_policy.inactivity_timeout_secs)
+                    .get_active_conversation_id(
+                        &msg.chat_jid,
+                        session_policy.inactivity_timeout_secs,
+                        session_policy.max_turns,
+                    )
                     .await?;
-
 
                 let quote_id = match msg.chat_type {
                     ChatType::Group => Some(msg.id.as_str()),
@@ -289,10 +292,12 @@ impl ProcessIncomingMessageUseCase {
                 };
 
                 // 5. Prepare Cognitive Context (Profiling, Persona, Epistemic Gate, Task Triage)
+                let is_resumed = existing_conv_id.is_some();
                 let prompt = match ContextPreparer::prepare(
                     &msg,
                     &self.persona_engine,
                     &self.session_store,
+                    is_resumed,
                 )
                 .await?
                 {
@@ -350,6 +355,12 @@ impl ProcessIncomingMessageUseCase {
                             )
                             .await;
                         error!("Agent engine failed to execute for chat {}: {}", msg.chat_jid, e);
+
+                        // Self-healing: if execution failed on an existing resumed session,
+                        // evict the session mapping immediately so subsequent messages start fresh without deadlock
+                        if existing_conv_id.is_some() {
+                            let _ = self.session_store.delete_conversation_id(&msg.chat_jid).await;
+                        }
 
                         // Finalize telemetry failure record
                         audit_tracker

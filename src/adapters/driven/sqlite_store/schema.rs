@@ -13,10 +13,25 @@ pub fn init_schema(conn: &Connection) -> anyhow::Result<()> {
         "CREATE TABLE IF NOT EXISTS chats (
             chat_jid TEXT PRIMARY KEY,
             conversation_uuid TEXT NOT NULL,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            turn_count INTEGER NOT NULL DEFAULT 1
         )",
         [],
     )?;
+
+    // Backward-compatible schema migration: ensure 'turn_count' exists on chats
+    let has_turn_count_col: bool = conn
+        .prepare("PRAGMA table_info(chats)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .filter_map(|r| r.ok())
+        .any(|name| name == "turn_count");
+
+    if !has_turn_count_col {
+        let _ = conn.execute(
+            "ALTER TABLE chats ADD COLUMN turn_count INTEGER NOT NULL DEFAULT 1",
+            [],
+        );
+    }
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS message_history (

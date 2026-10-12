@@ -16,16 +16,22 @@ pub fn get_active_conversation_id(
     conn: &Connection,
     chat_jid: &str,
     max_inactivity_secs: u64,
+    max_turns: u32,
 ) -> anyhow::Result<Option<String>> {
     let mut stmt = conn.prepare(
         "SELECT conversation_uuid,
-                CAST((strftime('%s', CURRENT_TIMESTAMP) - strftime('%s', updated_at)) AS INTEGER)
+                CAST((strftime('%s', CURRENT_TIMESTAMP) - strftime('%s', updated_at)) AS INTEGER),
+                turn_count
          FROM chats WHERE chat_jid = ?1 LIMIT 1"
     )?;
     let mut rows = stmt.query(params![chat_jid])?;
     if let Some(row) = rows.next()? {
         let uuid: String = row.get(0)?;
         let elapsed: Option<i64> = row.get(1)?;
+        let turn_count: u32 = row.get(2).unwrap_or(1);
+        if turn_count >= max_turns {
+            return Ok(None);
+        }
         if let Some(secs) = elapsed {
             if secs >= 0 && (secs as u64) <= max_inactivity_secs {
                 return Ok(Some(uuid));
@@ -41,7 +47,7 @@ pub fn get_active_conversation_id(
 
 pub fn touch_conversation_activity(conn: &Connection, chat_jid: &str) -> anyhow::Result<()> {
     conn.execute(
-        "UPDATE chats SET updated_at = CURRENT_TIMESTAMP WHERE chat_jid = ?1",
+        "UPDATE chats SET updated_at = CURRENT_TIMESTAMP, turn_count = turn_count + 1 WHERE chat_jid = ?1",
         params![chat_jid],
     )?;
     Ok(())
@@ -50,11 +56,12 @@ pub fn touch_conversation_activity(conn: &Connection, chat_jid: &str) -> anyhow:
 
 pub fn save_conversation_id(conn: &Connection, chat_jid: &str, conv_uuid: &str) -> anyhow::Result<()> {
     conn.execute(
-        "INSERT INTO chats (chat_jid, conversation_uuid, updated_at)
-         VALUES (?1, ?2, CURRENT_TIMESTAMP)
+        "INSERT INTO chats (chat_jid, conversation_uuid, updated_at, turn_count)
+         VALUES (?1, ?2, CURRENT_TIMESTAMP, 1)
          ON CONFLICT(chat_jid) DO UPDATE SET
             conversation_uuid = excluded.conversation_uuid,
-            updated_at = CURRENT_TIMESTAMP",
+            updated_at = CURRENT_TIMESTAMP,
+            turn_count = 1",
         params![chat_jid, conv_uuid],
     )?;
     Ok(())

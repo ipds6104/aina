@@ -49,9 +49,10 @@ impl SessionStorePort for SqliteSessionStore {
         &self,
         chat_jid: &str,
         max_inactivity_secs: u64,
+        max_turns: u32,
     ) -> anyhow::Result<Option<String>> {
         let conn = self.conn.lock().await;
-        session::get_active_conversation_id(&conn, chat_jid, max_inactivity_secs)
+        session::get_active_conversation_id(&conn, chat_jid, max_inactivity_secs, max_turns)
     }
 
     async fn touch_conversation_activity(&self, chat_jid: &str) -> anyhow::Result<()> {
@@ -470,19 +471,23 @@ mod tests {
         let chat = "6289999999@s.whatsapp.net";
 
         // Initially no conversation
-        assert_eq!(store.get_active_conversation_id(chat, 7200).await.unwrap(), None);
+        assert_eq!(store.get_active_conversation_id(chat, 7200, 40).await.unwrap(), None);
 
         // Save conversation
         store.save_conversation_id(chat, "conv-active-uuid-1").await.unwrap();
 
-        // Immediately active within 7200s window
-        let active = store.get_active_conversation_id(chat, 7200).await.unwrap();
+        // Immediately active within 7200s window and turn < 40
+        let active = store.get_active_conversation_id(chat, 7200, 40).await.unwrap();
         assert_eq!(active.as_deref(), Some("conv-active-uuid-1"));
 
-        // Touch activity
+        // Touch activity increments turn_count
         store.touch_conversation_activity(chat).await.unwrap();
-        let active2 = store.get_active_conversation_id(chat, 7200).await.unwrap();
+        let active2 = store.get_active_conversation_id(chat, 7200, 40).await.unwrap();
         assert_eq!(active2.as_deref(), Some("conv-active-uuid-1"));
+
+        // When max_turns is set to 2, turn_count (which is now 2) causes rollover
+        let active_rolled = store.get_active_conversation_id(chat, 7200, 2).await.unwrap();
+        assert_eq!(active_rolled, None);
 
         // Test with 0 seconds window (or simulate expiration)
         // With 0 max_inactivity_secs, elapsed is >= 0 so immediately expires if elapsed > 0

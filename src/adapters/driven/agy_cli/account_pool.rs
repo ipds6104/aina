@@ -128,6 +128,9 @@ pub fn is_transient_error(s: &str) -> bool {
     let lower = s.to_lowercase();
     lower.contains("subscriber fell behind updates")
         || lower.contains("connection to the agent was interrupted")
+        || lower.contains("stream was interrupted")
+        || lower.contains("the stream was interrupted")
+        || lower.contains("stream interrupted")
         || lower.contains("stalled for")
         || lower.contains("connection reset")
         || lower.contains("broken pipe")
