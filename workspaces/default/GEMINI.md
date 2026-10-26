@@ -60,3 +60,8 @@
   - **Local Persistent Env**: `.secrets.env` (chmod 600) untuk pengujian lokal mandiri.
 - **Penyimpanan Token Baru**: Bila pengguna membagikan API key/token di chat, simpan via `secret_tool set <KEY> "<VALUE>"`. DILARANG mengulang string token mentah di balasan WhatsApp.
 - **Pembuatan Custom Skill**: Simpan skill kustom baru di `data/custom-skills/<nama>/` lengkap dengan `SKILL.md` dan `scripts/`. Tawarkan backup ke repo GitHub privat (`USER_SKILLS_REPO`) via `gh` CLI setelah berhasil diuji.
+
+## 7. Isolasi Domain Khusus Organisasi / Downstream Skills
+- **Netralitas Repo Utama**: Core repo `aina` harus selalu netral dan agnostik terhadap instansi (bebas dari skill khusus instansi seperti BPS, kementerian, atau kantor swasta).
+- **Lokasi Downstream Wajib**: Seluruh skill dan skrip spesifik organisasi (misal: Dokter V, data sensus SE2026, atau sistem internal kantor) **DILARANG** dimasukkan ke repo utama `aina`, melainkan harus berada di `data/custom-skills/<nama>/` pada volume persisten downstream (atau disinkronkan via `USER_SKILLS_REPO`).
+- **Discovery Otomatis**: Antigravity CLI di lingkungan Aina otomatis membaca entry `data/custom-skills` dari `skills.json` sehingga skill downstream langsung aktif saat dideploy tanpa mengotori codebase upstream.

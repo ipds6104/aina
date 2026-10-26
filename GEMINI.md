@@ -38,6 +38,13 @@ src/
    - **`GEMINI.md` (Rules)**: Menetapkan batasan arsitektur, kebijakan keamanan (OpSec), dan aturan baku yang selalu aktif.
    - **`skills/<name>/SKILL.md` (Skills)**: Menampung prosedur operasional multi-langkah dan pemanggilan alat eksternal (misal: REST API Whatsmeow, Google Drive, atau ekstraksi dokumen VLM via `skills/vision-document-extractor`) dengan prinsip *Progressive Disclosure* untuk menghemat token.
    - **`config/persona.md` (Persona)**: Menentukan gaya bahasa, karakter rekan kerja, dan keramahan komunikasi.
+4. **Isolasi Core Upstream vs Downstream Custom Skills (Netralitas Repositori Utama)**:
+   - Repositori utama `aina` adalah repositori *upstream core engine* yang wajib bersifat **netral & agnostik terhadap instansi/organisasi**.
+   - **DILARANG KERAS** memasukkan skill atau skrip khusus instansi/organisasi tertentu (misalnya: BPS, kementerian/lembaga kedinasan, aplikasi internal kantor seperti `dokter-v`, `se-data`, kueri database sensus, sistem administrasi internal) ke dalam direktori `skills/` atau `scripts/` di repo utama `aina`.
+   - Seluruh skill khusus instansi/organisasi adalah **domain downstream / tenant-specific**, yang wajib:
+     * Ditempatkan di direktori persisten runtime: `data/custom-skills/<nama>/` (pada container di `/app/data/custom-skills/`).
+     * Dikelola atau disinkronkan secara independen melalui repositori privat pengguna (misal via variabel environment `USER_SKILLS_REPO`).
+     * Antigravity CLI di dalam Aina otomatis mendeteksi entry `data/custom-skills` dari `skills.json` saat dideploy tanpa perlu menyentuh core repo.
 
 
 ---
