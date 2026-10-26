@@ -598,6 +598,169 @@ def cmd_init(args):
     }, indent=2))
 
 
+def cmd_install(args):
+    """Install custom skill(s) from a Git repository or local Git folder."""
+    repo_url = args.url.strip()
+    if not repo_url:
+        print(json.dumps({"status": "error", "message": "Git repository URL is required"}, indent=2))
+        sys.exit(1)
+
+    import tempfile
+    import uuid
+    temp_dir = Path(tempfile.gettempdir()) / f"aina_skill_install_{uuid.uuid4().hex[:8]}"
+
+    # 1. Clone repository
+    clone_cmd = ["git", "clone", "--depth", "1"]
+    if args.branch:
+        clone_cmd.extend(["--branch", args.branch])
+    clone_cmd.extend([repo_url, str(temp_dir)])
+
+    res = subprocess.run(clone_cmd, capture_output=True, text=True)
+    if res.returncode != 0:
+        print(json.dumps({
+            "status": "error",
+            "message": f"Failed to clone repository: {res.stderr.strip()}",
+            "command": " ".join(clone_cmd)
+        }, indent=2))
+        sys.exit(1)
+
+    custom_dir = get_custom_skills_dir()
+    installed = []
+    errors = []
+
+    try:
+        # 2. Discover skills in the cloned repository
+        candidates = {}
+
+        # Pattern A: Single-skill repo where SKILL.md is at root
+        root_skill_md = temp_dir / "SKILL.md"
+        if root_skill_md.is_file():
+            name = None
+            try:
+                content = root_skill_md.read_text(encoding="utf-8")
+                match = re.search(r"^name:\s*([^\n]+)", content, re.MULTILINE)
+                if match:
+                    name = sanitize_skill_name(match.group(1).strip())
+            except Exception:
+                pass
+            if not name:
+                repo_base = repo_url.rstrip("/").split("/")[-1].replace(".git", "")
+                name = sanitize_skill_name(repo_base)
+            candidates[name] = temp_dir
+        else:
+            # Pattern B: Multi-skill repository with skills/ or .agents/skills/
+            search_roots = [
+                temp_dir / "skills",
+                temp_dir / ".agents" / "skills",
+                temp_dir
+            ]
+            for s_root in search_roots:
+                if s_root.is_dir():
+                    for item in sorted(s_root.iterdir()):
+                        if item.is_dir() and (item / "SKILL.md").is_file():
+                            s_name = sanitize_skill_name(item.name)
+                            if s_name not in candidates:
+                                candidates[s_name] = item
+
+        if not candidates:
+            print(json.dumps({
+                "status": "error",
+                "message": "No valid skills with SKILL.md found in the specified repository."
+            }, indent=2))
+            sys.exit(1)
+
+        # 3. Determine which skills to install
+        to_install = {}
+        if args.skill:
+            req_name = sanitize_skill_name(args.skill)
+            if req_name in candidates:
+                to_install[req_name] = candidates[req_name]
+            else:
+                print(json.dumps({
+                    "status": "error",
+                    "message": f"Skill '{args.skill}' not found in repository. Available skills: {list(candidates.keys())}"
+                }, indent=2))
+                sys.exit(1)
+        elif args.all:
+            to_install = candidates
+        else:
+            # If only 1 skill in repo, install it automatically
+            if len(candidates) == 1:
+                to_install = candidates
+            else:
+                print(json.dumps({
+                    "status": "multiple_skills_found",
+                    "message": f"Repository contains multiple skills: {list(candidates.keys())}. Specify --skill <name> or --all.",
+                    "available_skills": list(candidates.keys())
+                }, indent=2))
+                sys.exit(1)
+
+        # 4. Copy each skill to persistent storage, set permissions, install requirements
+        for s_name, s_source in to_install.items():
+            dest_dir = custom_dir / s_name
+            if dest_dir.exists():
+                if not args.force:
+                    errors.append(f"Skill '{s_name}' already exists at {dest_dir}. Use --force to overwrite.")
+                    continue
+                else:
+                    shutil.rmtree(dest_dir)
+
+            dest_dir.mkdir(parents=True, exist_ok=True)
+
+            # Copy contents excluding .git
+            for child in s_source.iterdir():
+                if child.name == ".git":
+                    continue
+                target = dest_dir / child.name
+                if child.is_dir():
+                    shutil.copytree(child, target)
+                else:
+                    shutil.copy2(child, target)
+
+            # Fix script permissions chmod +x
+            scripts_dir = dest_dir / "scripts"
+            if scripts_dir.is_dir():
+                for f in scripts_dir.iterdir():
+                    if f.is_file():
+                        f.chmod(0o755)
+
+            # Optional requirements.txt installation into persistent Python user environment
+            req_file = dest_dir / "requirements.txt"
+            pip_installed = False
+            if req_file.is_file():
+                pip_res = subprocess.run(
+                    [sys.executable, "-m", "pip", "install", "--user", "-r", str(req_file)],
+                    capture_output=True,
+                    text=True
+                )
+                if pip_res.returncode == 0:
+                    pip_installed = True
+
+            installed.append({
+                "skill": s_name,
+                "path": str(dest_dir),
+                "pip_dependencies_installed": pip_installed,
+                "scripts": [f.name for f in scripts_dir.iterdir() if f.is_file()] if scripts_dir.is_dir() else []
+            })
+
+    finally:
+        # Clean up temporary clone directory
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+    status = "success" if installed and not errors else ("partial" if installed else "error")
+    print(json.dumps({
+        "status": status,
+        "repo": repo_url,
+        "installed_count": len(installed),
+        "installed": installed,
+        "errors": errors,
+        "advice": "Skill is now persistently available in data/custom-skills/ and immediately active in Aina!"
+    }, indent=2))
+
+    if not installed and errors:
+        sys.exit(1)
+
+
 def cmd_validate(args):
     """Validate skill compliance: frontmatter, directory structure, permissions, syntax, and OpSec."""
     skill_name = sanitize_skill_name(args.name)
@@ -926,6 +1089,14 @@ def main():
     p_init.add_argument("--desc", "-d", dest="description", help="Short description of the skill")
     p_init.add_argument("--force", "-f", action="store_true", help="Overwrite if skill directory already exists")
 
+    # install
+    p_inst = subparsers.add_parser("install", help="Install custom skill(s) from a Git repository or local Git folder")
+    p_inst.add_argument("url", help="Git repository URL or local repository path")
+    p_inst.add_argument("--skill", "-s", help="Name of specific skill to install from multi-skill repository")
+    p_inst.add_argument("--branch", "-b", help="Git branch or tag to clone")
+    p_inst.add_argument("--all", "-a", action="store_true", help="Install all skills found in repository")
+    p_inst.add_argument("--force", "-f", action="store_true", help="Overwrite if skill directory already exists")
+
     # validate
     p_val = subparsers.add_parser("validate", help="Validate a custom skill for compliance, syntax, and OpSec")
     p_val.add_argument("name", help="Name or path of the skill to validate")
@@ -951,6 +1122,8 @@ def main():
 
     if args.command == "init":
         cmd_init(args)
+    elif args.command == "install":
+        cmd_install(args)
     elif args.command == "validate":
         cmd_validate(args)
     elif args.command == "test":

@@ -71,6 +71,13 @@ SUBCOMMANDS:
                                 --desc, -d <text>       Deskripsi fungsi dan tujuan skill
                                 --force, -f             Timpa direktori skill jika sudah ada
 
+    install <url> [options]   Install custom skill dari repositori Git atau folder lokal
+                              Options:
+                                --skill, -s <name>      Nama skill spesifik yang ingin diinstall (dari multi-skill repo)
+                                --branch, -b <branch>   Branch atau tag Git yang ingin di-clone
+                                --all, -a               Install seluruh skill yang ditemukan di repositori
+                                --force, -f             Timpa direktori skill jika sudah ada
+
     test <name>               Jalankan pengujian otomatis (syntax compile, --help, status check)
     validate <name>           Validasi kepatuhan YAML frontmatter, izin eksekusi, dan OpSec
     delete <name>             Hapus skill kustom dari volume persisten
@@ -84,6 +91,7 @@ SUBCOMMANDS:
 
 CONTOH:
     aina skill init tally-api --template api --desc "Integrasi formulir Tally.so"
+    aina skill install https://github.com/ihkaru/agent-skills --skill arc42-architect
     aina skill test tally-api
     aina skill validate tally-api
     aina skill list

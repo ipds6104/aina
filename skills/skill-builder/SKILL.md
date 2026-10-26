@@ -132,16 +132,39 @@ Kirimkan konfirmasi santun dan jelas:
 
 ---
 
+### SOP Alternatif: Install Custom Skill dari Repositori Git
+
+Bila pengguna di WhatsApp atau web chat meminta:
+- *"Aina, tolong install skill X dari github.com/..."*
+- *"Aina, pasang skill `arc42-architect` dari repo `ihkaru/agent-skills`"*
+
+Jalankan perintah Git installer:
+```bash
+# 1. Install 1 skill spesifik dari repositori multi-skill / hub:
+python3 skills/skill-builder/scripts/skill_scaffolder.py install https://github.com/ihkaru/agent-skills --skill <nama_skill>
+
+# 2. Install langsung dari repositori single-skill:
+python3 skills/skill-builder/scripts/skill_scaffolder.py install <url_repo_git>
+
+# 3. Atau via CLI aina:
+aina skill install <url_repo_git> [--skill <nama_skill>] [--all]
+```
+*Installer otomatis meng-clone shallow `--depth 1`, mendeteksi struktur repo, memindahkan berkas ke volume persisten `data/custom-skills/<nama>/`, memasang izin `chmod +x`, serta menginstall dependensi `requirements.txt` via `pip install --user` ke storage persisten Python.*
+
+---
+
 ## 6. Helper Tool Command Reference
 
 | Perintah | Deskripsi |
 | :--- | :--- |
 | `skill_scaffolder init <NAME> [--template api\|cli\|data\|minimal] [--desc "<DESC>"]` | Membuat template skill baru di `data/custom-skills/`. |
+| `skill_scaffolder install <URL> [--skill <NAME>] [--all] [--force]` | Meng-clone dan meng-install skill dari repositori Git ke volume persisten. |
 | `skill_scaffolder test <NAME>` | Menjalankan suite pengujian otomatis (syntax compile, `--help`, status command). |
 | `skill_scaffolder validate <NAME>` | Memvalidasi kepatuhan format YAML, izin eksekusi, dan kebocoran secret. |
 | `skill_scaffolder list` | Menampilkan seluruh custom skill yang terpasang dan status remote Git. |
 | `skill_scaffolder delete <NAME> [--force]` | Menghapus skill kustom dari volume persisten. |
 | `skill_scaffolder sync [--repo <URL>]` | Melakukan commit dan push folder custom skills ke Git repository. |
+
 
 ---
 

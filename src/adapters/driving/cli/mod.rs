@@ -180,16 +180,19 @@ PENGGUNAAN:
                               Options:
                                 --json                  Output format JSON terstruktur
 
-    skill [list|init|test|validate|delete|sync] Manajemen & Scaffolding Custom Skills Persisten
+    skill [list|init|install|test|validate|delete|sync] Manajemen, Scaffolding & Git Installer Custom Skills
                               Subcommands:
                                 list                    Daftar seluruh custom skill yang terpasang
                                 init <name>             Scaffold skill kustom baru di `data/custom-skills/`
+                                install <url>           Install skill dari repositori Git atau folder lokal
                                 test <name>             Jalankan suite pengujian otomatis custom skill
                                 validate <name>         Validasi kepatuhan format & OpSec
                                 delete <name>           Hapus custom skill dari volume persisten
                                 sync                    Sinkronisasi custom skills ke Git repository
                               Options:
                                 --template, -t <tpl>    Pilihan template: minimal, api, cli, data
+                                --skill, -s <name>      Nama skill spesifik (dari multi-skill repo)
+                                --all, -a               Install semua skill dari repository
                                 --desc, -d <desc>       Deskripsi fungsi skill
                                 --force, -f             Timpa / konfirmasi penghapusan
 
