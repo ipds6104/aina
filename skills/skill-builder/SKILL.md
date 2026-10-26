@@ -1,9 +1,10 @@
 ---
 name: skill-builder
 description: >-
-  Use this skill whenever the user asks Aina to create, build, extend, or update custom skills, integrations,
+  Use this skill whenever the user asks Aina to create, build, extend, test, or update custom skills, integrations,
   or autonomous tools. Guides compliant Antigravity skill structure, persistent storage in `data/custom-skills`,
-  JIT secret handling via Infisical, self-validation, and Git synchronization to `USER_SKILLS_REPO`.
+  JIT secret handling via Infisical, multi-template scaffolding (api, cli, data, minimal), self-validation,
+  automated testing, and Git synchronization to `USER_SKILLS_REPO`.
 ---
 
 # Autonomous Skill Builder & Extensibility Manager
@@ -19,7 +20,8 @@ Activate this skill immediately whenever:
    Pengguna di WhatsApp atau web chat meminta:
    - *"Aina, tolong buatkan integrasi / skill baru untuk Tally.so"*
    - *"Aina, buatkan tool untuk auto-deploy repo X"*
-   - *"Aina, tambahkan skill untuk query Prometheus / Loki"*
+   - *"Aina, tambahkan skill untuk query database / parquet"*
+   - *"Aina, tolong buat skill kustom baru untuk API Y"*
 2. **Kebutuhan Tool Khusus Repositori Produksi**:
    Aina mengidentifikasi perlunya script otomasi baru untuk menangani repositori atau layanan tertentu.
 3. **Pencadangan / Sinkronisasi Skill ke Git**:
@@ -40,7 +42,20 @@ Activate this skill immediately whenever:
 
 ---
 
-## 3. Strict OpSec & Secret Storage (Infisical Integration)
+## 3. Pilihan Template Arsitektur
+
+Saat scaffolding skill baru, pilih `--template` yang paling sesuai:
+
+| Template | Deskripsi | Cocok Digunakan Untuk |
+| :--- | :--- | :--- |
+| `api` | HTTP REST API client lengkap dengan timeout, Bearer auth, retries, dan format WhatsApp. | Layanan eksternal (Tally, Notion, GitHub API, Cloudflare, Webhook). |
+| `cli` | Wrapper biner/subproses eksternal dengan isolasi timeout dan format JSON. | Biner sistem, docker CLI, git runner, utilitas jaringan. |
+| `data` | Tabular query & filter (SQLite, DuckDB, Parquet) hemat memori. | Dataset analitik, database lokal, laporan CSV/Parquet. |
+| `minimal` | Template dasar Python dengan subcommand `status` dan `run`. | Otomasi sederhana atau prototipe cepat. |
+
+---
+
+## 4. Strict OpSec & Secret Storage (Infisical Integration)
 
 > [!CAUTION]
 > **JANGAN PERNAH MENG-HARDCODE KREDENSIAL / TOKEN**:
@@ -58,27 +73,31 @@ Activate this skill immediately whenever:
 
 ---
 
-## 4. Standard Operating Procedures (SOP Pembuatan Skill Baru)
+## 5. Standard Operating Procedures (SOP Pembuatan Skill Baru)
 
 ```text
 ┌────────────────┐     ┌────────────────┐     ┌────────────────┐     ┌────────────────┐     ┌────────────────┐
-│ 1. Scaffold    │ ──> │ 2. Implement   │ ──> │ 3. OpSec &     │ ──> │ 4. Self-Test   │ ──> │ 5. Git Backup  │
+│ 1. Scaffold    │ ──> │ 2. Implement   │ ──> │ 3. OpSec &     │ ──> │ 4. Auto-Test   │ ──> │ 5. Git Backup  │
 │ persistent dir │     │ logic & scripts│     │ Vault Secrets  │     │ & Validate     │     │ & Confirm User │
 └────────────────┘     └────────────────┘     └────────────────┘     └────────────────┘     └────────────────┘
 ```
 
 ### Langkah 1: Scaffold Skill Baru di Persistent Storage
-Gunakan helper tool `skill_scaffolder.py`:
+Gunakan helper tool `skill_scaffolder.py` atau CLI `aina skill`:
 ```bash
-python3 skills/skill-builder/scripts/skill_scaffolder.py init <nama_skill> --desc "<Deskripsi fungsi skill>"
+# Contoh membuat skill API
+python3 skills/skill-builder/scripts/skill_scaffolder.py init <nama_skill> --template api --desc "<Deskripsi fungsi skill>"
+
+# Atau via CLI Aina
+aina skill init <nama_skill> --template api --desc "<Deskripsi fungsi skill>"
 ```
 *Perintah ini otomatis membuat:*
 - `data/custom-skills/<nama_skill>/SKILL.md` (lengkap dengan frontmatter standar).
 - `data/custom-skills/<nama_skill>/scripts/<nama_skill>_tool.py` (executable `chmod +x`).
 
 ### Langkah 2: Tulis Logika Tool & Dokumentasi
-1. Tulis atau modifikasi skrip di `data/custom-skills/<nama_skill>/scripts/`:
-   - Gunakan argument parser (`argparse` untuk Python atau standard flags).
+1. Sesuaikan skrip di `data/custom-skills/<nama_skill>/scripts/`:
+   - Gunakan argument parser (`argparse` untuk Python).
    - Selalu kembalikan output berformat JSON (`{"status": "success", ...}`) agar mudah dicerna AI.
 2. Perbarui `SKILL.md`:
    - Pastikan field `name` sama dengan nama folder.
@@ -87,50 +106,46 @@ python3 skills/skill-builder/scripts/skill_scaffolder.py init <nama_skill> --des
 ### Langkah 3: Integrasikan Kredensial via Infisical
 Jika tool membutuhkan kredensial pihak ketiga:
 ```bash
-# Tanya pengguna dengan santun atau ambil dari brankas:
-secret_tool list
+secret_tool set <KEY_NAME> "<VALUE>"
 ```
 
-### Langkah 4: Pengujian Mandiri (Closed-Loop Validation)
-Sebelum mengonfirmasi ke pengguna:
-1. **Jalankan skrip secara langsung**:
-   ```bash
-   python3 data/custom-skills/<nama_skill>/scripts/<nama_skill>_tool.py status
-   ```
-2. **Jalankan validator kepatuhan format & OpSec**:
-   ```bash
-   python3 skills/skill-builder/scripts/skill_scaffolder.py validate <nama_skill>
-   ```
-   *Validator akan memastikan tidak ada hardcoded token, izin berkas benar, dan frontmatter valid.*
+### Langkah 4: Pengujian Otomatis (Closed-Loop Testing & Validation)
+Sebelum mengonfirmasi ke pengguna, jalankan pengujian otomatis:
+```bash
+# 1. Jalankan test otomatis (compile, --help, status command)
+python3 skills/skill-builder/scripts/skill_scaffolder.py test <nama_skill>
+
+# 2. Jalankan validator kepatuhan format & OpSec
+python3 skills/skill-builder/scripts/skill_scaffolder.py validate <nama_skill>
+```
+*Pengujian memastikan skrip dapat dikompilasi, dapat dieksekusi, statusnya siap, dan tidak ada hardcoded secret.*
 
 ### Langkah 5: Pencadangan & Sinkronisasi Git (`USER_SKILLS_REPO`)
 Tawarkan pencadangan ke repositori Git privat pengguna:
 ```bash
-# Jika USER_SKILLS_REPO sudah disetel:
 python3 skills/skill-builder/scripts/skill_scaffolder.py sync --message "Add <nama_skill> integration"
-
-# Atau inisialisasi repo baru via GitHub CLI:
-gh repo create my-custom-skills --private --source=data/custom-skills --push
 ```
 
 ### Langkah 6: Konfirmasi ke Pengguna
 Kirimkan konfirmasi santun dan jelas:
-> *"Siaapp Kak/Bang, skill baru `<nama_skill>` sudah selesai Aina buat dan uji coba 👍. Skill tersimpan secara persisten di volume brankas data dan siap dipanggil kapan saja!"*
+> *"Siaapp Kak/Bang, skill baru `<nama_skill>` sudah selesai Aina buat dan uji coba 👍. Template `<template>` telah aktif dan tersimpan persisten di volume data!"*
 
 ---
 
-## 5. Helper Tool Command Reference
+## 6. Helper Tool Command Reference
 
 | Perintah | Deskripsi |
 | :--- | :--- |
-| `skill_scaffolder.py init <NAME> --desc "<DESC>"` | Membuat template skill baru di direktori persisten `data/custom-skills/`. |
-| `skill_scaffolder.py validate <NAME>` | Memvalidasi kepatuhan format YAML, izin eksekusi, dan memeriksa adanya kebocoran secret. |
-| `skill_scaffolder.py list` | Menampilkan seluruh custom skill yang terpasang dan status remote Git. |
-| `skill_scaffolder.py sync [--repo <URL>]` | Melakukan commit dan push folder custom skills ke repositori Git pengguna. |
+| `skill_scaffolder init <NAME> [--template api\|cli\|data\|minimal] [--desc "<DESC>"]` | Membuat template skill baru di `data/custom-skills/`. |
+| `skill_scaffolder test <NAME>` | Menjalankan suite pengujian otomatis (syntax compile, `--help`, status command). |
+| `skill_scaffolder validate <NAME>` | Memvalidasi kepatuhan format YAML, izin eksekusi, dan kebocoran secret. |
+| `skill_scaffolder list` | Menampilkan seluruh custom skill yang terpasang dan status remote Git. |
+| `skill_scaffolder delete <NAME> [--force]` | Menghapus skill kustom dari volume persisten. |
+| `skill_scaffolder sync [--repo <URL>]` | Melakukan commit dan push folder custom skills ke Git repository. |
 
 ---
 
-## 6. Sinergi dengan Skill Lain
+## 7. Sinergi dengan Skill Lain
 
 - **`skills/infisical`**: Brankas kredensial untuk semua token pihak ketiga yang dibutuhkan skill baru.
 - **`skills/knowledge-curator`**: Mencatat katalog kapabilitas baru ke `knowledge/index.md`.

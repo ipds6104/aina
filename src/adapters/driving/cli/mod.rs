@@ -180,6 +180,19 @@ PENGGUNAAN:
                               Options:
                                 --json                  Output format JSON terstruktur
 
+    skill [list|init|test|validate|delete|sync] Manajemen & Scaffolding Custom Skills Persisten
+                              Subcommands:
+                                list                    Daftar seluruh custom skill yang terpasang
+                                init <name>             Scaffold skill kustom baru di `data/custom-skills/`
+                                test <name>             Jalankan suite pengujian otomatis custom skill
+                                validate <name>         Validasi kepatuhan format & OpSec
+                                delete <name>           Hapus custom skill dari volume persisten
+                                sync                    Sinkronisasi custom skills ke Git repository
+                              Options:
+                                --template, -t <tpl>    Pilihan template: minimal, api, cli, data
+                                --desc, -d <desc>       Deskripsi fungsi skill
+                                --force, -f             Timpa / konfirmasi penghapusan
+
     metacog [diag|capabilities|calibration] Observabilitas Metakognisi & Kalibrasi Self-Awareness
                               Subcommands:
                                 diag, diagnostics       Representasi diri R, ringkasan Brier score, dan status kalibrasi
@@ -226,7 +239,9 @@ PENGGUNAAN:
             "schedule" | "cron" => commands::handle_schedule(&args[2..]).await,
             "persona" => commands::handle_persona(&args[2..]).await,
             "model" => commands::handle_model(&args[2..]).await,
+            "skill" | "skills" => commands::handle_skill(&args[2..]),
             "metacog" | "metacognition" => commands::handle_metacognition(&args[2..]).await,
+
             _ => {
                 eprintln!("Subcommand tidak dikenal: `{}`. Ketik `aina help`.", cmd);
                 std::process::exit(1);

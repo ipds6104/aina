@@ -24,6 +24,9 @@
 /data/custom-skills/*
 !/data/custom-skills/README.md
 !/data/custom-skills/.gitkeep
+.agents/skills/dokter-v
+.agents/skills/se-data
+
 
 
 # Global Shared Data Lake (heavy analytical datasets, DuckDB, Parquet, SQLite)

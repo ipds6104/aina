@@ -178,6 +178,31 @@ impl AgentCapabilityManifest {
             },
         );
 
+        // 7. skill_scaffolder.py (Autonomous Custom Skill Builder & Extensibility)
+        tools.insert(
+            "skill_scaffolder.py".to_string(),
+            ToolContract {
+                name: "skill_scaffolder.py".to_string(),
+                description: "Pembangun, scaffolder, tester, dan validator skill kustom persisten (data/custom-skills/) dengan dukungan multi-template dan sinkronisasi Git".to_string(),
+                capability_tags: vec![
+                    "skill_builder".to_string(),
+                    "custom_skills".to_string(),
+                    "scaffolding".to_string(),
+                    "extensibility".to_string(),
+                ],
+                resource_intensity: "light".to_string(),
+                timeout_seconds: 30,
+                supports_multimodal: false,
+                common_failure_modes: vec![
+                    "Menyimpan skill kustom di direktori non-persisten (/app/skills/) yang dapat terhapus saat redeploy".to_string(),
+                ],
+                forbidden_patterns: vec![
+                    "DILARANG membuat custom skill baru di dalam folder core repo `skills/` (wajib di `data/custom-skills/`)".to_string(),
+                    "DILARANG meng-hardcode token API di dalam script baru yang dibuat (wajib gunakan secret_tool)".to_string(),
+                ],
+            },
+        );
+
         Self {
             version: "2.1.0".to_string(),
             model_profile: ModelProfile {
@@ -218,6 +243,7 @@ impl AgentCapabilityManifest {
                 "centralized_secrets_and_vault".to_string(),
                 "autonomous_persona_and_wardrobe_rhythm".to_string(),
                 "git_and_codebase_observability".to_string(),
+                "custom_skills_and_extensibility".to_string(),
             ],
             unsupported_domains: vec![
                 "3d_mesh_rendering_and_blender".to_string(),
