@@ -191,6 +191,84 @@ impl PersonaEngine {
         None
     }
 
+    /// Membaca ringkasan singkat seluruh custom skill yang terpasang di persistent volume (data/custom-skills).
+    pub fn load_custom_skills_summary(&self) -> Option<String> {
+        let ws_dir = self.workspace_dir.as_deref().unwrap_or("./workspaces/default");
+        let candidates = [
+            std::path::Path::new(ws_dir).join("data").join("custom-skills"),
+            std::path::PathBuf::from("data/custom-skills"),
+            std::path::PathBuf::from("/app/data/custom-skills"),
+            std::path::Path::new(ws_dir).join("../../data/custom-skills"),
+        ];
+
+        let mut custom_dir = None;
+        for c in &candidates {
+            if c.is_dir() {
+                custom_dir = Some(c);
+                break;
+            }
+        }
+
+        let dir = custom_dir?;
+        let entries = std::fs::read_dir(dir).ok()?;
+        let mut skills = Vec::new();
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                let skill_md = path.join("SKILL.md");
+                if skill_md.is_file() {
+                    let skill_name = path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("unknown")
+                        .to_string();
+
+                    // Baca deskripsi dari YAML frontmatter (mendukung single-line dan multi-line >- atau |)
+                    let desc = if let Ok(content) = std::fs::read_to_string(&skill_md) {
+                        let mut lines = content.lines();
+                        let mut found_desc = String::new();
+                        while let Some(line) = lines.next() {
+                            let trimmed = line.trim();
+                            if trimmed.starts_with("description:") {
+                                let after_prefix = trimmed.trim_start_matches("description:").trim();
+                                let after_block = after_prefix
+                                    .trim_start_matches(">-")
+                                    .trim_start_matches('>')
+                                    .trim_start_matches('|')
+                                    .trim();
+                                if !after_block.is_empty() {
+                                    found_desc = after_block.to_string();
+                                    break;
+                                } else if let Some(next_line) = lines.next() {
+                                    found_desc = next_line.trim().to_string();
+                                    break;
+                                }
+                            }
+                        }
+                        if found_desc.is_empty() {
+                            "Custom skill terpasang".to_string()
+                        } else {
+                            found_desc
+                        }
+                    } else {
+                        "Custom skill terpasang".to_string()
+                    };
+
+                    skills.push(format!("• `{}`: {}", skill_name, desc));
+                }
+            }
+        }
+
+        if skills.is_empty() {
+            None
+        } else {
+            skills.sort();
+            Some(skills.join("\n"))
+        }
+    }
+
+
     pub fn current_local_time_string(&self) -> String {
         let epoch_secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -340,6 +418,17 @@ impl PersonaEngine {
             None => String::new(),
         };
 
+        let custom_skills_context = match self.load_custom_skills_summary() {
+            Some(summary) => format!(
+                "\n---\n[Katalog Custom Skills Tambahan Aktif (data/custom-skills/)]:\n\
+                 {}\n\
+                 - Catatan Pemanggilan: Seluruh custom skill di atas tersimpan di volume persisten (`data/custom-skills/<nama_skill>/scripts/`) dan siap diaktifkan sesuai kebutuhan tugas.\n",
+                summary
+            ),
+            None => String::new(),
+        };
+
+
         let media_context = if msg.has_media {
             if let Some(path) = &msg.media_path {
                 let m_type = msg.media_type.as_deref().unwrap_or("image");
@@ -415,7 +504,8 @@ impl PersonaEngine {
             [Pesan dari Pengirim]:\n\
             {text}\
             {media_context}\n\
-            {knowledge_context}\n\
+            {knowledge_context}\
+            {custom_skills_context}\n\
             ---\n\
             [Integrasi WhatsApp Gateway & Akses Sistem]:\n\
             - URL Whatsmeow Gateway: {whatsmeow_url}\n\
@@ -553,6 +643,7 @@ impl PersonaEngine {
             quoted_context = quoted_context,
             text = msg.text,
             knowledge_context = knowledge_context,
+            custom_skills_context = custom_skills_context,
             platform_format_guidelines = platform_format_guidelines,
             metacog_context = crate::core::domain::metacognition::AgentCapabilityManifest::default_manifest().to_prompt_context()
         )
@@ -882,4 +973,64 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
+
+    #[test]
+    fn test_custom_skills_summary_injection() {
+        let temp_dir = std::env::temp_dir().join(format!("aina_test_custom_skills_{}", rand::random::<u32>()));
+        let skill_dir = temp_dir.join("data").join("custom-skills").join("sample-skill");
+        std::fs::create_dir_all(&skill_dir).unwrap();
+
+        let skill_md = skill_dir.join("SKILL.md");
+        std::fs::write(
+            &skill_md,
+            "---\nname: sample-skill\ndescription: >-\n  Sample custom tool for automated testing.\n---\n# Sample Skill",
+        )
+        .unwrap();
+
+        let engine = PersonaEngine::new(
+            "Persona text".to_string(),
+            "Org text".to_string(),
+            "6281234567890@s.whatsapp.net".to_string(),
+            "Asia/Jakarta".to_string(),
+            7,
+            "id-ID".to_string(),
+            "https://aina-wa.test".to_string(),
+            "628999888777@s.whatsapp.net".to_string(),
+            Some(temp_dir.to_str().unwrap().to_string()),
+        );
+
+        let summary = engine.load_custom_skills_summary();
+        assert!(summary.is_some());
+        let summary_text = summary.unwrap();
+        assert!(summary_text.contains("• `sample-skill`: Sample custom tool for automated testing."));
+
+        let msg = IncomingMessage {
+            id: "MSG_SKILL_TEST".to_string(),
+            platform: Platform::WhatsApp,
+            session_role: SessionRole::PrimaryBot,
+            chat_jid: "628111222333@s.whatsapp.net".to_string(),
+            chat_type: ChatType::DirectMessage,
+            sender: Sender {
+                jid: "628111222333@s.whatsapp.net".to_string(),
+                name: Some("Rekan".to_string()),
+            },
+            text: "Aina kamu punya skill apa aja?".to_string(),
+            timestamp: 1790335800,
+            quoted_message: None,
+            mentioned_jids: vec![],
+            is_bot_mentioned: true,
+            bot_lid: None,
+            is_from_me: false,
+            has_media: false,
+            media_type: None,
+            media_path: None,
+        };
+
+        let prompt = engine.build_prompt(&msg, None);
+        assert!(prompt.contains("[Katalog Custom Skills Tambahan Aktif (data/custom-skills/)]:"));
+        assert!(prompt.contains("• `sample-skill`: Sample custom tool for automated testing."));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
 }
+
