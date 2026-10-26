@@ -28,9 +28,11 @@ Skill ini memberikan antarmuka terstruktur bagi Aina untuk berinteraksi dengan R
 
 ## 2. Penggunaan CLI Tool Resmi (`dokter_v_tool.py`)
 
-Jalankan perintah melalui CLI:
+Jalankan perintah melalui runtime secret broker:
 ```bash
-python3 skills/dokter-v/scripts/dokter_v_tool.py <subcommand> [options]
+secret_tool run -- python3 skills/dokter-v/scripts/dokter_v_tool.py <subcommand> [options]
+# atau jika alias terpasang:
+secret-broker run -- python3 skills/dokter-v/scripts/dokter_v_tool.py <subcommand> [options]
 ```
 
 ### Subcommands Tersedia:

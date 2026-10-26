@@ -138,6 +138,8 @@ if [ -d "/app/skills" ]; then
     ln -sf /app/skills/vision-document-extractor/scripts/doc_extract.py /usr/local/bin/agy-doc-extract 2>/dev/null || true
     ln -sf /app/skills/vision-document-extractor/scripts/doc_extract.py /usr/local/bin/doc_extract 2>/dev/null || true
     ln -sf /app/skills/infisical/scripts/secret_tool.py /usr/local/bin/secret_tool 2>/dev/null || true
+    ln -sf /app/skills/infisical/scripts/secret_tool.py /usr/local/bin/secret-broker 2>/dev/null || true
+    ln -sf /app/skills/infisical/scripts/secret_tool.py /usr/local/bin/secret_broker 2>/dev/null || true
     ln -sf /app/skills/event-triage/scripts/event_triage_tool.py /usr/local/bin/event_triage_tool 2>/dev/null || true
     ln -sf /app/skills/skill-builder/scripts/skill_scaffolder.py /usr/local/bin/skill_scaffolder 2>/dev/null || true
 fi

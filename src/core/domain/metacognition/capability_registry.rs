@@ -123,15 +123,18 @@ impl AgentCapabilityManifest {
             "agy-doc-extract".to_string(),
             ToolContract {
                 name: "agy-doc-extract".to_string(),
-                description: "Ekstraksi dokumen PDF dan gambar via CodeBuddy VLM 9Router dengan beban CPU 0%".to_string(),
+                description: "Ekstraksi dokumen PDF dan gambar via VLM 9Router (wajib dijalankan melalui runtime secret broker: secret_tool run -- agy-doc-extract)".to_string(),
                 capability_tags: vec!["document_ocr".to_string(), "table_extraction".to_string(), "pdf".to_string()],
                 resource_intensity: "light".to_string(),
                 timeout_seconds: 120,
                 supports_multimodal: true,
                 common_failure_modes: vec![
                     "Koneksi timeout jika router 9Router offline atau kunci API kadaluarsa".to_string(),
+                    "Missing API key jika tidak dipanggil via 'secret_tool run -- agy-doc-extract'".to_string(),
                 ],
-                forbidden_patterns: vec![],
+                forbidden_patterns: vec![
+                    "DILARANG meng-hardcode token API key ke dalam source code skrip".to_string(),
+                ],
             },
         );
 
@@ -154,13 +157,13 @@ impl AgentCapabilityManifest {
             },
         );
 
-        // 6. secret_tool.py (Infisical Vault)
+        // 6. secret_tool.py (Runtime Secret Broker)
         tools.insert(
             "secret_tool.py".to_string(),
             ToolContract {
                 name: "secret_tool.py".to_string(),
-                description: "Pengelolaan brankas kredensial & secret terpusat (Infisical) dengan proteksi zero-leakage".to_string(),
-                capability_tags: vec!["secrets".to_string(), "infisical".to_string(), "vault".to_string(), "security".to_string()],
+                description: "Runtime Secret Broker vendor-agnostic (first-party Infisical, Vault, Doppler, Env) untuk injeksi Just-in-Time tanpa kebocoran disk/chat".to_string(),
+                capability_tags: vec!["secrets".to_string(), "infisical".to_string(), "vault".to_string(), "security".to_string(), "secret_broker".to_string()],
                 resource_intensity: "light".to_string(),
                 timeout_seconds: 20,
                 supports_multimodal: false,
@@ -170,6 +173,7 @@ impl AgentCapabilityManifest {
                 forbidden_patterns: vec![
                     "DILARANG menampilkan token rahasia mentah ke teks balasan chat WhatsApp".to_string(),
                     "DILARANG menulis hardcoded API key ke dalam file skrip atau commit Git".to_string(),
+                    "DILARANG menjalankan tool pihak ketiga yang membutuhkan token tanpa melewati secret broker runtime (secret_tool run)".to_string(),
                 ],
             },
         );

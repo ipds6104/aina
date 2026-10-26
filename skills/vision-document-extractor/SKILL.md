@@ -24,10 +24,11 @@ Aktifkan skill ini ketika:
 
 ## 2. Pilihan Flag CLI yang Fleksibel & Best Practice
 
-Gunakan perintah resmi `agy-doc-extract` (atau `python3 skills/vision-document-extractor/scripts/doc_extract.py`):
-
+Gunakan perintah resmi melalui runtime secret broker:
 ```bash
-agy-doc-extract "<file>" [flags]
+secret_tool run -- agy-doc-extract "<file>" [flags]
+# atau jika alias terpasang / env sudah terinjeksi:
+secret-broker run -- agy-doc-extract "<file>" [flags]
 ```
 
 ### Daftar Flag Operasional:
@@ -55,9 +56,9 @@ agy-doc-extract "<file>" [flags]
 ## 3. Alur Kerja Standar Operasional (SOP) di WhatsApp
 
 ### Skenario A: Pengguna Mengirim PDF dan Minta Rangkuman / Jawaban
-1. Jalankan ekstraksi:
+1. Jalankan ekstraksi melalui runtime secret broker:
    ```bash
-   agy-doc-extract "<path_file.pdf>" -o output/doc_extract/
+   secret_tool run -- agy-doc-extract "<path_file.pdf>" -o output/doc_extract/
    ```
 2. Buka dan baca `output/doc_extract/extracted_content.md` menggunakan `view_file`.
 3. Balas ke chat WhatsApp dengan format teks ramah, dan ubah tabel menjadi format poin *bullet* (`•`) yang rapi.
@@ -65,13 +66,13 @@ agy-doc-extract "<file>" [flags]
 ### Skenario B: Pengguna Hanya Ingin Halaman Tertentu
 Contoh: *"Aina tolong cek isi halaman 4 dan 5 saja"*:
 ```bash
-agy-doc-extract "<path_file.pdf>" -p 4-5 -o output/doc_extract/
+secret_tool run -- agy-doc-extract "<path_file.pdf>" -p 4-5 -o output/doc_extract/
 ```
 
 ### Skenario C: Pengguna Minta Tabel Diubah ke File CSV / Excel
 Contoh: *"Aina tolong convert tabel di laporan ini ke CSV"*:
 ```bash
-agy-doc-extract "<path_file.pdf>" --mode tables --csv -o output/doc_extract/
+secret_tool run -- agy-doc-extract "<path_file.pdf>" --mode tables --csv -o output/doc_extract/
 ```
 Kirim file `.csv` yang dihasilkan ke pengguna WhatsApp:
 ```bash

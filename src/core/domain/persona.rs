@@ -355,9 +355,9 @@ impl PersonaEngine {
                          - Tipe Media: {m_type}\n\
                          - Lokasi File Lokal: {path}\n\
                          - INSTRUKSI PEMROSESAN DOKUMEN / PDF: Berkas ini adalah dokumen/PDF. JANGAN mencoba membaca file mentah dengan `view_file` biasa.\n\
-                           JALANKAN EKSTRAKSI DOKUMEN melalui perintah CLI:\n\
-                           `python3 skills/vision-document-extractor/scripts/doc_extract.py \"{path}\" -o output/doc_extract/`\n\
-                           (atau `agy-doc-extract \"{path}\" -o output/doc_extract/`).\n\
+                           JALANKAN EKSTRAKSI DOKUMEN melalui runtime secret broker:\n\
+                           `secret_tool run -- agy-doc-extract \"{path}\" -o output/doc_extract/`\n\
+                           (atau `secret_tool run -- python3 skills/vision-document-extractor/scripts/doc_extract.py \"{path}\" -o output/doc_extract/`).\n\
                          - KESADARAN KONKURENSI PARALEL & RESILIENSI AUTO-RETRY:\n\
                            * Tool ini ditenagai 9Router load-balancer dengan rotasi 10 akun CodeBuddy dan memproses halaman secara PARALEL SERENTAK (default 4 worker, dukung `-c 8` atau `-c 16` untuk kecepatan kilat ~2-3 detik per dokumen multi-halaman).\n\
                            * Dilengkapi fitur AUTO-RESTART/RETRY otomatis (`-r 3`) dengan exponential backoff jika terjadi gangguan transient jaringan.\n\

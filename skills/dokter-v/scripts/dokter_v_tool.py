@@ -50,13 +50,17 @@ def make_request(method, path, body=None, params=None):
         url = f"{url}?{query_string}"
 
     api_key = get_api_key()
+    if not api_key:
+        return {
+            "error": True,
+            "message": "DOKTER_V_API_KEY tidak ditemukan di environment. Jalankan tool ini melalui runtime secret broker: 'secret_tool run -- python3 skills/dokter-v/scripts/dokter_v_tool.py ...'"
+        }
     headers = {
         "Accept": "application/json",
         "User-Agent": "Aina-Agent/1.0",
+        "X-API-KEY": api_key,
+        "Authorization": f"Bearer {api_key}",
     }
-    if api_key:
-        headers["X-API-KEY"] = api_key
-        headers["Authorization"] = f"Bearer {api_key}"
 
     data_bytes = None
     if body is not None:

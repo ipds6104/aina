@@ -34,10 +34,11 @@
   4. Pengguna juga dapat menggunakan Personal Access Token (PAT) via `aina gh-login <pat>`.
 
 ## 5. Ekstraksi Dokumen & PDF (Vision VLM Engine)
-- **Tool Resmi**: `python3 skills/vision-document-extractor/scripts/doc_extract.py` (atau `/usr/local/bin/agy-doc-extract`)
+- **Tool Resmi**: `secret_tool run -- agy-doc-extract` (atau `secret_tool run -- python3 skills/vision-document-extractor/scripts/doc_extract.py`)
 - **Skill Terkait**: `skills/vision-document-extractor`
 - **Output Default**: `output/doc_extract/`
 - **Aturan Eksekusi & Kesadaran Konkurensi**:
+  - Selalu jalankan melalui runtime secret broker (`secret_tool run -- agy-doc-extract ...`) agar kredensial diinjeksi Just-in-Time tanpa hardcoded secrets.
   - Selalu gunakan skrip ekstraktor di atas untuk berkas `.pdf`, invoice, struk belanja, bagan, atau gambar dokumen teks rapat.
   - Dilarang mencoba membaca biner PDF mentah menggunakan `view_file` atau `cat` secara langsung.
   - **Konkurensi Paralel Cepat**: Gunakan flag `-c 8` atau `-c 16` untuk dokumen multi-halaman agar semua halaman diproses serentak via 9Router (selesai dalam hitungan 2–3 detik).
@@ -46,9 +47,16 @@
   - **Konversi CSV**: Bila pengguna minta tabel diubah ke file CSV/Excel, tambahkan `--csv`, lalu kirimkan file `output/doc_extract/*.csv` ke pengguna via `python3 skills/whatsmeow/scripts/wa_tool.py send-media`.
   - Setelah ekstraksi selesai, baca file `output/doc_extract/extracted_content.md` untuk menjawab pengguna.
 
-## 6. Tata Kelola Secret (Infisical Vault) & Custom Skills
-- **Skill Terkait**: `skills/infisical`
-- **Tool Resmi**: `python3 skills/infisical/scripts/secret_tool.py` (atau `secret_tool <cmd>`)
+## 6. Runtime Secret Broker (Anti-Vendor Lock-in & First-Party Infisical)
+- **Skill Terkait**: `skills/infisical` (alias: `skills/secret-vault`)
+- **Tool Resmi**: `python3 skills/infisical/scripts/secret_tool.py` (atau `secret_tool <cmd>` / `secret-broker <cmd>`)
+- **Kewajiban Eksekusi Runtime (JIT)**:
+  - Setiap skill atau tool eksternal yang memerlukan token API/kredensial **WAJIB** dijalankan via: `secret_tool run -- <command>`.
+  - DILARANG meng-hardcode API key ke dalam source code skrip atau commit git.
+- **Dukungan Multi-Provider (Tanpa Vendor Lock-in)**:
+  - **Infisical (First-Party Support)**: Didukung bawaan dengan Universal Auth Machine Identity, caching token di `/root/.infisical/cached_token`, dan scoped path.
+  - **HashiCorp Vault**: Mendukung `VAULT_ADDR` & `VAULT_TOKEN`.
+  - **Doppler**: Mendukung `DOPPLER_TOKEN`.
+  - **Local Persistent Env**: `.secrets.env` (chmod 600) untuk pengujian lokal mandiri.
 - **Penyimpanan Token Baru**: Bila pengguna membagikan API key/token di chat, simpan via `secret_tool set <KEY> "<VALUE>"`. DILARANG mengulang string token mentah di balasan WhatsApp.
-- **Injeksi Secret Just-in-Time**: Jalankan skrip yang membutuhkan secret via `secret_tool run -- python3 ...`.
 - **Pembuatan Custom Skill**: Simpan skill kustom baru di `data/custom-skills/<nama>/` lengkap dengan `SKILL.md` dan `scripts/`. Tawarkan backup ke repo GitHub privat (`USER_SKILLS_REPO`) via `gh` CLI setelah berhasil diuji.

@@ -17,9 +17,9 @@ from pathlib import Path
 from html.parser import HTMLParser
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-DEFAULT_BASE_URL = os.environ.get("DOC_EXTRACT_BASE_URL", "https://router.dvlpid.my.id/v1")
-DEFAULT_API_KEY = os.environ.get("DOC_EXTRACT_API_KEY", os.environ.get("CODEBUDDY_API_KEY", "sk-9router-master-key"))
-DEFAULT_MODEL = os.environ.get("DOC_EXTRACT_MODEL", "cbai/minimax-m3")
+DEFAULT_BASE_URL = os.environ.get("DOC_EXTRACT_BASE_URL", os.environ.get("NINEROUTER_BASE_URL", "https://router.dvlpid.my.id/v1"))
+DEFAULT_API_KEY = os.environ.get("DOC_EXTRACT_API_KEY", os.environ.get("NINEROUTER_API_KEY", os.environ.get("CODEBUDDY_API_KEY", "")))
+DEFAULT_MODEL = os.environ.get("DOC_EXTRACT_MODEL", os.environ.get("NINEROUTER_DEFAULT_MODEL", "my9model-free"))
 
 
 class SimpleHTMLTableToCSV(HTMLParser):
@@ -299,9 +299,16 @@ def process_document(args):
     if not path.exists():
         raise FileNotFoundError(f"File not found: {args.file}")
 
-    base_url = (args.base_url or os.environ.get("DOC_EXTRACT_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
-    api_key = args.api_key or os.environ.get("DOC_EXTRACT_API_KEY") or os.environ.get("CODEBUDDY_API_KEY") or DEFAULT_API_KEY
-    model = args.model or os.environ.get("DOC_EXTRACT_MODEL") or DEFAULT_MODEL
+    base_url = (args.base_url or os.environ.get("DOC_EXTRACT_BASE_URL") or os.environ.get("NINEROUTER_BASE_URL") or os.environ.get("CODEBUDDY_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
+    api_key = args.api_key or os.environ.get("DOC_EXTRACT_API_KEY") or os.environ.get("NINEROUTER_API_KEY") or os.environ.get("CODEBUDDY_API_KEY") or DEFAULT_API_KEY
+    if not api_key:
+        raise RuntimeError(
+            "API key tidak ditemukan di runtime environment! "
+            "Untuk keamanan, skrip ini wajib dijalankan melalui runtime secret broker: "
+            "'secret_tool run -- agy-doc-extract <file>' "
+            "(atau pastikan NINEROUTER_API_KEY / DOC_EXTRACT_API_KEY telah terinjeksi)."
+        )
+    model = args.model or os.environ.get("DOC_EXTRACT_MODEL") or os.environ.get("NINEROUTER_DEFAULT_MODEL") or os.environ.get("CODEBUDDY_MODEL") or DEFAULT_MODEL
 
     out_path = Path(args.output)
     out_path.mkdir(parents=True, exist_ok=True)
@@ -510,7 +517,7 @@ def main():
     parser.add_argument("--model", default="", help="Override model VLM (default: cbai/deepseek-v4.1-flash)")
 
     parser.add_argument("--base-url", default="", help="Override base URL VLM (default: https://router.dvlpid.my.id/v1)")
-    parser.add_argument("--api-key", default="", help="Override API Key VLM (default: sk-9router-master-key)")
+    parser.add_argument("--api-key", default="", help="Override API Key VLM (default: diinjeksi secara Just-in-Time via secret broker)")
     parser.add_argument("--stdout", action="store_true", help="Cetak hasil markdown langsung ke stdout")
 
 

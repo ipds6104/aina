@@ -94,3 +94,25 @@ src/
   2. `/root/.gemini` ➔ Token autentikasi OAuth Antigravity CLI.
   3. `/app/workspace` ➔ Sandbox direktori kerja agen.
 - **Izin Eksekusi Skrip**: Skrip pembantu di dalam `skills/*/scripts/` wajib memiliki izin `chmod +x`, yang otomatis diamankan oleh `docker-entrypoint.sh`.
+
+---
+
+## 7. Protokol Runtime Secret Broker & Anti-Vendor Lock-in
+
+1. **Kewajiban Secret Broker Runtime**:
+   - Seluruh built-in skills atau tools yang memerlukan kredensial pihak ketiga (API key, token, client secret, atau password) **HANYA BOLEH DIJALANKAN** melalui **Secret Broker** secara *runtime* menggunakan Just-in-Time (JIT) injection:
+     ```bash
+     secret_tool run -- <command>
+     # atau alias container:
+     secret-broker run -- <command>
+     ```
+   - Skrip pihak ketiga/ekstraktor dilarang membaca atau mengasumsikan secret tersimpan statis di disk ataupun meng-hardcode nilai fallback ke dalam kode sumber.
+2. **Prinsip Anti-Vendor Lock-in**:
+   - Arsitektur Secret Broker [`skills/infisical/scripts/secret_tool.py`](file:///home/ihza/Projects/aina/skills/infisical/scripts/secret_tool.py) bersifat *vendor-agnostic* dengan kontrak antarmuka seragam (`get`, `set`, `list`, `run`, `status`), mendukung:
+     * **Infisical (First-Party Support)**: Prioritas utama terintegrasi dengan Universal Auth (Machine Identity), token caching 30 hari, REST API fallback tanpa dependensi eksternal, dan hierarki path/folder.
+     * **HashiCorp Vault**: Engine KV v1/v2 via CLI `vault` atau direct REST API (`VAULT_ADDR` & `VAULT_TOKEN`).
+     * **Doppler**: CLI `doppler run` atau service token (`DOPPLER_TOKEN`).
+     * **Local Persistent Env**: `.secrets.env` (chmod 600) untuk pengujian lokal/offline tanpa koneksi cloud.
+3. **Strict OpSec & Sanitasi Chat**:
+   - Dilarang keras menaruh string token/kredensial fallback mentah di dalam file script.
+   - Dilarang mengulang atau mencetak string token rahasia ke dalam teks balasan obrolan WhatsApp (hanya nama kunci dan status sensor bertopeng yang diizinkan).
