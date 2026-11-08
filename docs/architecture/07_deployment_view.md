@@ -1,77 +1,100 @@
-# 7. Tampilan Penyebaran (Deployment View)
+# 7. Pandangan Penerapan (Deployment View)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `e9b88a2` (branch: `main`)
-> - **Verified Timestamp**: `2026-10-26T11:19:12+07:00`
+> - **Verified Commit**: `1ee7597` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-08T16:40:29+07:00`
 > - **Tracked Paths**: `src/`, `config/`, `skills/`
 > - **Drift Status**: `verified`
 
-Bab ini menjelaskan bagaimana sistem Aina dipasang, dioperasikan, dan dijalankan di infrastruktur server secara nyata (baik melalui Docker, Coolify, maupun mesin fisik Linux).
+Bab ini menjelaskan topologi perangkat keras, konfigurasi kontainer Docker, pemetaan komponen blok pembangun ke lingkungan eksekusi, serta jalur volume penyimpanan permanen di server produksi tempat Aina beroperasi.
 
 ---
 
-## 7.1 Lingkungan Infrastruktur Server (Infrastructure Overview)
+## 7.1 Topologi Penerapan Produksi (Production Deployment Topology)
 
-Aina dirancang untuk berjalan sebagai kontainer tunggal (*single binary container*) yang sangat ringan dan mandiri, didampingi oleh kontainer gerbang Whatsmeow.
+Aina diterapkan di server fisik mandiri (*on-premises self-hosted*) yang dikelola melalui platform PaaS **Coolify**:
 
 ```mermaid
 flowchart TD
-    subgraph ServerHost ["Mesin Server Fisik / Cloud VPS (Linux x86_64 / ARM64)"]
-        subgraph DockerNet ["Jaringan Docker Internal (Bridge)"]
-            subgraph AinaContainer ["Kontainer Aina (Port 8090)"]
-                AppBin["Biner Tunggal Aina (Rust Engine)"]
-                AppCLI["Google Antigravity CLI (agy)"]
-            end
-            
-            subgraph WhatsmeowContainer ["Kontainer Whatsmeow Gateway (Port 8080)"]
-                WaDaemon["Whatsmeow Daemon (Go Socket Engine)"]
-                WaDB["SQLite Sesi WhatsApp (whatsmeow.db)"]
-            end
+    subgraph HostServer ["Server Produksi (Lenovo ThinkStation P320 / Ubuntu Linux)"]
+        subgraph MeshNet ["Jaringan Privat (Tailscale Mesh Network)"]
+            Tailscale["Tailscale Daemon (Userspace Mode :1055)"]
         end
 
-        subgraph HostStorage ["Penyimpanan Berkas Persisten (Host Volumes)"]
-            VolData["/app/data (aina.db & custom-skills)"]
-            VolAuth["/root/.gemini (Kunci OAuth Google Pool)"]
-            VolWorkspace["/app/workspace (Sandbox Kerja Agen)"]
-            VolWaData["/data/whatsmeow (Kunci Sesi Perangkat WA)"]
+        subgraph CoolifyOrch ["Orkestrasi Coolify (Docker Engine 29.5)"]
+            subgraph AinaApp ["Kontainer Utama (aina-app)"]
+                RustCore["Aina Core Daemon (Biner Rust /usr/local/bin/aina)"]
+                Entrypoint["docker-entrypoint.sh (Reconciler & Symlinks)"]
+                PythonVenv["Python Runtime (scripts/*.py, reflect.py)"]
+                AGYCli["Google Antigravity CLI (/usr/local/bin/agy)"]
+            end
+
+            subgraph WAApp ["Kontainer Gateway (whatsapp-bot)"]
+                WhatsmeowService["Whatsmeow Go Service (:8080)"]
+            end
+
+            subgraph WADatabase ["Kontainer Database Gateway"]
+                PostgresWA["PostgreSQL Database (Whatsmeow Sessions)"]
+            end
+
+            subgraph PersistentStorage ["Volume Persisten (/app/data/)"]
+                DBFile["aina.db (SQLite WAL & FTS5)"]
+                ActFolder["activities/ (*.json overrides persisten)"]
+                CustomSkillsFolder["custom-skills/ (Keahlian kustom Git)"]
+                AssetsFolder["assets/ (character_sheet.png acuan)"]
+                JournalFile["status_journal.jsonl (Riwayat visual)"]
+            end
         end
     end
 
-    WaDaemon <-->|"Jaringan WebSocket WhatsApp Resmi"| WhatsAppCloud["Server Cloud WhatsApp"]
-    WaDaemon -->|"Kirim Webhook Pesan Masuk (HTTP)"| AppBin
-    AppBin -->|"Kirim Balasan Pesan (HTTP REST)"| WaDaemon
-
-    AppBin --- VolData
-    AppBin --- VolAuth
-    AppBin --- VolWorkspace
-    WaDaemon --- VolWaData
+    WhatsmeowService <-->|"HTTP Webhook & Send (:8080)"| RustCore
+    WhatsmeowService <-->|"Sesi WhatsApp"| PostgresWA
+    RustCore <-->|"Simpan percakapan & jadwal"| DBFile
+    RustCore <-->|"Sinkronisasi jadwal persisten"| ActFolder
+    RustCore <-->|"Auto-discovery ke .agents/skills"| CustomSkillsFolder
+    PythonVenv <-->|"Audit jurnal visual"| JournalFile
 ```
 
 ---
 
-## 7.2 Pemetaan Komponen ke Lingkungan Penyebaran (Component Deployment Mapping)
+## 7.2 Pemetaan Komponen Blok Pembangun ke Node Penerapan
 
-Semua komponen blok pembangun dari Bab 5 dipetakan ke dalam proses runtime kontainer sebagai berikut:
+Tabel berikut memetakan seluruh komponen dari Bab 5 (*Building Block View*) ke kontainer fisik dan lingkungan runtime eksekusinya di server ThinkStation:
 
-1. **`WebhookServer`**: Berjalan sebagai listener HTTP di dalam proses biner Aina, mengikat port `8090`. Menerima webhook dari Whatsmeow dan melayani dasbor web.
-2. **`CliDispatcher`**: Berjalan saat biner Aina dipanggil melalui terminal perintah kontainer (`docker exec -it aina aina <subcommand>`).
-3. **`ProcessIncomingMessageUseCase`**: Berjalan di dalam memori proses utama Aina, mengorkestrasi logika bisnis secara asinkron.
-4. **`PersonaEngine`**: Berjalan di dalam memori proses utama Aina, membaca file konfigurasi `config/persona.md` dan `config/organization.md`.
-5. **`SqliteSessionStore`**: Mengakses file fisik database di volume persisten `/app/data/aina.db` dengan mode WAL berkecepatan tinggi.
-6. **`AntigravityCliAdapter`**: Memanggil proses biner pembantu `agy` di `/root/.local/bin/agy` dan membaca token autentikasi di volume `/root/.gemini`.
-7. **`WhatsmeowHttpAdapter`**: Mengirim permintaan HTTP keluar (*outbound HTTP client*) ke alamat kontainer Whatsmeow (`http://whatsmeow:8080`).
-8. **`SecretBroker`**: Skrip pembantu yang terpasang di kontainer (`secret_tool` / `secret-broker`), bertugas mengambil kunci rahasia secara aman saat agen menjalankan perintah.
-9. **`SkillRegistry`**: Membaca folder keahlian di `/app/skills/` dan folder keahlian persisten di `/app/data/custom-skills/`.
+| Komponen Blok Pembangun | Kontainer / Node Eksekusi | Lingkungan Runtime & Jalur Eksekusi |
+|:---|:---|:---|
+| WebhookServer | `aina-app` | Axum HTTP server pada port `:3000` di dalam kontainer utama. |
+| CliDispatcher | `aina-app` | Biner CLI `/usr/local/bin/aina` untuk eksekusi perintah terminal ad-hoc. |
+| ProcessIncomingMessageUseCase | `aina-app` | Runtime asinkron Tokio task pool di dalam proses daemon utama. |
+| PersonaEngine | `aina-app` | Modul domain Rust di dalam memori proses utama. |
+| SqliteSessionStore | `aina-app` | Connection pool `rusqlite` mengakses berkas `/app/data/aina.db` di volume persisten. |
+| AntigravityCliAdapter | `aina-app` | Subprocess runner yang memanggil biner Google Antigravity CLI (`/usr/local/bin/agy`). |
+| WhatsmeowHttpAdapter | `aina-app` | HTTP client asinkron yang berkomunikasi dengan kontainer `whatsapp-bot:8080`. |
+| SecretBroker | `aina-app` | Skrip Python `skills/infisical/scripts/secret_tool.py` yang dieksekusi secara Just-in-Time. |
+| SkillRegistry | `aina-app` | Modul Rust `metacognition` dan utilitas `skill_scaffolder.py` yang memindai `/app/data/custom-skills`. |
+| ActivityReconciler | `aina-app` | Modul domain Rust yang dieksekusi saat booting dan via CLI `aina activity`. |
+| ActivityReflectionEngine | `aina-app` | Skrip Python `skills/activity-reflection/scripts/reflect.py` untuk evaluasi otonom harian. |
 
 ---
 
-## 7.3 Persyaratan Volume Persisten (Persistent Storage Invariants)
+## 7.3 Struktur Volume Penyimpanan Persisten (`/app/data/`)
 
-Agar data tidak hilang saat kontainer diperbarui (*rolling update* atau *rebuild* di Coolify), 4 folder berikut wajib dihubungkan ke volume permanen:
+Karena kontainer Docker bersifat *ephemeral* (dihancurkan dan dibuat ulang setiap kali kode baru di-push ke branch `main`), seluruh state krusial wajib disimpan di direktori `/app/data/` yang dipetakan ke volume persisten Docker di host ThinkStation:
 
-| Jalur di Dalam Kontainer | Isi Data & Kepentingan | Akibat Jika Volume Hilang |
+| Jalur di Kontainer | Isi & Tanggung Jawab | Kebijakan Saat Redeployment |
 |:---|:---|:---|
-| `/app/data` | Database SQLite (`aina.db`), riwayat chat, dan folder keahlian khusus (`data/custom-skills`). | Riwayat percakapan dan keahlian kustom hilang, sistem kembali ke setelan pabrik. |
-| `/root/.gemini` | Token autentikasi OAuth Google untuk Antigravity CLI. | Pengguna harus login ulang dan menyambungkan akun Google dari awal. |
-| `/app/workspace` | Tempat kerja agen saat membuat berkas olahan data atau unduhan dokumen. | File hasil olahan data sementara hilang (tidak kritis). |
-| `/data/whatsmeow` | Kunci sesi enkripsi soket WhatsApp di kontainer Whatsmeow. | Koneksi WhatsApp terputus dan pengguna harus memindai ulang QR Code di ponsel. |
+| `/app/data/aina.db` | Basis data SQLite utama (sesi, profil, riwayat chat FTS5, jadwal `scheduled_tasks`, audit). | Terlindungi 100% di Docker volume; migrasi skema dijalankan otomatis saat startup. |
+| `/app/data/activities/` | Berkas konfigurasi tugas terjadwal kustom/modifikasi pengguna (`<slug>.json`). | Disinkronkan oleh `ActivityReconciler` saat startup; override pengguna diutamakan di atas baseline pabrik. |
+| `/app/data/custom-skills/` | Folder keahlian kustom yang dipasang via `aina skill install`. | Disinkronkan dengan symlink `.agents/skills/` agar terdeteksi instan tanpa restart. |
+| `/app/data/assets/` | Berkas acuan gambar karakter Aina (`character_sheet.png`, `avatar.png`). | Bebas dari penimpaan Git (`.gitignore`); menjaga identitas visual agar tidak bergeser (*anti-visual drifting*). |
+| `/app/data/status_journal.jsonl` | Riwayat log publikasi status WhatsApp harian (tema, busana, caption, ID). | Dibaca oleh `scripts/persona_status.py` dan `scripts/reflect.py` untuk mengukur skor kebosanan (*boredom score*). |
+
+---
+
+## 7.4 Otomasi CI/CD & Zero-Downtime Deployment
+
+Alur penerapan kode diperbarui secara otomatis menggunakan arsitektur *GitOps*:
+1. **Developer Push**: Pengembang melakukan `git push origin main` ke GitHub `ipds6104/aina`.
+2. **GitHub App Webhook**: GitHub App otomatis mengirim webhook deployment ke server Coolify ThinkStation.
+3. **Multi-Stage Docker Build**: Coolify mengompilasi biner Rust release dengan caching dependensi Cargo, menghasilkan citra mini berbasis Debian Bookworm Slim.
+4. **Healthcheck & Swap**: Kontainer baru diuji status kesehatannya via HTTP endpoint `/api/status`. Begitu berstatus *healthy*, kontainer lama dihentikan dan lalu lintas dialihkan seketika (*zero-downtime rolling update*).

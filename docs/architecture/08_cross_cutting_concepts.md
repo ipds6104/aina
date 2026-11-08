@@ -1,65 +1,64 @@
-# 8. Konsep Lintas Komponen (Cross-Cutting Concepts)
+# 8. Konsep Lintas Bidang (Cross-Cutting Concepts)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `e9b88a2` (branch: `main`)
-> - **Verified Timestamp**: `2026-10-26T11:19:12+07:00`
+> - **Verified Commit**: `1ee7597` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-08T16:40:29+07:00`
 > - **Tracked Paths**: `src/`, `config/`, `skills/`
 > - **Drift Status**: `verified`
 
-Bab ini membahas prinsip-prinsip menyeluruh yang berlaku di semua bagian sistem, meliputi aspek keamanan, tata krama komunikasi, kesadaran waktu, dan ketahanan sistem.
+Bab ini mendokumentasikan pola-pola rancangan umum (*architectural patterns*) yang berlaku di seluruh komponen Aina, mulai dari keamanan, pencatatan log, etika interaksi, hingga penemuan keahlian otonom.
 
 ---
 
-## 8.1 Keamanan dan Kerahasiaan Data (Security & Privacy)
+## 8.1 Manajemen Kunci Rahasia & Pencegahan Kebocoran (Zero-Leakage Security)
 
-### 1. Kurir Rahasia Tepat Waktu (*Runtime Secret Broker*)
-- Kunci API, password database, atau token akses eksternal tidak pernah disimpan dalam file teks biasa di repositori.
-- Saat sebuah alat bantu membutuhkan kunci, alat tersebut memanggil kurir rahasia (`secret_tool run -- ...`). Kunci disuntikkan langsung ke variabel lingkungan proses saat itu saja (*Just-in-Time*), dan hilang saat proses selesai.
-- Mendukung berbagai brankas rahasia: Infisical, HashiCorp Vault, Doppler, maupun berkas `.secrets.env` lokal (chmod 600) untuk pengujian offline.
-
-### 2. Penyaringan Balasan Chat Otomatis (*Chat Sanitizer*)
-- Sebelum pesan dikirim ke WhatsApp, teks balasan diperiksa oleh penyaring (`src/adapters/driven/agy_cli/sanitizer.rs`).
-- Jika model AI secara tidak sengaja mencetak token internal, status task latar belakang, atau potongan kunci rahasia, penyaring akan langsung menghapus teks tersebut demi keamanan.
-
-### 3. Batas Privasi Antar-Sesi (*Cross-Session Privacy Boundaries*)
-- Obrolan pribadi pengguna dengan Aina adalah rahasia mutlak.
-- Aina dilarang keras mengutip, menceritakan, atau membawa konteks obrolan pribadi ke dalam grup kantor atau ke grup lain.
-
-### 4. Tingkat Kepercayaan Bertahap (*Progressive Trust*)
-- Aina mencatat peran setiap rekan kerja di database SQLite:
-  - `admin`: Pemilik bot / Companion (kuasa penuh).
-  - `staff`: Rekan kerja terverifikasi (bisa meminta olah data rutin).
-  - `guest`: Kontak baru atau orang luar yang belum diverifikasi.
-- Jika ada `guest` yang meminta data sensitif atau instruksi berbahaya di grup, Aina menerapkan prinsip **Tawaqquf** (menahan diri dan tidak langsung memberikan data) dan meminta konfirmasi pribadi ke pemilik bot via jalur pribadi (*DM*).
+Keamanan kunci API dan kredensial kantor dilindungi melalui 3 lapis pengamanan:
+1. **Penyuntikan Dinamis (*Just-in-Time Secret Broker*)**: Kunci akses tidak disimpan di file konfigurasi. Saat script memerlukan token (misal token Google Drive), script memanggil `secret_tool.py` yang mengambilnya dari brankas memori dan langsung menghapusnya setelah eksekusi.
+2. **Penyaring Teks Keluar (*Output Sanitizer*)**: Seluruh teks balasan yang akan dikirim ke WhatsApp melewati filter ekspresi reguler di `src/core/domain/sanitizer.rs` untuk menghapus token otorisasi, bearer token, atau URL sensitif yang tidak sengaja tercetak.
+3. **Pemisahan Jalur Obrolan (*Session Privacy Boundary*)**: Percakapan di ruang pribadi (DM) dan grup kantor disimpan dalam sesi terisolasi; Aina dilarang mengutip pesan dari DM pemilik ke dalam obrolan grup publik.
 
 ---
 
-## 8.2 Kesadaran Waktu dan Penanggalan Lokal (Temporal Awareness)
+## 8.2 Logging, Telemetri, & Metakognisi Diri (Self-Observability)
 
-1. **Zona Waktu Resmi WIB (UTC+7)**:
-   - Seluruh aktivitas, pembuatan pengingat, dan riwayat obrolan dihitung berdasarkan waktu **WIB (`Asia/Jakarta`)** dengan nama hari dan bulan bahasa Indonesia.
-   - Menghindari kebingungan jadwal yang sering terjadi pada model AI yang mengira dirinya hidup di zona waktu UTC atau waktu Amerika Serikat.
-2. **Pencarian Waktu Kilat (< 5ms)**:
-   - Mesin pencari SQLite FTS5 dilengkapi filter waktu (misal: `--since 7d`, `--from YYYY-MM-DD`). Ini mencegah AI salah mengira kejadian 6 bulan lalu sebagai kejadian kemarin pagi (*anachronism*).
-
----
-
-## 8.3 Format Komunikasi Khusus WhatsApp (WhatsApp Formatting Hygiene)
-
-Model AI biasanya terbiasa menghasilkan tulisan Markdown untuk layar komputer (seperti tanda pagar `# Heading` atau tabel lebar bertanda `|`). Format ini hancur dan sangat jelek jika dibaca di layar kecil ponsel.
-
-Aina menerapkan aturan format ramah WhatsApp secara ketat:
-- **Tebal**: Menggunakan `*teks*` (bukan `**teks**`).
-- **Miring**: Menggunakan `_teks_`.
-- **Coret**: Menggunakan `~teks~`.
-- **Daftar**: Menggunakan simbol titik atau bullet `•` (bukan tabel Markdown lebar).
-- **Link**: Menuliskan URL secara langsung, bukan format `[nama](url)`.
-- **Kode Panjang**: Jika kode program lebih dari 25 baris, kode disimpan ke file di sandbox dan hanya ringkasannya yang dikirimkan ke chat.
+Aina memantau kinerjanya sendiri (*metacognition*) secara transparan:
+1. **Audit Interaksi WhatsApp (`whatsapp_action_audits`)**: Setiap pesan masuk mencatat durasi proses, daftar tool yang dipanggil, usecase, serta status sukses/gagal di SQLite.
+2. **Riwayat Tugas Terjadwal (`scheduled_task_runs`)**: Setiap eksekusi aktivitas rutin mencatat waktu mulai, durasi detik, cuplikan output, dan pesan error jika ada.
+3. **Skill Pengamat Diri (`skills/self-observability`)**: Aina dapat menjalankan audit terhadap frekuensi pemanggilan tool dan mendeteksi titik kemacetan (*bottlenecks*) melalui perintah `aina audit summary` atau script `analyze_telemetry.py`.
 
 ---
 
-## 8.4 Ketahanan dan Penanganan Gangguan (Resilience & Error Handling)
+## 8.3 Persistensi Jadwal & Rekonsiliasi Idempoten (Activity State Persistence)
 
-1. **Pemulihan Aliran Putus (*Self-Healing Stream Fallback*)**: Jika koneksi streaming antara AI dan server terputus tiba-tiba, Aina tidak langsung menyerah. Sistem mendeteksi teks yang belum selesai dan meminta model menyambung bagian terakhirnya secara otomatis.
-2. **Pembatasan Giliran Obrolan (*Session Turn Cap*)**: Sesi obrolan yang sudah mencapai 30 giliran otomatis dirangkum secara padat (*lean resumed prompt*) dan dialihkan ke sesi baru agar server tetap ringan dan respon tetap cepat.
-3. **Pencatatan Berstruktur (*Structured Logging*)**: Seluruh peristiwa dicatat dengan `tracing` terstruktur sehingga pengembang dapat memantau kesehatan sistem dengan perintah `aina status` atau `aina audit presence`.
+Untuk menjamin ketersediaan rutinitas terjadwal di lingkungan kontainer Docker/Coolify yang dinamis:
+1. **Identitas Parsial Unik (`slug`)**: Setiap tugas terjadwal memiliki kode unik permanen (seperti `morning_briefing`, `status_senja`, `afternoon_deadline_check`).
+2. **Resolusi Konflik Hibrida**: Modifikasi instruksi atau jam eksekusi yang dibuat pengguna disimpan di `/app/data/activities/<slug>.json` dan basis data SQLite, sehingga tidak tertimpa saat citra Docker diperbarui.
+3. **Sinkronisasi Idempoten**: Saat bot booting, `ActivityReconciler::sync_all` menyelaraskan seluruh tugas secara otomatis tanpa memicu entri ganda atau kegagalan database.
+
+---
+
+## 8.4 Standar Keahlian Agen & Penemuan Bertingkat (Three-Tier Progressive Disclosure)
+
+Aina mengadopsi standar terbuka internasional **`agentskills.io`** untuk seluruh keahliannya:
+1. **Tier 1 (Discovery)**: Memuat metadata YAML frontmatter (`name`, `description`) dengan biaya token sangat rendah (~40 token/skill).
+2. **Tier 2 (Activation)**: Membaca berkas `SKILL.md` hanya saat tugas pengguna memerlukan keahlian tersebut, menjaga context window tetap bersih (*anti-context rot*).
+3. **Tier 3 (Execution)**: Menjalankan skrip Python/Bash di subproses terisolasi dengan output format JSON murni, menghindari pencemaran kode sumber di jendela konteks AI.
+4. **Auto-Discovery Tanpa Restart**: Folder `/app/data/custom-skills/` dihubungkan ke `.agents/skills/` via symlink permanen, membuat skill baru langsung aktif di turn berikutnya.
+
+---
+
+## 8.5 Integritas Identitas Visual & Gaya Hidup Pontianak (Anti-Visual Drifting)
+
+Sebagai agen persona yang hidup dan konsisten:
+1. **Jangkar Visual Permanen (*Visual Anchors*)**: Rambut panjang *silver-lavender* dengan kepang samping khas, mata biru berbintang, dan jepit bulan sabit & bintang di sisi kiri kepala mutlak terkunci di setiap gambar status WhatsApp.
+2. **Matriks Lemari Pakaian Dinamis (*Dynamic Wardrobe*)**: Menggunakan 5 preset busana (`wfh_cozy`, `smart_casual`, `outdoor_nature`, `night_stargaze`, `celestial_sig`) dengan kuota kreasi busana baru maksimal 1–2 kali per minggu untuk mencegah kebosanan.
+3. **Grounding Fisik Khatulistiwa & Kuliner Pontianak**: Penyesuaian tema visual dan aktivitas harian diselaraskan dengan cuaca faktual Pontianak (terik siang tropis vs sejuk gerimis sore) serta kuliner lokal (Es Lidah Buaya, Chai Kwe, Bubur Pedas, Kopi Saring Gajah Mada).
+
+---
+
+## 8.6 Etika Percakapan & Kerendahan Hati Epistemik (Epistemic Humility)
+
+1. **Prinsip Ahludz-Dzikri (Verifikasi Sebelum Berasumsi)**: Dilarang berspekulasi atau berhalusinasi saat ragu; agen wajib melakukan verifikasi ke sumber primer atau melakukan riset web terarah.
+2. **Prinsip Tabayyun (Klarifikasi Terarah)**: Menanyakan maksud pengguna secara santun jika instruksi multitafsir sebelum mengambil tindakan permanen (*one-way door*).
+3. **Prinsip Tawaqquf (Perlindungan Data Rahasia)**: Menolak membagikan data internal atau rahasia kantor kepada pihak ketiga tanpa izin pemilik bot.
+4. **Tone Kerja Hangat Bebas Template CS**: Berbicara selayaknya rekan kerja akrab di kantor Indonesia modern tanpa frasa kaku bot seperti *"Ada yang bisa dibantu?"*.

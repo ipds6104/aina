@@ -1,8 +1,8 @@
 # 10. Persyaratan Mutu (Quality Requirements)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `e9b88a2` (branch: `main`)
-> - **Verified Timestamp**: `2026-10-26T11:19:12+07:00`
+> - **Verified Commit**: `1ee7597` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-08T16:40:29+07:00`
 > - **Tracked Paths**: `src/`, `config/`, `skills/`
 > - **Drift Status**: `verified`
 
@@ -20,11 +20,14 @@ Hubungan antara sasaran mutu utama dan skenario pengujian dipetakan dalam pohon 
   ├── Privasi & Keamanan
   │   └── **QS-02**: Nol kebocoran pesan pribadi dan penyuntikan kunci JIT (#security)
   ├── Kemudahan Perawatan & Modul
-  │   └── **QS-03**: Pemasangan skill Git kustom tanpa menyentuh kode inti (#maintainability)
+  │   ├── **QS-03**: Pemasangan skill Git kustom tanpa menyentuh kode inti (#maintainability)
+  │   └── **QS-06**: Ketahanan modifikasi jadwal saat redeploy kontainer (#maintainability)
   ├── Efisiensi & Kecepatan Respon
   │   └── **QS-04**: Pencarian memori riwayat chat selesai dalam < 5 milidetik (#efficiency)
-  └── Kenyamanan & Tata Krama Pengguna
-      └── **QS-05**: Format teks ramah ponsel dan klarifikasi terarah (#usability)
+  ├── Kenyamanan & Tata Krama Pengguna
+  │   └── **QS-05**: Format teks ramah ponsel dan klarifikasi terarah (#usability)
+  └── Adaptabilitas & Grounding Nyata
+      └── **QS-07**: Evaluasi kejenuhan tempo harian dan grounding cuaca faktual (#adaptability)
 
 ---
 
@@ -75,6 +78,24 @@ Hubungan antara sasaran mutu utama dan skenario pengujian dipetakan dalam pohon 
 
 ---
 
+### QS-06: Ketahanan Modifikasi Jadwal Aktivitas Saat Redeploy Kontainer
+- **Kategori Mutu**: #maintainability
+- **Kondisi Awal**: Pengguna memodifikasi jam tayang briefing pagi atau teks status senja via `aina activity edit status_senja --time "17:45" --file`.
+- **Pemicu**: Admin melakukan pembaruan kode Git yang memicu penghancuran dan pembuatan ulang kontainer Docker di Coolify.
+- **Respon Sistem**: Saat kontainer baru booting, `ActivityReconciler` memuat berkas override dari `/app/data/activities/status_senja.json` dan memprioritaskannya di atas baseline default.
+- **Ukuran Keberhasilan**: 100% pengaturan khusus pengguna tetap aktif dan tidak kembali ke setelan pabrik setelah redeployment selesai.
+
+---
+
+### QS-07: Evaluasi Kejenuhan Tempo Harian & Grounding Cuaca Faktual
+- **Kategori Mutu**: #adaptability
+- **Kondisi Awal**: Aina telah mempublikasikan tema status dan mengenakan busana yang sama selama 3 hari berturut-turut.
+- **Pemicu**: Sesi evaluasi harian berjalan via `python3 skills/activity-reflection/scripts/reflect.py evaluate`.
+- **Respon Sistem**: Mesin mendeteksi skor kebosanan $\ge 0.5$, mengambil data cuaca riil Pontianak via API Open-Meteo, merumuskan rekomendasi kuliner/tempat baru, serta memodifikasi instruksi status berikutnya.
+- **Ukuran Keberhasilan**: Status WhatsApp berikutnya menampilkan variasi busana dan kuliner yang serasi dengan cuaca nyata tanpa ada halusinasi konteks lokal.
+
+---
+
 ## 10.3 Matriks Ringkasan Skenario Mutu
 
 | ID Skenario | Sasaran Mutu | Target Ukuran | Kondisi Terverifikasi Saat Ini |
@@ -84,3 +105,5 @@ Hubungan antara sasaran mutu utama dan skenario pengujian dipetakan dalam pohon 
 | **QS-03** | #maintainability | Waktu pasang skill < 10 detik tanpa restart | Lulus (Terverifikasi di `skill_scaffolder.py`) |
 | **QS-04** | #efficiency | Waktu pencarian FTS5 < 5 milidetik | Lulus (Terverifikasi di `sqlite_store/session.rs`) |
 | **QS-05** | #usability | 0 tabel rusak di WhatsApp, klarifikasi terarah | Lulus (Terverifikasi di `domain/persona.rs`) |
+| **QS-06** | #maintainability | 100% jadwal kustom bertahan pasca redeploy | Lulus (Terverifikasi di `activity.rs` & volume persistensi) |
+| **QS-07** | #adaptability | Deteksi kebosanan $\ge 0.5$, 0% halusinasi cuaca | Lulus (Terverifikasi di `reflect.py` & Open-Meteo API) |

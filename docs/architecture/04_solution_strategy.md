@@ -1,8 +1,8 @@
 # 4. Strategi Solusi (Solution Strategy)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `e9b88a2` (branch: `main`)
-> - **Verified Timestamp**: `2026-10-26T11:19:12+07:00`
+> - **Verified Commit**: `1ee7597` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-08T16:40:29+07:00`
 > - **Tracked Paths**: `src/`, `config/`, `skills/`
 > - **Drift Status**: `verified`
 
@@ -27,6 +27,7 @@ flowchart TD
         ContextPrep["Peracik Konteks (Rolling Context)"]
         Persona["Mesin Karakter & Tata Krama"]
         Lifecycle["Pengatur Batas Sesi (Turn Cap)"]
+        ActivityDomain["Entitas & Rekonsiliasi Aktivitas"]
     end
 
     subgraph DrivenAdapters ["Colokan Pelaksana (Driven Adapters)"]
@@ -34,6 +35,7 @@ flowchart TD
         SqliteStore["Database SQLite (Penyimpan Memori)"]
         WaSender["Pengirim Pesan Whatsmeow"]
         SecretBrokerTool["Kurir Rahasia (Secret Broker)"]
+        EnvAPI["Grounding Cuaca & Web Search"]
     end
 
     DrivingAdapters -->|"Memicu alur"| CoreDomain
@@ -96,3 +98,35 @@ Percakapan yang terlalu panjang berisiko membuat model AI boros token, lambat, a
 1. **Inti Program yang Netral**: Repositori utama bebas dari kode spesifik kantor. Siapa pun dapat menggunakan Aina untuk keperluan apa pun.
 2. **Keahlian Khusus Modular (`data/custom-skills`)**: Fitur khusus kantor (seperti kueri data internal, cek disposisi surat, atau ekstraksi dokumen dinas) ditempatkan di folder terpisah. Aina menyediakan perintah `aina skill install <repo-git>` untuk memasang keahlian tambahan secara instan.
 3. **Penyuntikan Rahasia Tepat Waktu (*Just-in-Time Secret Broker*)**: Kunci API atau password tidak disimpan di kode atau lingkungan sistem permanen. Saat skrip membutuhkan kunci, skrip meminta izin ke Secret Broker. Setelah eksekusi selesai, kredensial segera dibersihkan dari memori.
+
+---
+
+## 4.7 Strategi Rekonsiliasi Aktivitas Hibrida (Declarative Baseline & Persistent Custom Activities)
+
+Untuk memecahkan masalah hilangnya jadwal rutin saat kontainer Docker/Coolify di-redeploy:
+- **Baseline Activities**: Didefinisikan secara deklaratif di `config/activities.default.json` (termasuk briefing pagi, status WhatsApp harian, pengingat akhir bulan).
+- **Custom Activities & Modifikasi**: Disimpan di volume persisten `/app/data/activities/<slug>.json` dan basis data SQLite.
+- **Mesin Rekonsiliator (*ActivityReconciler*)**: Dijalankan otomatis saat bot booting (`ActivityReconciler::sync_all`). Aturan resolusi prioritas:
+  $$\text{Custom File Override} > \text{SQLite Active State} > \text{Declarative Baseline}$$
+- **CLI Terpadu**: Pengguna dapat memodifikasi aktivitas kapan saja via terminal (`aina activity edit <slug> --append "..." --file`).
+
+---
+
+## 4.8 Strategi Penemuan Keahlian Bertingkat (Three-Tier Progressive Disclosure)
+
+Mengadopsi standar terbuka internasional **`agentskills.io`**:
+1. **Tier 1 (Discovery)**: Saat inisialisasi, hanya metadata nama dan deskripsi YAML frontmatter yang dimuat (~40 token per skill).
+2. **Tier 2 (Activation)**: Ketika instruksi pengguna cocok dengan deskripsi skill, agen secara mandiri membaca isi lengkap berkas `SKILL.md`.
+3. **Tier 3 (Execution)**: Skrip eksekutabel di folder `scripts/` dijalankan di subproses bash dengan output terstruktur (`--json`), mencegah kode mentah mencemari jendela konteks LLM.
+4. **Hot Container Auto-Discovery**: Symlink otomatis dari `/app/data/custom-skills` ke `.agents/skills/` membuat skill baru langsung terdeteksi pada turn berikutnya tanpa perlu me-restart kontainer.
+
+---
+
+## 4.9 Strategi Refleksi Pengalaman & Grounding Lingkungan (Experiential Reflection)
+
+Terinspirasi dari *Gibbs' Reflective Cycle* dan arsitektur refleksi *Stanford Generative Agents*:
+1. **Pemanenan Bukti**: Mengaudit riwayat tugas terjadwal (`aina activity runs`), jurnal visual (`data/status_journal.jsonl`), dan aksi chat.
+2. **Deteksi Kejenuhan (*Boredom Engine*)**: Menghitung frekuensi pengulangan tema dan pakaian; memicu variasi jika skor kebosanan $\ge 0.5$.
+3. **Grounding Fisik Khatulistiwa**: Mengambil data cuaca real-time Pontianak (suhu, hujan, kelembapan) via Open-Meteo API tanpa menebak.
+4. **Riset Web Terarah (*Gated Novelty Web Search*)**: Memformulasikan 1–2 kueri pencarian tajam untuk memperkaya latar sensorik kuliner dan destinasi lokal.
+5. **Adaptasi Otonom**: Menyuntikkan hasil refleksi ke aktivitas terjadwal via CLI (`aina activity edit <slug> --append "..." --file`).

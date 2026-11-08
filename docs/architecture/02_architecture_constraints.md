@@ -1,8 +1,8 @@
 # 2. Batasan Arsitektur (Architecture Constraints)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `e9b88a2` (branch: `main`)
-> - **Verified Timestamp**: `2026-10-26T11:19:12+07:00`
+> - **Verified Commit**: `1ee7597` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-08T16:40:29+07:00`
 > - **Tracked Paths**: `src/`, `config/`, `skills/`
 > - **Drift Status**: `verified`
 
@@ -37,6 +37,15 @@ Bab ini merangkum batas-batas teknis, operasional, dan aturan baku yang menjadi 
    - Sistem dapat dijalankan langsung di Linux fisik (komputer x86_64 atau ARM64 seperti smartphone via Termux) maupun di dalam kontainer Docker / Coolify.
    - Ukuran citra kontainer dijaga sangat kecil (< 50 MB) dengan proses kompilasi *multi-stage build*.
 
+7. **Persistensi State Lintas Siklus Kontainer (Persistent Volume Mounts)**:
+   - Kontainer Docker bersifat *ephemeral*. Seluruh state yang wajib bertahan lintas redeployment (`aina.db`, `data/activities/*.json`, `data/custom-skills/*`) dipetakan ke volume permanen `/app/data/`.
+   - Script `docker-entrypoint.sh` secara otomatis menyinkronkan berkas default dan menjaga symlink aktif agar tidak ada data yang hilang saat pembaruan citra (*redeploy*).
+
+8. **Partial Unique Index untuk Identitas Aktivitas Terjadwal**:
+   - Kolom `slug` pada tabel `scheduled_tasks` dilindungi oleh partial unique index:
+     `CREATE UNIQUE INDEX IF NOT EXISTS idx_scheduled_tasks_slug ON scheduled_tasks(slug) WHERE slug IS NOT NULL`
+   - Memastikan operasi rekonsiliasi aktivitas bersifat idempoten dan mencegah duplikasi task terjadwal saat restart.
+
 ---
 
 ## 2.2 Batasan Organisasi dan Operasional (Operational Constraints)
@@ -45,13 +54,19 @@ Bab ini merangkum batas-batas teknis, operasional, dan aturan baku yang menjadi 
    - Repositori utama Aina adalah perangkat lunak umum yang bebas dari keterikatan organisasi atau kantor tertentu.
    - **Aturan Baku**: Dilarang memasukkan skrip atau prosedur kerja khusus instansi (misalnya kueri basis data sensus, format surat dinas khusus, atau aplikasi internal kantor) ke dalam folder kode utama. Seluruh kebutuhan khusus wajib diletakkan di folder keahlian tambahan (`data/custom-skills`).
 
-2. **Larangan Keras Menyimpan Kunci Rahasia Statis**:
+2. **Kepatuhan Standar Terbuka Keahlian Agen (`agentskills.io`)**:
+   - Seluruh modul kemampuan agen wajib mematuhi spesifikasi terbuka `agentskills.io`:
+     - Berkas wajib `SKILL.md` dengan YAML frontmatter valid (`name`, `description`).
+     - Deskripsi wajib menjelaskan fungsi dan *trigger conditions* secara presisi.
+     - Mengikuti model *Three-Tier Progressive Disclosure* (Discovery $\rightarrow$ Activation $\rightarrow$ Execution) untuk mencegah *context rot*.
+
+3. **Larangan Keras Menyimpan Kunci Rahasia Statis**:
    - Dilarang keras menuliskan password, token API, atau kunci akses apa pun di dalam kode sumber program maupun file teks biasa.
    - Semua rahasia wajib disuntikkan secara dinamis saat alat dijalankan (*Runtime Secret Broker*).
 
-3. **Standar Waktu Resmi (WIB / UTC+7)**:
+4. **Standar Waktu Resmi (WIB / UTC+7)**:
    - Seluruh pencatatan waktu, jadwal pengingat, dan pemahaman hari dihitung berdasarkan zona waktu **WIB (Waktu Indonesia Barat / Asia/Jakarta, UTC+7)** dengan penanggalan bahasa Indonesia.
 
-4. **Adab dan Privasi Ruang Obrolan**:
+5. **Adab dan Privasi Ruang Obrolan**:
    - Aina mematuhi aturan privasi ketat: pesan pribadi dari kontak lain di akun sensor bayangan tidak pernah dicatat.
    - Di grup obrolan, Aina hanya berstatus menyimak pasif (*RecordOnly*) dan tidak boleh mengirim balasan kecuali jika dipanggil secara sengaja oleh anggota grup.

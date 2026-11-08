@@ -1,8 +1,8 @@
 # 9. Keputusan Arsitektur (Architecture Decisions)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `e9b88a2` (branch: `main`)
-> - **Verified Timestamp**: `2026-10-26T11:19:12+07:00`
+> - **Verified Commit**: `1ee7597` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-08T16:40:29+07:00`
 > - **Tracked Paths**: `src/`, `config/`, `skills/`
 > - **Drift Status**: `verified`
 
@@ -72,3 +72,42 @@ Bab ini mencatat keputusan-keputusan arsitektur penting (*Architecture Decision 
 - **Konsekuensi Positif**:
   Keamanan maksimal, bebas keterikatan penyedia brankas tertentu, dan tidak ada kunci rahasia yang tertinggal di hard disk atau pesan obrolan.
 - **Risiko yang Muncul**: RISK-05
+
+---
+
+### ADR-006: Rekonsiliasi Aktivitas Hibrida & Partial Unique Index di SQLite
+
+- **Status**: Diterima (*Accepted*)
+- **Konteks**:
+  Redeploy kontainer Docker/Coolify sering kali mereset jadwal yang telah diedit pengguna. Di sisi lain, default bawaan pabrik (seperti briefing pagi dan status WhatsApp) harus tetap terpasang secara otomatis jika belum ada.
+- **Keputusan**:
+  Menerapkan arsitektur hibrida: baseline didefinisikan secara deklaratif di `config/activities.default.json`, sedangkan modifikasi pengguna disimpan di `/app/data/activities/<slug>.json` dan basis data SQLite. Tabel `scheduled_tasks` dilengkapi kolom `slug` dan partial unique index `idx_scheduled_tasks_slug` agar rekonsiliasi bersifat idempoten tanpa duplikasi baris.
+- **Konsekuensi Positif**:
+  Modifikasi pengguna 100% persisten melintasi proses redeployment, dan pembaruan baseline bawaan pabrik tetap tersinkronisasi mulus.
+- **Risiko yang Muncul**: RISK-06
+
+---
+
+### ADR-007: Three-Tier Progressive Disclosure Model (`agentskills.io`) & Auto-Discovery
+
+- **Status**: Diterima (*Accepted*)
+- **Konteks**:
+  Menaruh seluruh dokumentasi keahlian ke dalam system prompt utama memicu context rot dan pemborosan kuota token yang drastis.
+- **Keputusan**:
+  Mengadopsi standar terbuka internasional `agentskills.io`: Tier 1 (Discovery metadata di prompt ~40 token), Tier 2 (Aktivasi pembacaan `SKILL.md` saat cocok), dan Tier 3 (Eksekusi skrip Python via subproses bash dengan output format JSON murni). Folder `/app/data/custom-skills` ditautkan ke `.agents/skills` via symlink permanen untuk hot auto-discovery tanpa perlu me-restart kontainer.
+- **Konsekuensi Positif**:
+  Jendela konteks AI tetap bersih dan tajam, waktu eksekusi instan, serta skalabilitas puluhan skill tanpa degradasi penalaran.
+- **Risiko yang Muncul**: RISK-07
+
+---
+
+### ADR-008: Siklus Refleksi Harian 5-Tahap & Grounding Fisik Tanpa Halusinasi
+
+- **Status**: Diterima (*Accepted*)
+- **Konteks**:
+  Asisten otonom yang menjalankan jadwal rutin rentan mengulang-ulang pola yang sama (*monoton*), atau mengarang kondisi cuaca dan destinasi lokal tanpa dasar fakta riil.
+- **Keputusan**:
+  Membangun siklus refleksi mandiri 5-tahap (*Gibbs Reflective Cycle* + *Stanford Generative Agents*). Aina mengaudit eksekusi hariannya, mendeteksi *boredom score*, mengambil cuaca faktual Pontianak via Open-Meteo API, merumuskan 1–2 kueri riset web terarah (*gated novelty search*), dan mengeksekusi penyesuaian instruksi aktivitas secara nyata via CLI `aina activity edit --file`.
+- **Konsekuensi Positif**:
+  Aina menjadi rekan kerja yang hidup, kontekstual, dan dinamis, terbebas dari halusinasi lingkungan khatulistiwa.
+- **Risiko yang Muncul**: RISK-08

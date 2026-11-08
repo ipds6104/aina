@@ -1,8 +1,8 @@
 # 1. Pendahuluan dan Tujuan (Introduction and Goals)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `e9b88a2` (branch: `main`)
-> - **Verified Timestamp**: `2026-10-26T11:19:12+07:00`
+> - **Verified Commit**: `1ee7597` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-08T16:40:29+07:00`
 > - **Tracked Paths**: `src/`, `config/`, `skills/`
 > - **Drift Status**: `verified`
 
@@ -19,7 +19,9 @@ Aina **bukanlah chatbot kaku** seperti bot layanan pelanggan biasa yang hanya me
 1. Membaca pesan obrolan dan memahami konteks percakapan di grup maupun jalur pribadi (DM).
 2. Mengeksekusi perintah kerja nyata di komputer atau server (misalnya menjalankan skrip analisis, merapikan data, atau mengunduh berkas Google Drive).
 3. Mengekstrak tabel rumit dari dokumen PDF dan gambar tanpa merusak susunan kolom dan baris.
-4. Menjaga tata krama kerja di WhatsApp: tidak membocorkan obrolan pribadi ke grup, dan tidak membocorkan data rahasia kantor kepada orang asing.
+4. Menjalankan rutinitas dan aktivitas terjadwal secara otonom (*autonomous scheduled activities*) yang persisten meskipun kontainer di-redeploy.
+5. Merefleksikan tempo harian, menimbang kejenuhan aktivitas (*boredom score*), serta memodifikasi perilakunya sendiri secara adaptif berbasis bukti faktual lingkungan lokal.
+6. Menjaga tata krama kerja di WhatsApp: tidak membocorkan obrolan pribadi ke grup, dan tidak membocorkan data rahasia kantor kepada orang asing.
 
 ### Masalah Nyata yang Diselesaikan
 Dalam penggunaan asisten AI di lingkungan kantor atau tim kerja sehari-hari, ada beberapa kendala besar:
@@ -40,6 +42,14 @@ Dalam penggunaan asisten AI di lingkungan kantor atau tim kerja sehari-hari, ada
    Kunci akses (API token) atau data internal kantor rawan bocor jika ditaruh secara sembarangan di dalam file program.
    *Solusi Aina*: Aina menggunakan kurir rahasia (*Secret Broker*). Kunci sandi hanya diserahkan saat sebuah alat dijalankan di balik layar, dan langsung dimusnahkan dari memori setelah selesai. Aina juga memiliki penyaring otomatis agar teks rahasia tidak pernah terkirim ke obrolan WhatsApp.
 
+5. **Kehilangan Jadwal & Modifikasi Aktivitas Saat Redeploy Kontainer (*Stateless Container Trap*)**:
+   Saat aplikasi di-deploy ulang ke server (misal melalui Coolify atau Docker CI/CD), modifikasi jadwal aktivitas pengguna sering kali terhapus dan kembali ke pengaturan bawaan.
+   *Solusi Aina*: Mesin Rekonsiliasi Aktivitas (*ActivityReconciler*). Aina membedakan *Baseline Activities* (katalog deklaratif versi terkontrol di `config/activities.default.json`) dan *Custom Activities* (disimpan di volume persisten `/app/data/activities`). Saat kontainer restart, modifikasi pengguna dipadukan secara otomatis dan tidak pernah terhapus.
+
+6. **Kejenuhan Rutinitas & Halusinasi Konteks Lokal**:
+   Asisten terjadwal rentan terjebak dalam tema dan gaya hidup yang monoton, atau mengarang fakta cuaca dan tempat lokal.
+   *Solusi Aina*: Siklus Refleksi Harian Otonom (*Activity Reflection Engine*). Aina mengaudit eksekusi hariannya, mendeteksi skor kejenuhan (*boredom score*), mengambil data cuaca faktual Pontianak secara real-time via API, dan memodifikasi instruksi masa depannya sendiri secara otonom (*self-adaptation*) melalui CLI `aina activity edit --file`.
+
 ---
 
 ## 1.2 Sasaran Mutu (Quality Goals)
@@ -50,9 +60,11 @@ Sasaran mutu berikut dirumuskan secara terukur untuk menjamin bahwa Aina dapat d
 |:---|:---|:---|:---|
 | 1 | #reliability | Ketersediaan Sistem & Rotasi Kuota Otomatis | Sistem mampu melayani percakapan 24/7 tanpa henti. Jika akun Google utama terkena batas kuota (kode 429), sistem otomatis beralih ke akun cadangan dalam waktu < 2 detik tanpa membuat pesan pengguna gagal. |
 | 2 | #security | Perlindungan Privasi & Keamanan Kunci Sandi | 100% pesan pribadi (DM) di akun sensor tidak pernah dicatat atau dibocorkan ke grup. Seluruh kunci akses API disuntikkan secara dinamis saat eksekusi (*Just-in-Time*) dan disaring agar 0% token rahasia bocor ke teks balasan chat. |
-| 3 | #maintainability | Kemudahan Perawatan & Pemisahan Keahlian | Kode inti aplikasi bersifat netral. Seluruh keahlian khusus kantor atau instansi dipisahkan ke folder tersendiri (`data/custom-skills`), sehingga penambahan fitur baru tidak merusak logika inti program. |
+| 3 | #maintainability | Kemudahan Perawatan & Pemisahan Keahlian | Kode inti aplikasi bersifat netral. Seluruh keahlian khusus kantor dipisahkan ke folder tersendiri (`data/custom-skills` mengikuti standar `agentskills.io`), sehingga penambahan fitur baru tidak merusak logika inti program. |
 | 4 | #efficiency | Kecepatan Respon & Pencarian Memori Kilat | Pencarian riwayat percakapan masa lalu menggunakan database teks berkecepatan tinggi selesai dalam waktu < 5 milidetik, dengan filter rentang waktu presisi untuk mencegah salah ingat tanggal. |
 | 5 | #usability | Kenyamanan Komunikasi & Interaksi Alami | Pesan balasan di WhatsApp diformat rapi sesuai tampilan layar ponsel (tanpa tanda pagar Markdown besar atau tabel lebar yang rusak), serta mampu meminta klarifikasi terarah jika instruksi multitafsir (*Tabayyun*). |
+| 6 | #maintainability | Ketahanan Konfigurasi & Persistensi Jadwal | 100% modifikasi instruksi aktivitas dan keahlian kustom bertahan utuh saat kontainer Docker/Coolify di-redeploy berkat arsitektur rekonsiliasi hibrida. |
+| 7 | #adaptability | Refleksi Pengalaman & Variasi Otonom | Sistem secara berkala merefleksikan tempo harian, mendeteksi kejenuhan tema/busana ($\ge 0.5$), dan memadukan cuaca riil untuk mengadaptasi aktivitas berikutnya secara otonom. |
 
 ---
 

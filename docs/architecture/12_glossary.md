@@ -1,8 +1,8 @@
 # 12. Glosarium Istilah (Glossary)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `e9b88a2` (branch: `main`)
-> - **Verified Timestamp**: `2026-10-26T11:19:12+07:00`
+> - **Verified Commit**: `1ee7597` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-08T16:40:29+07:00`
 > - **Tracked Paths**: `src/`, `config/`, `skills/`
 > - **Drift Status**: `verified`
 
@@ -26,7 +26,14 @@ Bab ini menyajikan daftar istilah penting yang digunakan di seluruh sistem dan d
 | **Rangkuman Padat (*Lean Resumed Prompt*)** | Ringkasan sari pati obrolan lama yang dibuat secara otomatis saat membuka sesi baru, sehingga AI tetap ingat kesepakatan sebelumnya dengan hemat token. |
 | **Kurir Rahasia (*Secret Broker*)** | Sistem perantara yang bertugas mengambil kunci API atau sandi dari brankas aman tepat saat dibutuhkan, tanpa pernah menyimpannya di file teks. |
 | **Penyuntikan Tepat Waktu (*Just-in-Time / JIT Injection*)** | Metode menyerahkan password ke proses komputasi hanya selama proses itu berjalan, lalu langsung dimusnahkan saat selesai. |
+| **Aktivitas Bawaan (*Baseline Activity*)** | Tugas terjadwal bawaan pabrik yang didefinisikan secara deklaratif di `config/activities.default.json` (seperti briefing harian, status WhatsApp story, dan pengingat presensi). |
+| **Aktivitas Kustom (*Custom Activity*)** | Tugas terjadwal yang dibuat atau dimodifikasi oleh pengguna dan disimpan di direktori persisten `/app/data/activities/<slug>.json`. |
+| **Rekonsiliasi Aktivitas (*Activity Reconciler*)** | Proses penyelarasan idempoten saat booting yang menggabungkan baseline default pabrik dengan modifikasi persisten pengguna tanpa pernah menghapus jadwal yang telah diubah. |
+| **Penyingkapan Bertingkat (*Progressive Disclosure*)** | Model arsitektur pemuatan keahlian 3-tahap (Discovery $\rightarrow$ Activation $\rightarrow$ Execution) sesuai standar `agentskills.io` untuk mencegah pemborosan token dan *context rot*. |
 | **Keahlian Khusus (*Custom Skills*)** | Alat bantu atau prosedur kerja tambahan (misal pengolah data kantor) yang disimpan di folder terpisah (`data/custom-skills`) dan bisa diunduh dari Git. |
+| **Skor Kebosanan (*Boredom Score*)** | Metrik kuantitatif (0.0 hingga 1.0) yang mengukur tingkat pengulangan tema adegan dan busana dalam status harian Aina untuk memicu variasi baru. |
+| **Impact Maxxing** | Filosofi hidup Aina yang berupaya menghadirkan dampak positif, ketenangan, optimisme, dan rasa syukur bagi rekan kerja tanpa bersikap menggurui. |
+| **Riset Web Terarah (*Gated Novelty Search*)** | Protokol pencarian internet terarah (maksimal 1–2 query) saat sesi refleksi untuk memverifikasi cuaca atau mencari inspirasi lokal tanpa halusinasi. |
 | **Tabayyun** | Sikap aktif Aina untuk bertanya dan meminta klarifikasi terarah kepada pengguna jika instruksi yang diberikan masih ambigu atau tidak lengkap. |
 | **Tawaqquf** | Sikap menahan diri untuk tidak membagikan data kantor atau dokumen rahasia kepada orang asing di grup sebelum mendapat persetujuan pemilik bot. |
 | **SQLite FTS5** | Teknologi database lokal berkecepatan tinggi yang mampu mencari kata di puluhan ribu riwayat obrolan dalam waktu hitungan milidetik. |
