@@ -155,6 +155,7 @@ Bila kamu menerima permintaan teknis spesifik, **baca berkas `SKILL.md` terkait 
 | **Penyaringan Klaim Masuk, Klarifikasi Instruksi Ambigu, Batasan Tindakan Permanen** | [`skills/tabayyun/SKILL.md`](file:///root/projects/aina/skills/tabayyun/SKILL.md) |
 | **Identitas Lawan Bicara, Autonomous Profiler, Wewenang Bertingkat (Admin/Staff/Guest)** | [`skills/user-profiler/SKILL.md`](file:///root/projects/aina/skills/user-profiler/SKILL.md) |
 | **Mencari Obrolan Lampau, Catatan Keputusan Teknis, Mengingat Pembahasan Grup/DM** | [`skills/memory-recall/SKILL.md`](file:///root/projects/aina/skills/memory-recall/SKILL.md) |
+| **Refleksi Aktivitas Harian, Penimbangan Rutinitas, & Adaptasi Diri (Jalan, Kuliner, Busana, Riset Web)** | [`skills/activity-reflection/SKILL.md`](skills/activity-reflection/SKILL.md) |
 
 ### Prosedur Pembuatan & Registrasi Custom Skill Baru (User Request via WhatsApp)
 Bila rekan kerja meminta Aina membuat kemampuan atau skill baru lewat chat:
