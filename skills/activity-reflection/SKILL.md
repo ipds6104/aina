@@ -205,14 +205,34 @@ Untuk mengeksekusi modifikasi aktivitas secara langsung ke scheduler dan volume 
 python3 skills/activity-reflection/scripts/reflect.py adapt --apply
 ```
 
-### SOP 4: Riset Web Cepat Saat Butuh Inspirasi Baru
-Jika ingin mencari tempat nongkrong atau referensi terkini di Pontianak:
-```bash
-# Melalui tool agen Antigravity:
-# search_web: "rekomendasi coffee shop tenang pontianak 2026"
-# Atau memeriksa prakiraan cuaca 3 hari ke depan via curl:
-curl -s "https://wttr.in/Pontianak?format=3"
-```
+### SOP 4: Merumuskan & Mengeksekusi Riset Web Terarah (Gated Web Research)
+Skill ini secara aktif memformulasi kebutuhan riset internet saat refleksi untuk mencegah halusinasi dan kejenuhan rutinitas:
+
+1. **Melihat Rekomendasi Kueri Riset Web Faktual**:
+   ```bash
+   python3 skills/activity-reflection/scripts/reflect.py search-queries
+   ```
+   Script otomatis merumuskan 1–2 query tajam berdasarkan status kebosanan, cuaca, dan slot waktu.
+
+2. **Eksekusi Pencarian Web via Tool Antigravity (`search_web`)**:
+   Panggil tool resmi `search_web` dengan query hasil formulasi:
+   - *Verifikasi Cuaca & Peringatan BMKG*:
+     `search_web: "prakiraan cuaca bmkg pontianak hari ini dan besok"`
+   - *Eksplorasi Destinasi & Sudut Baru Pontianak*:
+     `search_web: "rekomendasi coffee shop santai hidden gem pontianak 2026"`
+     `search_web: "agenda acara seni festival sungai kapuas pontianak 2026"`
+   - *Eksplorasi Kuliner Lokal Pontianak*:
+     `search_web: "rekomendasi tempat makan bubur pedas legendaris pontianak"`
+   - *Fenomena Langit Malam (Stargazing)*:
+     `search_web: "fenomena astronomi langit malam indonesia november 2026"`
+
+3. **Batasan & Panduan Riset Web (Strict Guardrails)**:
+   - **Maksimal 1–2 Query**: Hanya mengeksekusi pencarian yang terarah dan fokus (*strictly low-noise*). Dilarang melakukan pencarian berulang tanpa tujuan jelas.
+   - **Bumbu Atmosferik & Detail Sensorik (*Atmospheric Seasoning*)**: Hasil pencarian diserap sebagai detail cerita yang nyata (misal: aroma kopi liberika, jam buka kafe, atau rute angin sungai), bukan membuat rangkuman ensiklopedis yang kaku.
+   - **Suntikkan Hasil ke Instruksi Aktivitas**: Gunakan hasil riset untuk memperkaya payload aktivitas:
+     ```bash
+     aina activity edit status_senja --append "Hasil riset cuaca BMKG menunjukkan hujan reda pukul 17:00, waktu yang pas untuk jalan santai ke Waterfront Kapuas menikmati Chai Kwe hangat." --file
+     ```
 
 ---
 

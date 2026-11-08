@@ -436,6 +436,43 @@ def evaluate_daily_experience(
         recommended_outfit = "smart_casual"
         outfit_reason = "Busana kasual kemeja katun rapi dan knit vest yang fleksibel untuk kerja maupun kafe."
 
+    # 6. Formulasi Kebutuhan Riset Web Terarah (Gated Novelty Web Search)
+    web_search_prompts = []
+    month_year = now_wib.strftime("%B %Y")
+
+    if is_rain:
+        web_search_prompts.append({
+            "topic": "Cuaca & Peringatan Dini BMKG",
+            "query": "prakiraan cuaca bmkg pontianak hari ini dan besok",
+            "reason": "Memastikan durasi hujan rintik dan potensi petir di Pontianak sebelum merencanakan aktivitas luar."
+        })
+    else:
+        web_search_prompts.append({
+            "topic": "Suhu & Kenyamanan Luar Ruangan",
+            "query": "suhu dan cuaca pontianak sore ini",
+            "reason": "Memverifikasi kenyamanan suhu di luar ruangan sebelum merencanakan jalan santai."
+        })
+
+    if boredom_score >= 0.5 or now_wib.weekday() in [4, 5, 6]:
+        web_search_prompts.append({
+            "topic": "Eksplorasi Destinasi Baru / Event",
+            "query": f"rekomendasi coffee shop santai hidden gem pontianak {now_wib.year}",
+            "reason": "Mencari inspirasi sudut kota atau kedai kopi baru di Pontianak untuk mengatasi kejenuhan rutinitas."
+        })
+    else:
+        web_search_prompts.append({
+            "topic": "Eksplorasi Kuliner Lokal",
+            "query": f"kuliner khas pontianak legendaris {recommended_food['name']}",
+            "reason": "Memperkaya wawasan sensorik dan kisah budaya di balik hidangan khas Pontianak."
+        })
+
+    if hour >= 18:
+        web_search_prompts.append({
+            "topic": "Fenomena Astronomi Langit Malam",
+            "query": f"fenomena astronomi langit malam indonesia {month_year}",
+            "reason": "Mencari inspirasi adegan stargazing khatulistiwa (fase bulan, hujan meteor, konjungsi planet)."
+        })
+
     return {
         "timestamp_wib": now_wib.strftime("%Y-%m-%d %H:%M:%S WIB"),
         "performance": {
@@ -456,7 +493,8 @@ def evaluate_daily_experience(
                 "preset": recommended_outfit,
                 "reason": outfit_reason
             }
-        }
+        },
+        "web_search_prompts": web_search_prompts
     }
 
 
@@ -652,6 +690,15 @@ def cmd_suggest(args: argparse.Namespace) -> None:
         print(f"    Perintah CLI Siap Eksekusi:")
         print(f"    👉  {s['cmd']}")
         print()
+    if res.get("web_search_prompts"):
+        print("-" * 68)
+        print("🌐 REKOMENDASI RISET WEB TERARAH (GATED NOVELTY WEB SEARCH):")
+        print("Gunakan tool `search_web` untuk verifikasi fakta riil dan bumbu sensorik baru:")
+        for i, wp in enumerate(res["web_search_prompts"], 1):
+            print(f"   [{i}] Topik : {wp['topic']}")
+            print(f"       Query : search_web: \"{wp['query']}\"")
+            print(f"       Alasan: {wp['reason']}")
+
     print("=" * 68)
     print("💡 Petunjuk: Anda dapat menyalin perintah di atas atau menjalankan:")
     print("   python3 skills/activity-reflection/scripts/reflect.py adapt --apply")
@@ -689,6 +736,30 @@ def cmd_adapt(args: argparse.Namespace) -> None:
             print("   (Dry-Run: gunakan flag `--apply` untuk mengeksekusi langsung ke sistem)")
 
 
+
+def cmd_search_queries(args: argparse.Namespace) -> None:
+    """Menampilkan query riset web yang direkomendasikan berdasarkan kondisi saat ini."""
+    runs = harvest_daily_runs(args.db, limit=args.limit)
+    journal = harvest_recent_status_journal(args.journal, limit=args.limit)
+    weather = fetch_pontianak_weather()
+
+    res = evaluate_daily_experience(runs, journal, weather)
+    prompts = res.get("web_search_prompts", [])
+
+    if args.json:
+        print(json.dumps(prompts, indent=2, ensure_ascii=False))
+        return
+
+    print("=" * 68)
+    print("🌐 FORMULASI RISET WEB TERARAH (GATED WEB SEARCH QUERIES)")
+    print("=" * 68)
+    for i, p in enumerate(prompts, 1):
+        print(f"[{i}] Topik  : {p['topic']}")
+        print(f"    Query  : search_web: \"{p['query']}\"")
+        print(f"    Alasan : {p['reason']}")
+        print()
+    print("=" * 68)
+
 def main():
     parent_parser = argparse.ArgumentParser(add_help=False)
     parent_parser.add_argument("--db", default=DEFAULT_DB_PATH, help="Path ke database SQLite aina.db")
@@ -718,6 +789,10 @@ def main():
     # Subcommand: suggest
     p_sugg = subparsers.add_parser("suggest", parents=[parent_parser], help="Saran modifikasi perintah aktivitas CLI yang siap pakai")
     p_sugg.set_defaults(func=cmd_suggest)
+
+    # Subcommand: search-queries
+    p_search = subparsers.add_parser("search-queries", parents=[parent_parser], help="Rekomendasi query pencarian web terarah")
+    p_search.set_defaults(func=cmd_search_queries)
 
     # Subcommand: adapt
     p_adapt = subparsers.add_parser("adapt", parents=[parent_parser], help="Terapkan adaptasi aktivitas ke scheduler dan database")
