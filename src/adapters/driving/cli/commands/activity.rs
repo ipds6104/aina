@@ -26,6 +26,7 @@ pub async fn handle_activity(args: &[String]) -> anyhow::Result<()> {
         "toggle" => handle_toggle(&store, &args[1..]).await,
         "enable" => handle_set_active(&store, &args[1..], true).await,
         "disable" => handle_set_active(&store, &args[1..], false).await,
+        "reset" => handle_reset(&store, &args[1..]).await,
         "delete" | "rm" => handle_delete(&store, &args[1..]).await,
         "sync" => handle_sync(&store, &config, &args[1..]).await,
         "run" => handle_run(&store, &config, &args[1..]).await,
@@ -74,12 +75,15 @@ SUBCOMMANDS:
                                 --target <jid>       Ubah target WhatsApp
                                 --when <type>        Ubah tipe jadwal
                                 --time <expr>        Ubah ekspresi waktu
-                                --payload <text>     Ubah prompt instruksi / pesan
+                                --payload <text>     Ganti seluruh prompt instruksi / pesan
+                                --append, -a <text>  Tambahkan instruksi baru ke akhir prompt yang ada
                                 --category <cat>     Ubah kategori aktivitas
+                                --file               Simpan override ke berkas data/activities/<slug>.json
 
     toggle <slug|id>          Aktifkan / non-aktifkan aktivitas (flip state)
     enable <slug|id>          Aktifkan aktivitas secara eksplisit
     disable <slug|id>         Non-aktifkan aktivitas secara eksplisit
+    reset <slug|id>           Reset aktivitas baseline ke konfigurasi bawaan pabrik
 
     delete <slug|id>          Hapus custom activity (jika baseline, reset ke default config)
                               Options:
@@ -387,7 +391,9 @@ async fn handle_edit(
     let mut schedule_type: Option<String> = None;
     let mut schedule_expr: Option<String> = None;
     let mut payload: Option<String> = None;
+    let mut append_payload: Option<String> = None;
     let mut category: Option<String> = None;
+    let mut save_file = false;
 
     let mut i = 1;
     while i < args.len() {
@@ -412,12 +418,25 @@ async fn handle_edit(
                 payload = Some(args[i + 1].clone());
                 i += 2;
             }
+            "--append" | "--append-payload" | "-a" if i + 1 < args.len() => {
+                append_payload = Some(args[i + 1].clone());
+                i += 2;
+            }
             "--category" if i + 1 < args.len() => {
                 category = Some(args[i + 1].clone());
                 i += 2;
             }
+            "--file" => {
+                save_file = true;
+                i += 1;
+            }
             _ => i += 1,
         }
+    }
+
+    if let Some(ref add_text) = append_payload {
+        let current_p = payload.as_deref().unwrap_or(&task.payload);
+        payload = Some(format!("{}\n\n{}", current_p, add_text));
     }
 
     let next_run = if schedule_expr.is_some() || schedule_type.is_some() {
@@ -445,8 +464,78 @@ async fn handle_edit(
 
     if updated {
         println!("✅ Aktivitas `{}` (#ID: {}) berhasil diperbarui.", target, task.id);
+        if save_file {
+            let slug = task.slug.as_deref().unwrap_or(target);
+            let dir = get_custom_activities_dir();
+            let _ = std::fs::create_dir_all(&dir);
+            let file_path = dir.join(format!("{}.json", slug));
+            let act = Activity {
+                id: Some(task.id),
+                slug: slug.to_string(),
+                title: title.unwrap_or_else(|| task.title.clone()),
+                category: category.as_deref().map(ActivityCategory::from_str).unwrap_or_else(|| {
+                    task.category.as_deref().map(ActivityCategory::from_str).unwrap_or(ActivityCategory::Custom)
+                }),
+                task_type: task.task_type,
+                target_jid: target_jid.unwrap_or_else(|| task.target_jid.clone()),
+                schedule_type: schedule_type.unwrap_or_else(|| task.schedule_type.clone()),
+                schedule_expr: schedule_expr.unwrap_or_else(|| task.schedule_expr.clone()),
+                payload: payload.unwrap_or_else(|| task.payload.clone()),
+                source: task.source.as_deref().map(ActivitySource::from_str).unwrap_or(ActivitySource::Baseline),
+                is_active: task.is_active,
+                next_run_epoch: next_run,
+                last_run_epoch: task.last_run_epoch,
+                metadata: task.metadata.as_deref().and_then(|s| serde_json::from_str(s).ok()),
+            };
+            if let Ok(json) = serde_json::to_string_pretty(&act) {
+                let _ = std::fs::write(&file_path, json);
+                println!("   Berkas override : {} (tersimpan di storage persisten)", file_path.display());
+            }
+        }
     } else {
         eprintln!("⚠️ Gagal memperbarui aktivitas `{}`.", target);
+    }
+
+    Ok(())
+}
+
+async fn handle_reset(store: &dyn SessionStorePort, args: &[String]) -> anyhow::Result<()> {
+    if args.is_empty() {
+        eprintln!("Format salah. Contoh: aina activity reset status_pagi");
+        std::process::exit(1);
+    }
+
+    let target = &args[0];
+    let task = resolve_task(store, target).await?.ok_or_else(|| {
+        anyhow::anyhow!("Aktivitas `{}` tidak ditemukan.", target)
+    })?;
+
+    let slug = task.slug.as_deref().unwrap_or(target);
+    let baseline = load_default_baseline();
+    let def = baseline.iter().find(|b| b.slug == slug).ok_or_else(|| {
+        anyhow::anyhow!("Aktivitas `{}` bukan merupakan Baseline Activity bawaan sistem.", slug)
+    })?;
+
+    let updated = store.update_scheduled_task(
+        task.id,
+        Some(&def.title),
+        Some(&def.target_jid),
+        Some(&def.payload),
+        Some(&def.schedule_type),
+        Some(&def.schedule_expr),
+        Some(task.next_run_epoch),
+        Some(def.category.as_str()),
+    ).await?;
+
+    if updated {
+        println!("✅ Aktivitas baseline `{}` (#ID: {}) berhasil di-reset ke konfigurasi awal bawaan.", slug, task.id);
+        let custom_file = get_custom_activities_dir().join(format!("{}.json", slug));
+        if custom_file.exists() {
+            let _ = std::fs::remove_file(&custom_file);
+            println!("   Berkas override `{}` telah dihapus dari storage persisten.", custom_file.display());
+        }
+    } else {
+        eprintln!("⚠️ Gagal me-reset aktivitas baseline `{}`.", slug);
     }
 
     Ok(())
