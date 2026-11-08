@@ -398,7 +398,32 @@ def select_activity_with_novelty(recent_entries, slot, weekend, search_query=Non
             ]
         }
 
-    options = activities.get(slot, activities["sore"])
+    options = list(activities.get(slot, activities["sore"]))
+
+    # Dynamic Custom Activities Loader: Load user-defined persistent status activities
+    custom_dir = Path("/app/data/activities") if Path("/app/data/activities").exists() else Path("data/activities")
+    if custom_dir.exists():
+        for custom_file in custom_dir.glob("*.json"):
+            try:
+                with open(custom_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    items = data if isinstance(data, list) else [data]
+                    for item in items:
+                        if item.get("category") == "status" and item.get("is_active", True):
+                            meta = item.get("metadata") or {}
+                            act_slot = meta.get("slot") or item.get("slug", "").replace("status_", "")
+                            if act_slot == slot or act_slot in ["all", "any", ""]:
+                                theme_entry = {
+                                    "theme": item.get("slug", "custom_theme"),
+                                    "scene": meta.get("scene") or item.get("payload", ""),
+                                    "caption": meta.get("caption") or item.get("payload", ""),
+                                    "anchor_clothes": meta.get("anchor_clothes", "comfortable casual knit"),
+                                    "framing": meta.get("framing", "selfie"),
+                                    "vibe": meta.get("vibe", "Dynamic user-defined activity")
+                                }
+                                options.append(theme_entry)
+            except Exception:
+                pass
 
     # NOVELTY & BOREDOM ENGINE (HYBRID ARCHITECTURE):
     # 1. Deterministic Layer: Periksa riwayat 5 aktivitas terakhir

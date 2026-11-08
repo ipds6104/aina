@@ -84,7 +84,11 @@ pub fn init_schema(conn: &Connection) -> anyhow::Result<()> {
             created_at INTEGER NOT NULL,
             last_status TEXT,
             last_error TEXT,
-            last_duration_secs REAL
+            last_duration_secs REAL,
+            slug TEXT,
+            category TEXT DEFAULT 'custom',
+            source TEXT DEFAULT 'custom',
+            metadata TEXT
         )",
         [],
     )?;
@@ -93,10 +97,20 @@ pub fn init_schema(conn: &Connection) -> anyhow::Result<()> {
     let _ = conn.execute("ALTER TABLE scheduled_tasks ADD COLUMN last_status TEXT", []);
     let _ = conn.execute("ALTER TABLE scheduled_tasks ADD COLUMN last_error TEXT", []);
     let _ = conn.execute("ALTER TABLE scheduled_tasks ADD COLUMN last_duration_secs REAL", []);
+    let _ = conn.execute("ALTER TABLE scheduled_tasks ADD COLUMN slug TEXT", []);
+    let _ = conn.execute("ALTER TABLE scheduled_tasks ADD COLUMN category TEXT DEFAULT 'custom'", []);
+    let _ = conn.execute("ALTER TABLE scheduled_tasks ADD COLUMN source TEXT DEFAULT 'custom'", []);
+    let _ = conn.execute("ALTER TABLE scheduled_tasks ADD COLUMN metadata TEXT", []);
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run 
          ON scheduled_tasks(is_active, next_run_epoch)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_scheduled_tasks_slug 
+         ON scheduled_tasks(slug) WHERE slug IS NOT NULL",
         [],
     )?;
 

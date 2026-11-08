@@ -3,13 +3,68 @@ use crate::core::domain::{
 };
 use rusqlite::{params, Connection};
 
+pub const TASK_COLUMNS: &str = "id, title, task_type, target_jid, payload, schedule_type, schedule_expr, next_run_epoch, last_run_epoch, is_active, created_at, last_status, last_error, last_duration_secs, slug, category, source, metadata";
+
+pub fn parse_task_row(row: &rusqlite::Row) -> rusqlite::Result<ScheduledTask> {
+    let task_type_str: String = row.get(2)?;
+    let active_int: i32 = row.get(9)?;
+    Ok(ScheduledTask {
+        id: row.get(0)?,
+        title: row.get(1)?,
+        task_type: ScheduledTaskType::from_str(&task_type_str),
+        target_jid: row.get(3)?,
+        payload: row.get(4)?,
+        schedule_type: row.get(5)?,
+        schedule_expr: row.get(6)?,
+        next_run_epoch: row.get(7)?,
+        last_run_epoch: row.get(8)?,
+        is_active: active_int != 0,
+        created_at: row.get(10)?,
+        last_status: row.get(11)?,
+        last_error: row.get(12)?,
+        last_duration_secs: row.get(13)?,
+        slug: row.get(14)?,
+        category: row.get(15)?,
+        source: row.get(16)?,
+        metadata: row.get(17)?,
+    })
+}
+
 pub fn create_scheduled_task(conn: &Connection, task: &NewScheduledTask) -> anyhow::Result<i64> {
     let now_epoch = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
 
-    // Idempotency check: check if an active task already exists for this target around the same time (+/- 120s)
+    // 1. If slug is explicitly provided, check uniqueness by slug first
+    if let Some(ref slug) = task.slug {
+        let mut slug_stmt = conn.prepare("SELECT id FROM scheduled_tasks WHERE slug = ?1 LIMIT 1")?;
+        let mut s_rows = slug_stmt.query(params![slug])?;
+        if let Some(row) = s_rows.next()? {
+            let eid: i64 = row.get(0)?;
+            conn.execute(
+                "UPDATE scheduled_tasks 
+                 SET title = ?1, task_type = ?2, target_jid = ?3, payload = ?4, schedule_type = ?5, schedule_expr = ?6, next_run_epoch = ?7, category = ?8, source = ?9, metadata = ?10
+                 WHERE id = ?11",
+                params![
+                    task.title,
+                    task.task_type.as_str(),
+                    task.target_jid,
+                    task.payload,
+                    task.schedule_type,
+                    task.schedule_expr,
+                    task.next_run_epoch,
+                    task.category,
+                    task.source,
+                    task.metadata,
+                    eid
+                ],
+            )?;
+            return Ok(eid);
+        }
+    }
+
+    // 2. Idempotency check: check if an active task already exists for this target around the same time (+/- 120s)
     let mut check_stmt = conn.prepare(
         "SELECT id FROM scheduled_tasks 
          WHERE is_active = 1 
@@ -29,14 +84,18 @@ pub fn create_scheduled_task(conn: &Connection, task: &NewScheduledTask) -> anyh
     if let Some(eid) = existing_id {
         conn.execute(
             "UPDATE scheduled_tasks 
-             SET title = ?1, task_type = ?2, payload = ?3, schedule_expr = ?4, next_run_epoch = ?5 
-             WHERE id = ?6",
+             SET title = ?1, task_type = ?2, payload = ?3, schedule_expr = ?4, next_run_epoch = ?5, slug = COALESCE(slug, ?6), category = COALESCE(category, ?7), source = COALESCE(source, ?8), metadata = COALESCE(metadata, ?9)
+             WHERE id = ?10",
             params![
                 task.title,
                 task.task_type.as_str(),
                 task.payload,
                 task.schedule_expr,
                 task.next_run_epoch,
+                task.slug,
+                task.category,
+                task.source,
+                task.metadata,
                 eid
             ],
         )?;
@@ -45,8 +104,8 @@ pub fn create_scheduled_task(conn: &Connection, task: &NewScheduledTask) -> anyh
 
     conn.execute(
         "INSERT INTO scheduled_tasks 
-         (title, task_type, target_jid, payload, schedule_type, schedule_expr, next_run_epoch, is_active, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1, ?8)",
+         (title, task_type, target_jid, payload, schedule_type, schedule_expr, next_run_epoch, is_active, created_at, slug, category, source, metadata)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1, ?8, ?9, ?10, ?11, ?12)",
         params![
             task.title,
             task.task_type.as_str(),
@@ -55,7 +114,11 @@ pub fn create_scheduled_task(conn: &Connection, task: &NewScheduledTask) -> anyh
             task.schedule_type,
             task.schedule_expr,
             task.next_run_epoch,
-            now_epoch
+            now_epoch,
+            task.slug,
+            task.category,
+            task.source,
+            task.metadata,
         ],
     )?;
 
@@ -65,34 +128,13 @@ pub fn create_scheduled_task(conn: &Connection, task: &NewScheduledTask) -> anyh
 
 pub fn list_scheduled_tasks(conn: &Connection, active_only: bool) -> anyhow::Result<Vec<ScheduledTask>> {
     let query = if active_only {
-        "SELECT id, title, task_type, target_jid, payload, schedule_type, schedule_expr, next_run_epoch, last_run_epoch, is_active, created_at, last_status, last_error, last_duration_secs
-         FROM scheduled_tasks WHERE is_active = 1 ORDER BY next_run_epoch ASC"
+        format!("SELECT {} FROM scheduled_tasks WHERE is_active = 1 ORDER BY next_run_epoch ASC", TASK_COLUMNS)
     } else {
-        "SELECT id, title, task_type, target_jid, payload, schedule_type, schedule_expr, next_run_epoch, last_run_epoch, is_active, created_at, last_status, last_error, last_duration_secs
-         FROM scheduled_tasks ORDER BY is_active DESC, next_run_epoch ASC"
+        format!("SELECT {} FROM scheduled_tasks ORDER BY is_active DESC, next_run_epoch ASC", TASK_COLUMNS)
     };
 
-    let mut stmt = conn.prepare(query)?;
-    let rows = stmt.query_map([], |row| {
-        let task_type_str: String = row.get(2)?;
-        let active_int: i32 = row.get(9)?;
-        Ok(ScheduledTask {
-            id: row.get(0)?,
-            title: row.get(1)?,
-            task_type: ScheduledTaskType::from_str(&task_type_str),
-            target_jid: row.get(3)?,
-            payload: row.get(4)?,
-            schedule_type: row.get(5)?,
-            schedule_expr: row.get(6)?,
-            next_run_epoch: row.get(7)?,
-            last_run_epoch: row.get(8)?,
-            is_active: active_int != 0,
-            created_at: row.get(10)?,
-            last_status: row.get(11)?,
-            last_error: row.get(12)?,
-            last_duration_secs: row.get(13)?,
-        })
-    })?;
+    let mut stmt = conn.prepare(&query)?;
+    let rows = stmt.query_map([], parse_task_row)?;
 
     let mut list = Vec::new();
     for r in rows {
@@ -102,33 +144,12 @@ pub fn list_scheduled_tasks(conn: &Connection, active_only: bool) -> anyhow::Res
 }
 
 pub fn get_due_scheduled_tasks(conn: &Connection, current_epoch: i64) -> anyhow::Result<Vec<ScheduledTask>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, title, task_type, target_jid, payload, schedule_type, schedule_expr, next_run_epoch, last_run_epoch, is_active, created_at, last_status, last_error, last_duration_secs
-         FROM scheduled_tasks 
-         WHERE is_active = 1 AND next_run_epoch <= ?1
-         ORDER BY next_run_epoch ASC"
-    )?;
-
-    let rows = stmt.query_map(params![current_epoch], |row| {
-        let task_type_str: String = row.get(2)?;
-        let active_int: i32 = row.get(9)?;
-        Ok(ScheduledTask {
-            id: row.get(0)?,
-            title: row.get(1)?,
-            task_type: ScheduledTaskType::from_str(&task_type_str),
-            target_jid: row.get(3)?,
-            payload: row.get(4)?,
-            schedule_type: row.get(5)?,
-            schedule_expr: row.get(6)?,
-            next_run_epoch: row.get(7)?,
-            last_run_epoch: row.get(8)?,
-            is_active: active_int != 0,
-            created_at: row.get(10)?,
-            last_status: row.get(11)?,
-            last_error: row.get(12)?,
-            last_duration_secs: row.get(13)?,
-        })
-    })?;
+    let query = format!(
+        "SELECT {} FROM scheduled_tasks WHERE is_active = 1 AND next_run_epoch <= ?1 ORDER BY next_run_epoch ASC",
+        TASK_COLUMNS
+    );
+    let mut stmt = conn.prepare(&query)?;
+    let rows = stmt.query_map(params![current_epoch], parse_task_row)?;
 
     let mut list = Vec::new();
     for r in rows {
@@ -161,34 +182,82 @@ pub fn delete_scheduled_task(conn: &Connection, id: i64) -> anyhow::Result<bool>
 }
 
 pub fn get_scheduled_task(conn: &Connection, id: i64) -> anyhow::Result<Option<ScheduledTask>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, title, task_type, target_jid, payload, schedule_type, schedule_expr, next_run_epoch, last_run_epoch, is_active, created_at, last_status, last_error, last_duration_secs
-         FROM scheduled_tasks WHERE id = ?1 LIMIT 1"
-    )?;
-
+    let query = format!("SELECT {} FROM scheduled_tasks WHERE id = ?1 LIMIT 1", TASK_COLUMNS);
+    let mut stmt = conn.prepare(&query)?;
     let mut rows = stmt.query(params![id])?;
     if let Some(row) = rows.next()? {
-        let task_type_str: String = row.get(2)?;
-        let active_int: i32 = row.get(9)?;
-        Ok(Some(ScheduledTask {
-            id: row.get(0)?,
-            title: row.get(1)?,
-            task_type: ScheduledTaskType::from_str(&task_type_str),
-            target_jid: row.get(3)?,
-            payload: row.get(4)?,
-            schedule_type: row.get(5)?,
-            schedule_expr: row.get(6)?,
-            next_run_epoch: row.get(7)?,
-            last_run_epoch: row.get(8)?,
-            is_active: active_int != 0,
-            created_at: row.get(10)?,
-            last_status: row.get(11)?,
-            last_error: row.get(12)?,
-            last_duration_secs: row.get(13)?,
-        }))
+        Ok(Some(parse_task_row(row)?))
     } else {
         Ok(None)
     }
+}
+
+pub fn get_scheduled_task_by_slug(conn: &Connection, slug: &str) -> anyhow::Result<Option<ScheduledTask>> {
+    let query = format!("SELECT {} FROM scheduled_tasks WHERE slug = ?1 LIMIT 1", TASK_COLUMNS);
+    let mut stmt = conn.prepare(&query)?;
+    let mut rows = stmt.query(params![slug])?;
+    if let Some(row) = rows.next()? {
+        Ok(Some(parse_task_row(row)?))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn toggle_scheduled_task(conn: &Connection, id: i64) -> anyhow::Result<bool> {
+    conn.execute(
+        "UPDATE scheduled_tasks SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END WHERE id = ?1",
+        params![id],
+    )?;
+    let is_active: i32 = conn.query_row(
+        "SELECT is_active FROM scheduled_tasks WHERE id = ?1",
+        params![id],
+        |r| r.get(0),
+    )?;
+    Ok(is_active != 0)
+}
+
+pub fn set_scheduled_task_active(conn: &Connection, id: i64, is_active: bool) -> anyhow::Result<()> {
+    let active_int = if is_active { 1 } else { 0 };
+    conn.execute(
+        "UPDATE scheduled_tasks SET is_active = ?1 WHERE id = ?2",
+        params![active_int, id],
+    )?;
+    Ok(())
+}
+
+pub fn update_scheduled_task(
+    conn: &Connection,
+    id: i64,
+    title: Option<&str>,
+    target_jid: Option<&str>,
+    payload: Option<&str>,
+    schedule_type: Option<&str>,
+    schedule_expr: Option<&str>,
+    next_run_epoch: Option<i64>,
+    category: Option<&str>,
+) -> anyhow::Result<bool> {
+    let affected = conn.execute(
+        "UPDATE scheduled_tasks 
+         SET title = COALESCE(?1, title),
+             target_jid = COALESCE(?2, target_jid),
+             payload = COALESCE(?3, payload),
+             schedule_type = COALESCE(?4, schedule_type),
+             schedule_expr = COALESCE(?5, schedule_expr),
+             next_run_epoch = COALESCE(?6, next_run_epoch),
+             category = COALESCE(?7, category)
+         WHERE id = ?8",
+        params![
+            title,
+            target_jid,
+            payload,
+            schedule_type,
+            schedule_expr,
+            next_run_epoch,
+            category,
+            id
+        ],
+    )?;
+    Ok(affected > 0)
 }
 
 pub fn record_scheduled_task_run(
@@ -231,7 +300,7 @@ pub fn list_scheduled_task_runs(conn: &Connection, limit: usize) -> anyhow::Resu
         "SELECT id, task_id, task_title, target_jid, status, duration_secs, error_message, output_preview, executed_at_epoch
          FROM scheduled_task_runs
          ORDER BY executed_at_epoch DESC, id DESC
-         LIMIT ?1"
+         LIMIT ?1",
     )?;
 
     let rows = stmt.query_map(params![limit as i64], |row| {
@@ -340,31 +409,9 @@ pub fn get_scheduler_diagnostics(conn: &Connection) -> anyhow::Result<SchedulerD
     ).ok();
 
     let next_task: Option<ScheduledTask> = conn.query_row(
-        "SELECT id, title, task_type, target_jid, payload, schedule_type, schedule_expr, next_run_epoch, last_run_epoch, is_active, created_at, last_status, last_error, last_duration_secs
-         FROM scheduled_tasks
-         WHERE is_active = 1
-         ORDER BY next_run_epoch ASC LIMIT 1",
+        &format!("SELECT {} FROM scheduled_tasks WHERE is_active = 1 ORDER BY next_run_epoch ASC LIMIT 1", TASK_COLUMNS),
         [],
-        |row| {
-            let task_type_str: String = row.get(2)?;
-            let active_int: i32 = row.get(9)?;
-            Ok(ScheduledTask {
-                id: row.get(0)?,
-                title: row.get(1)?,
-                task_type: ScheduledTaskType::from_str(&task_type_str),
-                target_jid: row.get(3)?,
-                payload: row.get(4)?,
-                schedule_type: row.get(5)?,
-                schedule_expr: row.get(6)?,
-                next_run_epoch: row.get(7)?,
-                last_run_epoch: row.get(8)?,
-                is_active: active_int != 0,
-                created_at: row.get(10)?,
-                last_status: row.get(11)?,
-                last_error: row.get(12)?,
-                last_duration_secs: row.get(13)?,
-            })
-        }
+        parse_task_row,
     ).ok();
 
     Ok(SchedulerDiagnostics {

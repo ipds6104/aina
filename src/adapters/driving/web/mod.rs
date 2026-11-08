@@ -544,6 +544,10 @@ mod tests {
         async fn update_scheduled_task_run(&self, _id: i64, _last_run: i64, _next_run: Option<i64>, _is_active: bool) -> anyhow::Result<()> { Ok(()) }
         async fn delete_scheduled_task(&self, _id: i64) -> anyhow::Result<bool> { Ok(true) }
         async fn get_scheduled_task(&self, _id: i64) -> anyhow::Result<Option<crate::core::domain::ScheduledTask>> { Ok(None) }
+        async fn get_scheduled_task_by_slug(&self, _slug: &str) -> anyhow::Result<Option<crate::core::domain::ScheduledTask>> { Ok(None) }
+        async fn toggle_scheduled_task(&self, _id: i64) -> anyhow::Result<bool> { Ok(true) }
+        async fn set_scheduled_task_active(&self, _id: i64, _is_active: bool) -> anyhow::Result<()> { Ok(()) }
+        async fn update_scheduled_task(&self, _id: i64, _title: Option<&str>, _target_jid: Option<&str>, _payload: Option<&str>, _schedule_type: Option<&str>, _schedule_expr: Option<&str>, _next_run_epoch: Option<i64>, _category: Option<&str>) -> anyhow::Result<bool> { Ok(true) }
         async fn record_scheduled_task_run(&self, _task_id: i64, _task_title: &str, _target_jid: &str, _status: &str, _duration_secs: f64, _error_message: Option<&str>, _output_preview: Option<&str>) -> anyhow::Result<i64> { Ok(1) }
         async fn list_scheduled_task_runs(&self, _limit: usize) -> anyhow::Result<Vec<crate::core::domain::ScheduledTaskRun>> { Ok(vec![]) }
         async fn update_scheduled_task_result(&self, _id: i64, _status: &str, _error_message: Option<&str>, _duration_secs: f64) -> anyhow::Result<()> { Ok(()) }

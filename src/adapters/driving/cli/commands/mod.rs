@@ -1,3 +1,4 @@
+pub mod activity;
 pub mod archive;
 pub mod audit;
 pub mod github;
@@ -10,6 +11,7 @@ pub mod user;
 pub mod whatsapp;
 pub mod workspace;
 
+pub use activity::*;
 pub use archive::*;
 pub use audit::*;
 pub use github::*;

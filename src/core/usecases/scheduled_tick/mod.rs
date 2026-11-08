@@ -151,6 +151,10 @@ mod tests {
             schedule_type: "once".to_string(),
             schedule_expr: "22:26".to_string(),
             next_run_epoch: 100, // definitely in the past
+            slug: None,
+            category: None,
+            source: None,
+            metadata: None,
         };
         let task_id = store.create_scheduled_task(&new_task).await.unwrap();
 
@@ -230,6 +234,10 @@ mod tests {
             schedule_type: "once".to_string(),
             schedule_expr: "22:00".to_string(),
             next_run_epoch: 100,
+            slug: None,
+            category: None,
+            source: None,
+            metadata: None,
         };
         store.create_scheduled_task(&group_task).await.unwrap();
 
@@ -242,6 +250,10 @@ mod tests {
             schedule_type: "once".to_string(),
             schedule_expr: "22:00".to_string(),
             next_run_epoch: 100,
+            slug: None,
+            category: None,
+            source: None,
+            metadata: None,
         };
         store.create_scheduled_task(&status_task).await.unwrap();
 

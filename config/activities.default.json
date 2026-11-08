@@ -1,0 +1,90 @@
+[
+  {
+    "slug": "status_pagi",
+    "title": "Status WhatsApp Aina - Pagi",
+    "category": "status",
+    "task_type": "agent_action",
+    "target_jid": "status@broadcast",
+    "schedule_type": "daily",
+    "schedule_expr": "07:00",
+    "payload": "Eksekusi engine status harian Aina slot pagi: periksa kuota via scripts/persona_status.py, jika diizinkan generate gambar Makoto Shinkai dengan avatar acuan assets/character_sheet.png dan publikasikan ke Status WhatsApp Story.",
+    "is_active": true
+  },
+  {
+    "slug": "morning_briefing",
+    "title": "Briefing Deadline Harian Pagi (3 Hari)",
+    "category": "briefing",
+    "task_type": "agent_action",
+    "target_jid": "6289625345646@s.whatsapp.net",
+    "schedule_type": "daily",
+    "schedule_expr": "06:30",
+    "payload": "Periksa jadwal dan agenda kegiatan di knowledge base (via 'python3 /app/scripts/workspace_manager.py schedule' atau berkas kegiatan) untuk hari ini hingga 3 hari ke depan. Susun rekap briefing pagi yang rapi dan ringkas untuk Bang Ihza: sebutkan agenda dan deadline aktif hari ini hingga 3 hari ke depan beserta statusnya. Berikan salam pagi yang hangat khas rekan kerja.",
+    "is_active": true
+  },
+  {
+    "slug": "status_siang",
+    "title": "Status WhatsApp Aina - Siang",
+    "category": "status",
+    "task_type": "agent_action",
+    "target_jid": "status@broadcast",
+    "schedule_type": "daily",
+    "schedule_expr": "12:15",
+    "payload": "Eksekusi engine status harian Aina slot siang: periksa kuota via scripts/persona_status.py, jika diizinkan generate gambar Makoto Shinkai dengan avatar acuan assets/character_sheet.png dan publikasikan ke Status WhatsApp Story.",
+    "is_active": true
+  },
+  {
+    "slug": "status_senja",
+    "title": "Status WhatsApp Aina - Senja",
+    "category": "status",
+    "task_type": "agent_action",
+    "target_jid": "status@broadcast",
+    "schedule_type": "daily",
+    "schedule_expr": "17:30",
+    "payload": "Eksekusi engine status harian Aina slot senja: periksa kuota via scripts/persona_status.py, jika diizinkan generate gambar Makoto Shinkai dengan avatar acuan assets/character_sheet.png dan publikasikan ke Status WhatsApp Story.",
+    "is_active": true
+  },
+  {
+    "slug": "afternoon_deadline_check",
+    "title": "Cek Deadline Harian IPDS 6104",
+    "category": "briefing",
+    "task_type": "agent_action",
+    "target_jid": "120363377989532476@g.us",
+    "schedule_type": "daily",
+    "schedule_expr": "18:30",
+    "payload": "Periksa daftar agenda dan deadline kegiatan aktif di knowledge base (via 'aina kb schedule' atau berkas kegiatan). Susun pesan sapaan hangat rekan kerja ke grup The Real of IPDS 6104: sebutkan ringkas kegiatan/deadline aktif hari ini atau terdekat jika ada dan tanyakan apakah progresnya aman. Jika tidak ada deadline spesifik hari ini, tanyakan secara santai apakah progres tugas tim hari ini aman terkendali.",
+    "is_active": true
+  },
+  {
+    "slug": "status_malam",
+    "title": "Status WhatsApp Aina - Malam",
+    "category": "status",
+    "task_type": "agent_action",
+    "target_jid": "status@broadcast",
+    "schedule_type": "daily",
+    "schedule_expr": "21:00",
+    "payload": "Eksekusi engine status harian Aina slot malam: periksa kuota via scripts/persona_status.py, jika diizinkan generate gambar Makoto Shinkai dengan avatar acuan assets/character_sheet.png dan publikasikan ke Status WhatsApp Story.",
+    "is_active": true
+  },
+  {
+    "slug": "eom_presence_h_minus_1",
+    "title": "Pengingat H-1 Presensi Akhir Bulan BPS",
+    "category": "reminder",
+    "task_type": "direct_notification",
+    "target_jid": "6289625345646@s.whatsapp.net",
+    "schedule_type": "last_workday_minus_1",
+    "schedule_expr": "08:00",
+    "payload": "Halo Bang Ihza, selamat pagi! 🌤️ Mengingatkan bahwa besok adalah hari kerja terakhir penutupan presensi bulanan BPS. Mohon pastikan seluruh presensi pegawai/staf di aplikasi Presensi BPS mulai diperiksa dan nihil dari status tanpa kabar (TK) atau terlambat (TL) tanpa izin/surat tugas sah sebelum cut-off besok yaa.",
+    "is_active": true
+  },
+  {
+    "slug": "eom_presence_h",
+    "title": "Pengingat Hari H Presensi Akhir Bulan BPS",
+    "category": "reminder",
+    "task_type": "direct_notification",
+    "target_jid": "6289625345646@s.whatsapp.net",
+    "schedule_type": "last_workday",
+    "schedule_expr": "08:00",
+    "payload": "Halo Bang Ihza, selamat pagi! 🌤️ Hari ini adalah hari kerja terakhir penutupan presensi bulanan BPS. Pastikan seluruh presensi pegawai/staf di aplikasi Presensi BPS sudah berstatus bersih dan nihil status tanpa kabar (TK) atau terlambat (TL) sebelum cut-off rekap kehadiran akhir bulan hari ini yaa.",
+    "is_active": true
+  }
+]

@@ -107,6 +107,39 @@ async fn main() -> anyhow::Result<()> {
         config.app.timezone_offset_hours,
     ));
 
+    // 3.5 Auto-Reconcile Baseline & Custom Activities
+    let baseline_defs = crate::core::domain::load_default_baseline();
+    let custom_dir = if std::path::Path::new("/app/data/activities").exists() {
+        std::path::PathBuf::from("/app/data/activities")
+    } else {
+        std::path::PathBuf::from("data/activities")
+    };
+    let now_epoch = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
+    match crate::core::domain::ActivityReconciler::sync_all(
+        session_store.as_ref(),
+        &baseline_defs,
+        Some(&custom_dir),
+        config.app.timezone_offset_hours,
+        now_epoch,
+    ).await {
+        Ok(report) => {
+            tracing::info!(
+                "Activity Reconciler synced: {} new baseline, {} existing baseline, {} new custom, {} updated custom",
+                report.created_baseline,
+                report.existing_baseline,
+                report.created_custom,
+                report.updated_custom
+            );
+        }
+        Err(e) => {
+            tracing::warn!("Failed during initial activity reconciliation: {}", e);
+        }
+    }
+
     // 4. Start Scheduler if enabled (Driving Adapter)
     if config.scheduler.enabled {
         let runner = SchedulerRunner::new(

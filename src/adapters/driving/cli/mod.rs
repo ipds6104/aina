@@ -126,6 +126,25 @@ PENGGUNAAN:
                               Options:
                                 --json                  Output format JSON terstruktur
 
+    activity [list|get|add|edit|toggle|delete|sync|run] Manajemen Baseline & Custom Activities Terjadwal
+                              Subcommands:
+                                list                    Daftar seluruh aktivitas (baseline & custom)
+                                get <slug|id>           Detail lengkap konfigurasi aktivitas
+                                add <slug>              Tambah aktivitas kustom persisten
+                                edit <slug|id>          Ubah jadwal, target, atau prompt aktivitas
+                                toggle <slug|id>        Aktifkan / non-aktifkan aktivitas
+                                enable <slug|id>        Aktifkan aktivitas
+                                disable <slug|id>       Non-aktifkan aktivitas
+                                delete <slug|id>        Hapus custom activity (reset baseline)
+                                sync                    Sinkronisasi baseline & custom JSON ke scheduler
+                                run <slug|id>           Uji coba eksekusi instan di terminal
+                              Options:
+                                --all, -a               Tampilkan semua aktivitas (termasuk non-aktif)
+                                --baseline, -b          Hanya tampilkan baseline bawaan sistem
+                                --custom, -c            Hanya tampilkan custom dynamic activities
+                                --category <cat>        Filter kategori (status, briefing, reminder, maintenance, custom)
+                                --json                  Output format JSON terstruktur
+
     schedule list             Daftar tugas & riset terjadwal aktif
                               Options:
                                 --all                   Tampilkan semua tugas (termasuk non-aktif)
@@ -239,6 +258,7 @@ PENGGUNAAN:
             "status" => commands::handle_whatsapp(&args[1..]),
             "user" | "profile" => commands::handle_user(&args[2..]),
             "group" | "groups" => commands::handle_group(&args[2..]),
+            "activity" | "act" => commands::handle_activity(&args[2..]).await,
             "schedule" | "cron" => commands::handle_schedule(&args[2..]).await,
             "persona" => commands::handle_persona(&args[2..]).await,
             "model" => commands::handle_model(&args[2..]).await,

@@ -112,6 +112,28 @@ pub trait SessionStorePort: Send + Sync {
     /// Gets a single scheduled task by ID.
     async fn get_scheduled_task(&self, id: i64) -> anyhow::Result<Option<crate::core::domain::ScheduledTask>>;
 
+    /// Gets a single scheduled task by unique slug.
+    async fn get_scheduled_task_by_slug(&self, slug: &str) -> anyhow::Result<Option<crate::core::domain::ScheduledTask>>;
+
+    /// Toggles active status of a scheduled task.
+    async fn toggle_scheduled_task(&self, id: i64) -> anyhow::Result<bool>;
+
+    /// Sets active status of a scheduled task explicitly.
+    async fn set_scheduled_task_active(&self, id: i64, is_active: bool) -> anyhow::Result<()>;
+
+    /// Updates existing scheduled task fields.
+    async fn update_scheduled_task(
+        &self,
+        id: i64,
+        title: Option<&str>,
+        target_jid: Option<&str>,
+        payload: Option<&str>,
+        schedule_type: Option<&str>,
+        schedule_expr: Option<&str>,
+        next_run_epoch: Option<i64>,
+        category: Option<&str>,
+    ) -> anyhow::Result<bool>;
+
     /// Records an execution run of a scheduled task into the audit log.
     async fn record_scheduled_task_run(
         &self,

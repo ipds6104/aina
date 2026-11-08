@@ -45,7 +45,7 @@ mkdir -p "${AGENT_WORKSPACE:-/app/workspaces/default}/.agents/skills"
 mkdir -p "${AGENT_WORKSPACE:-/app/workspaces/default}/knowledge"
 mkdir -p "${AGENT_WORKSPACE:-/app/workspaces/default}/scripts"
 mkdir -p "$(dirname "${DATABASE_PATH:-/app/data/aina.db}")"
-mkdir -p /app/data/assets /app/assets /app/data/custom-skills
+mkdir -p /app/data/assets /app/assets /app/data/custom-skills /app/data/activities
 mkdir -p /root/.gemini/config/skills
 
 # Ensure persistent shared_data directory across Coolify redeployments
@@ -57,8 +57,9 @@ ln -sfn /app/data/shared_data "${AGENT_WORKSPACE:-/app/workspaces/default}/share
 mkdir -p /app/data/config /app/data/config/history
 mkdir -p "${AGENT_WORKSPACE:-/app/workspaces/default}/data"
 ln -sfn /app/data/custom-skills "${AGENT_WORKSPACE:-/app/workspaces/default}/data/custom-skills" 2>/dev/null || true
+ln -sfn /app/data/activities "${AGENT_WORKSPACE:-/app/workspaces/default}/data/activities" 2>/dev/null || true
 
-for cfg in persona.md character.md activities.md organization.md; do
+for cfg in persona.md character.md activities.md organization.md activities.default.json; do
     # 1. Always keep pristine default template from image available for factory reset
     if [ -f "/app/config/${cfg}.default.md" ]; then
         cp "/app/config/${cfg}.default.md" "/app/data/config/${cfg}.default.md" 2>/dev/null || true

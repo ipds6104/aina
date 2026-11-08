@@ -164,6 +164,10 @@ Pilihan --when & --time:
                 schedule_type: schedule_type.clone(),
                 schedule_expr: schedule_expr.clone(),
                 next_run_epoch: next_epoch,
+                slug: None,
+                category: Some("custom".to_string()),
+                source: Some("custom".to_string()),
+                metadata: None,
             };
 
             let id = store.create_scheduled_task(&new_task).await?;

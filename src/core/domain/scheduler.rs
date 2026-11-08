@@ -39,6 +39,14 @@ pub struct ScheduledTask {
     pub last_duration_secs: Option<f64>,
     pub is_active: bool,
     pub created_at: i64,
+    #[serde(default)]
+    pub slug: Option<String>,
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub metadata: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,7 +74,7 @@ pub struct SchedulerDiagnostics {
     pub next_task: Option<ScheduledTask>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewScheduledTask {
     pub title: String,
     pub task_type: ScheduledTaskType,
@@ -75,6 +83,40 @@ pub struct NewScheduledTask {
     pub schedule_type: String,
     pub schedule_expr: String,
     pub next_run_epoch: i64,
+    #[serde(default)]
+    pub slug: Option<String>,
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub metadata: Option<String>,
+}
+
+impl NewScheduledTask {
+    pub fn simple(
+        title: String,
+        task_type: ScheduledTaskType,
+        target_jid: String,
+        payload: String,
+        schedule_type: String,
+        schedule_expr: String,
+        next_run_epoch: i64,
+    ) -> Self {
+        Self {
+            title,
+            task_type,
+            target_jid,
+            payload,
+            schedule_type,
+            schedule_expr,
+            next_run_epoch,
+            slug: None,
+            category: None,
+            source: Some("custom".to_string()),
+            metadata: None,
+        }
+    }
 }
 
 use chrono::{DateTime, Datelike, Duration, FixedOffset, NaiveDate, Weekday};

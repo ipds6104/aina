@@ -1,3 +1,4 @@
+pub mod activity;
 pub mod archive;
 pub mod audit;
 pub mod conversation_heuristics;
@@ -16,6 +17,7 @@ pub mod usecase_classifier;
 pub mod version;
 pub mod workspace;
 
+pub use activity::*;
 pub use archive::{ArchiveEngine, ArchiveSearchFilter};
 pub use audit::*;
 pub use conversation_heuristics::*;

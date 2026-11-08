@@ -149,6 +149,46 @@ impl SessionStorePort for SqliteSessionStore {
         scheduler::get_scheduled_task(&conn, id)
     }
 
+    async fn get_scheduled_task_by_slug(&self, slug: &str) -> anyhow::Result<Option<ScheduledTask>> {
+        let conn = self.conn.lock().await;
+        scheduler::get_scheduled_task_by_slug(&conn, slug)
+    }
+
+    async fn toggle_scheduled_task(&self, id: i64) -> anyhow::Result<bool> {
+        let conn = self.conn.lock().await;
+        scheduler::toggle_scheduled_task(&conn, id)
+    }
+
+    async fn set_scheduled_task_active(&self, id: i64, is_active: bool) -> anyhow::Result<()> {
+        let conn = self.conn.lock().await;
+        scheduler::set_scheduled_task_active(&conn, id, is_active)
+    }
+
+    async fn update_scheduled_task(
+        &self,
+        id: i64,
+        title: Option<&str>,
+        target_jid: Option<&str>,
+        payload: Option<&str>,
+        schedule_type: Option<&str>,
+        schedule_expr: Option<&str>,
+        next_run_epoch: Option<i64>,
+        category: Option<&str>,
+    ) -> anyhow::Result<bool> {
+        let conn = self.conn.lock().await;
+        scheduler::update_scheduled_task(
+            &conn,
+            id,
+            title,
+            target_jid,
+            payload,
+            schedule_type,
+            schedule_expr,
+            next_run_epoch,
+            category,
+        )
+    }
+
     async fn record_scheduled_task_run(
         &self,
         task_id: i64,
@@ -334,6 +374,10 @@ mod tests {
             schedule_type: "once".to_string(),
             schedule_expr: "22:26".to_string(),
             next_run_epoch: 1000,
+            slug: None,
+            category: None,
+            source: None,
+            metadata: None,
         };
 
         let task_id = store.create_scheduled_task(&new_task).await.unwrap();
@@ -348,6 +392,10 @@ mod tests {
             schedule_type: "once".to_string(),
             schedule_expr: "22:26".to_string(),
             next_run_epoch: 1000,
+            slug: None,
+            category: None,
+            source: None,
+            metadata: None,
         };
         let dup_id = store.create_scheduled_task(&duplicate_task).await.unwrap();
         assert_eq!(task_id, dup_id);
