@@ -30,6 +30,7 @@ pub async fn handle_activity(args: &[String]) -> anyhow::Result<()> {
         "delete" | "rm" => handle_delete(&store, &args[1..]).await,
         "sync" => handle_sync(&store, &config, &args[1..]).await,
         "run" => handle_run(&store, &config, &args[1..]).await,
+        "runs" | "history" => handle_runs(&store, &args[1..]).await,
         _ => {
             eprintln!("Subcommand activity tidak dikenal: `{}`. Ketik `aina activity` untuk panduan.", subcmd);
             std::process::exit(1);
@@ -94,6 +95,12 @@ SUBCOMMANDS:
                                 --json               Output ringkasan format JSON
 
     run <slug|id>             Jalankan aktivitas sekarang juga (uji coba langsung di terminal)
+
+    runs, history             Daftar riwayat eksekusi aktivitas (waktu, status, durasi, preview)
+                              Options:
+                                --limit <n>          Batas entri riwayat (default: 20)
+                                --slug, -s <slug>    Filter riwayat untuk aktivitas tertentu
+                                --json               Output format JSON terstruktur
 "#
     );
 }
@@ -709,5 +716,80 @@ async fn handle_run(
         }
     }
 
+    Ok(())
+}
+
+async fn handle_runs(store: &dyn SessionStorePort, args: &[String]) -> anyhow::Result<()> {
+    let as_json = args.iter().any(|a| a == "--json");
+    let mut limit = 20;
+    if let Some(pos) = args.iter().position(|a| a == "--limit") {
+        if pos + 1 < args.len() {
+            limit = args[pos + 1].parse().unwrap_or(20);
+        }
+    }
+
+    let slug_filter = args
+        .windows(2)
+        .find(|w| w[0] == "--slug" || w[0] == "-s")
+        .map(|w| w[1].clone());
+
+    let target_task_id = if let Some(ref slug) = slug_filter {
+        if let Some(task) = resolve_task(store, slug).await? {
+            Some(task.id)
+        } else {
+            eprintln!("Aktivitas dengan slug/ID `{}` tidak ditemukan.", slug);
+            return Ok(());
+        }
+    } else {
+        None
+    };
+
+    let mut runs = store.list_scheduled_task_runs(limit).await?;
+    if let Some(task_id) = target_task_id {
+        runs.retain(|r| r.task_id == task_id);
+    }
+
+    if as_json {
+        println!("{}", serde_json::to_string_pretty(&runs)?);
+        return Ok(());
+    }
+
+    println!("📜 Riwayat Eksekusi Aktivitas Terjadwal (Aina Activity Run History)");
+    println!("================================================================================");
+    if runs.is_empty() {
+        println!("(Belum ada catatan riwayat eksekusi untuk aktivitas yang dipilih)");
+    } else {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        for r in &runs {
+            let diff = now - r.executed_at_epoch;
+            let time_desc = if diff < 60 {
+                format!("{}s lalu", diff)
+            } else if diff < 3600 {
+                format!("{}m lalu", diff / 60)
+            } else {
+                format!("{}h {}m lalu", diff / 3600, (diff % 3600) / 60)
+            };
+            let status_badge = if r.status == "success" { "✅ SUKSES" } else { "❌ GAGAL" };
+            println!("• [#Run: {} | Task: #{}] {} — {}", r.id, r.task_id, r.task_title, status_badge);
+            println!("  Waktu     : {} (Epoch: {}) | Durasi: {:.2}s", time_desc, r.executed_at_epoch, r.duration_secs);
+            println!("  Target WA : {}", r.target_jid);
+            if let Some(ref err) = r.error_message {
+                println!("  Error/RCA : {}", err);
+            }
+            if let Some(ref prev) = r.output_preview {
+                let clean_prev = prev.trim().replace('\n', " ");
+                let truncated_prev = if clean_prev.len() > 100 {
+                    format!("{}...", &clean_prev[..100])
+                } else {
+                    clean_prev
+                };
+                println!("  Preview   : {}", truncated_prev);
+            }
+            println!("--------------------------------------------------------------------------------");
+        }
+    }
     Ok(())
 }
