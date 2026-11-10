@@ -14,13 +14,18 @@ from typing import Dict, Any, List, Optional, Tuple
 
 WIB = timezone(timedelta(hours=7))
 
-# 5 Preset Busana Utama (Zero Visual Drifting)
+# Preset Busana Utama & Variasi Muslimah Resmi (Zero Visual Drifting)
 WARDROBE_PRESETS = {
+    # 5 Preset Pokok
     "wfh_cozy": "oversized cozy knit sweater in soft cream and lavender tones, comfortable relaxed culottes, indoor slippers, minimalist reading glasses",
     "smart_casual": "crisp white collared cotton shirt with a knit vest, tailored grey trousers, clean white sneakers, canvas tote bag",
     "outdoor_nature": "breezy light pastel cotton blouse, rolled-up linen trousers, cotton bucket hat, canvas crossbody bag",
     "night_stargaze": "thick warm navy-blue fleece hoodie or parka with warm hood, cozy jogger pants, fingerless knit gloves, holding steaming ceramic mug",
-    "celestial_sig": "celestial navy-blue robe and dress with delicate gold constellation star embroidery and subtle stardust motifs"
+    "celestial_sig": "celestial navy-blue robe and dress with delicate gold constellation star embroidery and subtle stardust motifs",
+    # Variasi Busana Muslimah Anggun & Syar'i (Signature Brooch Bulan Sabit & Bintang Perak di Sisi Kiri Hijab)
+    "muslimah_chic": "elegant modern modest Muslimah attire featuring a soft flowing silver-lavender pashmina hijab styled neatly, pinned with a delicate silver crescent moon and star brooch on the left side of the hijab, an elegant pastel beige long trench outer over a modest white inner tunic, relaxed pleated trousers, and clean white minimalist sneakers",
+    "muslimah_syari": "graceful modest syar'i Muslimah attire featuring an elegant draped dusty-lavender khimar hijab, adorned with a luminous silver crescent moon and star pin on the left side, a flowing earth-tone loose abaya dress with delicate embroidered cuffs, and a minimalist leather crossbody bag",
+    "muslimah_cozy": "cozy modest Muslimah casual wear featuring a soft cream-colored jersey hijab with a delicate silver crescent pin on the left side, an oversized warm lavender knit cardigan, long loose culottes, and comfortable indoor loafers"
 }
 
 # Inspirasi busana baru terarah saat bosan (Novelty Styling Seeds)
@@ -49,6 +54,16 @@ AUTONOMOUS_OUTFIT_SEEDS = [
         "slug": "nocturnal_cashmere_wrap",
         "desc": "soft dark-navy cashmere knit wrap sweater, cozy flannel lounge pants, and delicate starlight-motif brooch",
         "vibes": ["malam", "indoor", "stargaze"]
+    },
+    {
+        "slug": "pastel_lilac_abaya",
+        "desc": "contemporary minimalist pastel lilac abaya with subtle geometric sleeve stitching, soft flowy lavender chiffon hijab pinned with a crescent brooch on the left side, and light sandals",
+        "vibes": ["siang", "sore", "cafe", "outdoor", "muslimah"]
+    },
+    {
+        "slug": "modest_sage_trench",
+        "desc": "chic modest sage-green trench coat over a white high-neck inner, matching dusty-sage pashmina hijab with silver star pin, and wide-leg linen pants",
+        "vibes": ["pagi", "siang", "travel", "muslimah"]
     }
 ]
 
@@ -165,9 +180,12 @@ class WardrobeManager:
                 reason += f" (Peringatan: Kuota kustom minggu ini sudah mencapai {boredom['weekly_custom_count']}/2)"
             return slug, custom_clothes.strip(), True, reason
 
-        # 2. Jika ada requested_outfit spesifik dari preset
+        # 2. Jika ada requested_outfit spesifik dari preset atau ditentukan oleh aktivitas
         if requested_outfit and requested_outfit in WARDROBE_PRESETS:
             return requested_outfit, WARDROBE_PRESETS[requested_outfit], False, f"Memilih preset resmi '{requested_outfit}'."
+        act_outfit = activity.get("outfit")
+        if act_outfit and act_outfit in WARDROBE_PRESETS and not boredom["is_bored"]:
+            return act_outfit, WARDROBE_PRESETS[act_outfit], False, f"Preset resmi '{act_outfit}' ditentukan oleh aktivitas."
 
         # 3. Alur Otomatis Berbasis Novelty & Anti-Kebosanan
         scene_lower = activity.get("scene", "").lower()
@@ -199,7 +217,14 @@ class WardrobeManager:
                 return alt_outfit, WARDROBE_PRESETS[alt_outfit], False, reason
 
         # 4. Kondisi Normal (Tidak Bosan): Pilih preset terbaik sesuai konteks aktivitas
-        if "kafe" in scene_lower or "cafe" in scene_lower or "toko buku" in scene_lower:
+        if "muslimah" in scene_lower or "hijab" in scene_lower or "khimar" in scene_lower or "abaya" in scene_lower:
+            if "syari" in scene_lower or "khimar" in scene_lower or "abaya" in scene_lower:
+                outfit_key = "muslimah_syari"
+            elif "knit" in scene_lower or "santai" in scene_lower or "hujan" in scene_lower:
+                outfit_key = "muslimah_cozy"
+            else:
+                outfit_key = "muslimah_chic"
+        elif "kafe" in scene_lower or "cafe" in scene_lower or "toko buku" in scene_lower:
             outfit_key = "smart_casual"
         elif slot == "malam":
             outfit_key = "night_stargaze" if ("stargaz" in scene_lower or "luar" in scene_lower) else "wfh_cozy"

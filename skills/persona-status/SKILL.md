@@ -55,6 +55,55 @@ Daftarkan posting harian ke scheduler native Aina:
 aina schedule add --title "Status Pagi" --type agent --target "status@broadcast" --when daily --time "07:15" --payload "Jalankan python3 scripts/persona_status.py post --slot morning"
 ```
 
+### SOP 5: Menemukan Ketertarikan Baru & Mempublikasikan Story (Autonomous Curiosity Engine)
+
+> [!IMPORTANT]
+> **Invarian Mutlak: "Live Web Search First" (Zero Stale Knowledge)**
+> **DILARANG menggunakan pengetahuan masa lalu atau memori statis (misal: topik 2024 atau sebelumnya). Tahun saat ini adalah 2026.**
+> Setiap kali Admin meminta Aina mengeksplorasi ketertarikan baru atau membuat status berbasis internet:
+> 1. **Langkah 1 (WAJIB): Jalankan pencarian web aktual (`search_web`)** terlebih dahulu dengan filter tahun 2026 atau `when:1d`/`when:7d` (misal: `"latest AI engineering video breakthrough 2026"`, `"tren kopi kekinian viral jakarta 2026"`, `"tren abaya modern hijab 2026"`).
+> 2. **Langkah 2: Ambil headline dan fakta konkret terbaru tahun 2026** hasil penelusuran tersebut.
+> 3. **Langkah 3: Suntikkan ke Engine Status**: Masukkan topik nyata ke parameter `--topic` dan temuan faktual ke parameter `--findings` pada `scripts/persona_status.py generate/post`.
+
+1. **Alur Eksplorasi Nyata (Web Search -> Status Generation)**:
+   ```bash
+   # Contoh hasil pencarian web aktual tahun 2026 (AI Engineering):
+   python3 scripts/persona_status.py discover \
+     --topic "Andrej Karpathy Eureka Labs & Deep Dive LLM Architecture" \
+     --today \
+     --findings "Membahas post-training reasoning RL, test-time compute, dan kurikulum AI native"
+
+   # Contoh hasil pencarian kuliner viral Jakarta 2026:
+   python3 scripts/persona_status.py discover \
+     --topic "Omakafe Mikael Jasin & Kopi Fermentasi Carbonic Maceration" \
+     --today \
+     --findings "Pengalaman laboratorium rasa specialty coffee dengan ekstraksi presisi dan profil buah tropis"
+
+   # Contoh hasil pencarian tren fashion Muslimah 2026:
+   python3 scripts/persona_status.py discover \
+     --topic "Abaya Coat-Style Modern Sand Beige & Pashmina Viscose" \
+     --today \
+     --findings "Siluet trench coat syari dengan aksen lipit accordion flowy dan bahan crinkle airflow sejuk"
+   ```
+2. **Generate Prompt Sinematik Makoto Shinkai & Draf Caption Dinamis**:
+   ```bash
+   python3 scripts/persona_status.py generate \
+     --topic "Omakafe Mikael Jasin & Kopi Fermentasi Carbonic Maceration" \
+     --today \
+     --findings "Laboratorium rasa kopi presisi dengan fermentasi carbonic maceration"
+   ```
+3. **Panggil Tool `generate_image`**:
+   Gunakan prompt Makoto Shinkai yang dihasilkan untuk membuat visual artistik di `output/status/status_<theme>_<timestamp>.png`.
+4. **Publikasikan ke Status WhatsApp Story**:
+   ```bash
+   python3 scripts/persona_status.py post --image output/status/status_<theme>_<timestamp>.png
+   # atau publikasikan langsung dengan evaluasi otomatis:
+   python3 scripts/persona_status.py post \
+     --topic "Abaya Coat-Style Modern Sand Beige & Pashmina Viscose" \
+     --today \
+     --findings "Siluet trench coat syari dengan aksen lipit accordion flowy"
+   ```
+
 ---
 
 ## 3. Filosofi Konten Status ("Impact Maxxing")

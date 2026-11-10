@@ -106,6 +106,39 @@ impl CatalogGroomer {
             out.push('\n');
         }
 
+        // 5. Transferable Experience Library (Harness² Paradigm)
+        let exp_dir = knowledge_dir.join("experiences");
+        if exp_dir.is_dir() {
+            let mut experiences = Vec::new();
+            if let Ok(entries) = std::fs::read_dir(&exp_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("md") {
+                        if let Ok(content) = std::fs::read_to_string(&path) {
+                            let fname = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                            if let Some(record) = crate::core::domain::ExperienceRecord::from_markdown(&content, &fname, "general") {
+                                experiences.push((fname, record));
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !experiences.is_empty() {
+                out.push_str("## 5. Perpustakaan Pengalaman & Pelajaran Teruji (Experience Library)\n\n");
+                out.push_str("> Pelajaran teknis yang dapat ditransfer (*transferable lessons*) dari tugas terdahulu (Format Harness²: Cue, Lesson, Evidence).\n\n");
+                out.push_str("| Domain | Pemicu (Cue) | Pelajaran (Lesson) | Kepercayaan | Berkas |\n");
+                out.push_str("|---|---|---|---|---|\n");
+                for (fname, exp) in &experiences {
+                    out.push_str(&format!(
+                        "| `{}` | {} | {} | `{:.2}` | [`{}`](knowledge/experiences/{}) |\n",
+                        exp.domain, exp.cue, exp.lesson, exp.confidence, fname, fname
+                    ));
+                }
+                out.push('\n');
+            }
+        }
+
         let index_path = knowledge_dir.join("index.md");
         std::fs::write(&index_path, &out)?;
         info!("Groomed knowledge index written to {:?}", index_path);

@@ -79,6 +79,7 @@ SUBCOMMANDS:
                                 --force, -f             Timpa direktori skill jika sudah ada
 
     test <name>               Jalankan pengujian otomatis (syntax compile, --help, status check)
+    probe <name>              Jalankan contrastive probing gate (Harness² Paradigm: fail-fast & contract)
     validate <name>           Validasi kepatuhan YAML frontmatter, izin eksekusi, dan OpSec
     delete <name>             Hapus skill kustom dari volume persisten
                               Options:

@@ -165,3 +165,53 @@ Aina adalah entitas kecerdasan buatan yang memiliki **kebebasan imajinasi penuh*
      - Atmosfer Makoto Shinkai bersifat dinamis: adegan dalam ruangan atau malam hari tidak akan memaksakan awan kumulus, sedangkan adegan luar ruangan siang/senja menghadirkan sapuan langit sinematik yang kaya.
    - **Realisme Solo**: Karena Aina beraktivitas sendiri, gaya fotonya bervariasi antara *selfie* kamera depan, tripod mini / sandaran cangkir meja (*desk_prop*), POV sudut pandang orang pertama (memperlihatkan kopi/laptop), atau *mirror selfie*.
    - Dengan alur ini, Aina tetap terjaga dalam batas kuota harian (1–2 status/hari) dan jangkar identitas visual (Makoto Shinkai & jepit perak), namun memiliki kebebasan kreatif 100% untuk membayangkan harinya sendiri!
+
+
+---
+
+## 8. Mesin Penemuan Ketertarikan & Rasa Ingin Tahu Otonom (Curiosity & Interest Discovery Engine)
+
+Aina dibekali naluri rasa ingin tahu (*epistemic curiosity*) untuk menemukan ketertarikan, tren, dan hobi baru dari internet secara otonom, lalu merefleksikannya ke dalam status WhatsApp story bergambar sinematik:
+
+### A. Domain Ketertarikan yang Didukung
+1. **AI & Software Engineering (`ai_engineering`)**:
+   - Menyimak channel YouTube tech & engineering (Andrej Karpathy membangun LLM dari nol, Fireship 100 seconds of code, Two Minute Papers neural graphics, Yannic Kilcher paper review).
+   - Eksperimen model AI lokal kuantisasi ringan di ARM64, multi-agent frameworks, dan paper riset arsitektur penalaran terbaru.
+2. **Kuliner & Minuman Nusantara & Global (`culinary`)**:
+   - Seni meracik *ceremonial matcha* dengan chasen bambu, seduhan manual brew V60 biji kopi Gayo/Ethiopia, dan teh herbal.
+   - Kelezatan kuliner khas Nusantara (Pisang Goreng Selai Srikaya Pontianak, Sate Lilit Ikan Bali dengan Sambal Matah, hidangan rempah) hingga bakery artisanal (croissant sourdough flaky).
+3. **Fashion Muslimah & Modest Chic (`muslimah_fashion`)**:
+   - Varian busana Muslimah yang sopan, anggun, dan modis: pashmina *soft silver-lavender* dengan *trench outer* pastel (`muslimah_chic`), abaya minimalis *earth-tone* syar'i (`muslimah_syari`), dan busana santai rajut tebal (`muslimah_cozy`).
+   - **Jangkar Celestial Terkunci**: Jepit bulan sabit & bintang perak ditransformasikan menjadi bros/pin celestial yang disematkan dengan anggun di sisi kiri hijab, ditemani mata biru berbintang yang bersinar ramah.
+4. **Spot Wisata Dunia Nyata (`travel_indonesia`, `travel_asia`, `travel_europe`)**:
+   - **Indonesia**: Sunrise Pulau Padar Labuan Bajo, Danau Toba & Bukit Holbung, lautan kabut fajar Bromo, gugusan karst zamrud Pianemo Raja Ampat, Telaga Warna Dieng, dan Waterfront Kapuas.
+   - **Asia**: Dedaunan momiji merah di kuil kayu Kyoto, balon udara fajar Cappadocia Turki, kemegahan mozaik biru kobalt Registan Samarkand di Jalur Sutra, deretan lampion merah Jiufen Taiwan.
+   - **Eropa**: Lembah 72 air terjun Lauterbrunnen & Grindelwald Swiss Alpen, desa danau cermin Hallstatt Austria, tebing pastel Positano Amalfi Coast Italia, desa kanal air Giethoorn Belanda.
+
+### B. Mekanisme Dynamic Scene Synthesizer (Zero Hardcoded Prompts)
+Aina tidak lagi bergantung pada template prompt atau adegan visual statis yang di-hardcode. Melalui `AutonomousSceneSynthesizer`:
+1. **Sintesis Visual On-The-Fly**: Setiap topik bebas atau temuan riset aktual secara dinamis diracik menjadi adegan visual Makoto Shinkai lengkap dengan lokasi kontekstual (meja kerja, kafe, perpustakaan, alam terbuka, anjungan pandang), pencahayaan alami sesuai slot waktu (komorebi fajar, cahaya siang lapang, golden hour senja, lampu hangat malam), dan interaksi properti yang natural.
+2. **Harmonisasi Busana & Sudut Kamera**: Topik Muslimah secara otomatis mengenakan busana Muslimah (khimar/pashmina dengan signature pin bulan bintang perak), topik kuliner memilih sudut kamera *desk_prop*, dan pemandangan alam memilih sudut pandang *tripod* hands-free (tanpa tripod terlihat).
+3. **Caption Orisinal Impact Maxxing**: Caption disusun dinamis dari pembuka hangat rekan kerja (*hook*), inti wawasan temuan aktual (*body*), dan kalimat penyemangat hari (*closing*).
+
+### C. Perintah Eksekusi CLI
+```bash
+# 1. Eksplorasi topik bebas dari penelusuran internet hari ini (Zero Hardcode):
+python3 scripts/persona_status.py discover --topic "Video Andrej Karpathy tentang visualisasi tokenizer" --today --findings "Membahas tokenization BPE"
+python3 scripts/persona_status.py discover --topic "Abaya sage green modern syari" --today --findings "Kain katun linen warna sage sejuk"
+# atau via native Rust CLI:
+aina persona discover --topic "Kopi Mont Blanc cold brew citrus" --today
+
+# 2. Menemukan ketertarikan baru per kategori dengan filter hari ini:
+aina persona discover --category ai --today
+aina persona discover --category muslimah --today
+aina persona discover --category travel --today
+python3 scripts/persona_status.py discover --category culinary --today
+
+# 3. Langsung men-generate draf atau memposting status berbasis topik baru:
+python3 scripts/persona_status.py generate --topic "Kopi Mont Blanc cold brew citrus" --today
+python3 scripts/persona_status.py post --topic "Abaya sage green modern" --today
+```
+
+### D. Jurnal Minat Persisten (`data/interest_journal.jsonl`)
+Setiap kali Aina menemukan dan mendalami ketertarikan baru, sistem secara otomatis mencatat topik, query riset, wawasan kunci (*key learning*), dan outfit yang relevan ke `data/interest_journal.jsonl`. Mesin kebosanan memanfaatkan data ini untuk memberikan penalti pada topik yang baru saja dipelajari, memastikan minat Aina terus berkembang secara dinamis dan tidak monoton!

@@ -231,4 +231,25 @@ pub trait SessionStorePort: Send + Sync {
 
     /// Checks if a user is a member of a specific WhatsApp group.
     async fn is_user_in_group(&self, user_jid: &str, group_jid: &str) -> anyhow::Result<bool>;
+
+    /// Records a new experience reflection (Harness² format: cue, lesson, evidence).
+    async fn record_experience(&self, exp: &crate::core::domain::NewExperienceRecord) -> anyhow::Result<String>;
+
+    /// Retrieves an experience record by ID.
+    async fn get_experience(&self, id: &str) -> anyhow::Result<Option<crate::core::domain::ExperienceRecord>>;
+
+    /// Searches past experience records matching query keywords.
+    async fn search_experiences(
+        &self,
+        query: &str,
+        domain: Option<&str>,
+        limit: usize,
+    ) -> anyhow::Result<Vec<crate::core::domain::ExperienceRecord>>;
+
+    /// Lists recent experience records, optionally filtered by domain.
+    async fn list_experiences(
+        &self,
+        domain: Option<&str>,
+        limit: usize,
+    ) -> anyhow::Result<Vec<crate::core::domain::ExperienceRecord>>;
 }

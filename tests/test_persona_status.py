@@ -28,6 +28,12 @@ from scripts.persona.safety import (
 from scripts.persona.atmosphere import AtmosphereEngine
 from scripts.persona.wardrobe import WardrobeManager, WARDROBE_PRESETS
 from scripts.persona.captioner import ImageCaptionEngine
+from scripts.persona.interest import (
+    InterestDiscoveryEngine,
+    INTEREST_CATEGORIES,
+    CURATED_INTEREST_CATALOG,
+)
+from scripts.persona_status import build_makoto_shinkai_prompt
 
 
 class TestStatusSafetyGuard(unittest.TestCase):
@@ -412,6 +418,209 @@ class TestImageCaptionEngine(unittest.TestCase):
             fallback_caption="Caption fallback yang aman dan hangat yaa ✨"
         )
         self.assertEqual(caption, "Caption fallback yang aman dan hangat yaa ✨")
+
+
+class TestInterestDiscoveryEngine(unittest.TestCase):
+    """Test suite for Autonomous Novelty & Interest Discovery Engine."""
+
+    def test_get_domains_and_catalog_size(self):
+        domains = InterestDiscoveryEngine.get_domains()
+        self.assertIn("ai_engineering", domains)
+        self.assertIn("culinary", domains)
+        self.assertIn("muslimah_fashion", domains)
+        self.assertIn("travel_indonesia", domains)
+        self.assertIn("travel_asia", domains)
+        self.assertIn("travel_europe", domains)
+
+        catalog = InterestDiscoveryEngine.list_catalog()
+        self.assertGreaterEqual(len(catalog), 20)
+
+    def test_list_catalog_aliases(self):
+        ai_items = InterestDiscoveryEngine.list_catalog("ai")
+        self.assertTrue(all(item["category"] == "ai_engineering" for item in ai_items))
+        self.assertGreaterEqual(len(ai_items), 3)
+
+        food_items = InterestDiscoveryEngine.list_catalog("culinary")
+        self.assertTrue(all(item["category"] == "culinary" for item in food_items))
+        self.assertGreaterEqual(len(food_items), 4)
+
+        muslimah_items = InterestDiscoveryEngine.list_catalog("muslimah")
+        self.assertTrue(all(item["category"] == "muslimah_fashion" for item in muslimah_items))
+        self.assertGreaterEqual(len(muslimah_items), 3)
+
+        travel_items = InterestDiscoveryEngine.list_catalog("travel")
+        self.assertTrue(all(item["category"].startswith("travel_") for item in travel_items))
+        self.assertGreaterEqual(len(travel_items), 10)
+
+    def test_synthesize_activity_structure(self):
+        catalog = InterestDiscoveryEngine.list_catalog("ai_engineering")
+        item = catalog[0]
+        act = InterestDiscoveryEngine.synthesize_activity(
+            interest_item=item,
+            web_findings="Paper baru tentang reasoning model"
+        )
+        self.assertTrue(act["theme"].startswith("interest_"))
+        self.assertIn("reasoning model", act["scene"])
+        self.assertIn("caption", act)
+        self.assertIn("vibe", act)
+        self.assertIn("key_learning", act)
+        self.assertTrue(act["is_discovered_interest"])
+
+    def test_muslimah_wardrobe_in_presets(self):
+        self.assertIn("muslimah_chic", WARDROBE_PRESETS)
+        self.assertIn("muslimah_syari", WARDROBE_PRESETS)
+        self.assertIn("muslimah_cozy", WARDROBE_PRESETS)
+
+        desc = WARDROBE_PRESETS["muslimah_chic"]
+        self.assertIn("pashmina", desc.lower())
+        self.assertIn("crescent moon and star", desc.lower())
+
+    def test_prompt_harmonization_for_hijab(self):
+        activity = {
+            "theme": "interest_muslimah_test",
+            "scene": "Duduk di kafe membaca buku",
+            "outfit": "muslimah_chic",
+            "anchor_clothes": WARDROBE_PRESETS["muslimah_chic"],
+            "framing": "selfie"
+        }
+        prompt = build_makoto_shinkai_prompt(activity, weekend=False)
+        self.assertIn("elegant modest Muslimah style", prompt)
+        self.assertIn("silver crescent moon and star brooch pinned gracefully on the left side of her hijab", prompt)
+        self.assertIn("starry deep blue eyes", prompt)
+        # Verify it does NOT erroneously describe bare side-braided hair
+        self.assertNotIn("signature side braid", prompt)
+
+    def test_prompt_for_standard_outfit(self):
+        activity = {
+            "theme": "wfh_coding",
+            "scene": "Duduk di depan laptop",
+            "outfit": "wfh_cozy",
+            "anchor_clothes": WARDROBE_PRESETS["wfh_cozy"],
+            "framing": "selfie"
+        }
+        prompt = build_makoto_shinkai_prompt(activity, weekend=False)
+        self.assertIn("signature side braid", prompt)
+        self.assertIn("luminous crescent moon and star hairclip on the left side", prompt)
+
+    def test_discover_end_to_end(self):
+        discovered = InterestDiscoveryEngine.discover(
+            category="travel_asia",
+            search_query="spot musim gugur kyoto 2026",
+            notes="Wawasan baru tentang momijigari"
+        )
+        self.assertIsInstance(discovered, dict)
+        self.assertEqual(discovered["interest_category"], "travel_asia")
+        self.assertTrue(discovered["theme"].startswith("interest_"))
+        self.assertGreater(len(discovered["caption"]), 15)
+
+    def test_recency_query_formatting(self):
+        now = datetime(2026, 11, 10, 14, 0, tzinfo=timezone.utc)
+        q_today = InterestDiscoveryEngine.format_recency_query("trending AI", recency="today", now=now)
+        self.assertIn("hari ini", q_today)
+        self.assertIn("10 November 2026", q_today)
+        self.assertIn("when:1d", q_today)
+
+        q_week = InterestDiscoveryEngine.format_recency_query("kopi viral", recency="week", now=now)
+        self.assertIn("minggu ini", q_week)
+        self.assertIn("when:7d", q_week)
+
+        discovered = InterestDiscoveryEngine.discover(
+            category="culinary",
+            recency="today",
+            web_findings="Dirty latte kopi susu dingin viral",
+            now=now
+        )
+        self.assertIn("10 November 2026", discovered["scene"])
+        self.assertIn("Update seru hari ini!", discovered["caption"])
+
+    def test_dynamic_topic_discovery_without_catalog_seed(self):
+        """Uji penemuan minat bebas (Zero Hardcode) langsung dari topik baru."""
+        now = datetime(2026, 11, 10, 10, 30, tzinfo=timezone.utc)
+        topic = "Video Andrej Karpathy tentang visualisasi tokenizer BPE"
+        findings = "Membahas pemecahan kata menjadi representasi token byte level."
+
+        discovered = InterestDiscoveryEngine.discover(
+            topic=topic,
+            web_findings=findings,
+            recency="today",
+            now=now
+        )
+        self.assertEqual(discovered["interest_category"], "ai_engineering")
+        self.assertIn("tokenizer BPE", discovered["scene"])
+        self.assertIn("Update seru hari ini!", discovered["caption"])
+        self.assertIn("tokenizer BPE", discovered["caption"])
+        self.assertTrue(discovered["is_discovered_interest"])
+
+    def test_dynamic_muslimah_topic_deduction(self):
+        """Uji deduksi busana dan suasana otomatis untuk topik fashion Muslimah."""
+        now = datetime(2026, 11, 10, 16, 0, tzinfo=timezone.utc)
+        topic = "Abaya syari earth-tone katun madinah"
+
+        discovered = InterestDiscoveryEngine.discover(
+            topic=topic,
+            web_findings="Warna moka lembut sangat populer untuk siluet syari santun.",
+            recency="today",
+            now=now
+        )
+        self.assertEqual(discovered["interest_category"], "muslimah_fashion")
+        self.assertEqual(discovered["outfit"], "muslimah_syari")
+        self.assertEqual(discovered["framing"], "tripod")
+        self.assertIn("bros bulan sabit perak", discovered["scene"])
+
+    def test_dynamic_culinary_topic_deduction(self):
+        """Uji deduksi busana dan framing otomatis untuk topik kuliner / minuman."""
+        now = datetime(2026, 11, 10, 13, 0, tzinfo=timezone.utc)
+        topic = "Pour-over kopi v60 beans sidikalang citrus"
+
+        discovered = InterestDiscoveryEngine.discover(
+            topic=topic,
+            web_findings="Catatan rasa jeruk keprok segar dengan aftertaste karamel manis.",
+            recency="today",
+            now=now
+        )
+        self.assertEqual(discovered["interest_category"], "culinary")
+        self.assertEqual(discovered["framing"], "desk_prop")
+        self.assertIn("sidikalang", discovered["scene"])
+
+
+class TestAutonomousSceneSynthesizer(unittest.TestCase):
+    """Test suite untuk AutonomousSceneSynthesizer."""
+
+    def test_autonomous_scene_synthesis_makoto_shinkai(self):
+        from scripts.persona.interest import AutonomousSceneSynthesizer
+        now = datetime(2026, 11, 10, 17, 30, tzinfo=timezone.utc)
+        synth = AutonomousSceneSynthesizer.synthesize(
+            topic="Danau Kelimutu Flores 3 warna",
+            findings="Warna kawah danau toska muda saat golden hour senja.",
+            category="travel_indonesia",
+            slot="sore",
+            now=now
+        )
+        self.assertIn("Aina berada", synth["scene"])
+        self.assertIn("Kelimutu", synth["scene"])
+        self.assertIn("golden hour", synth["scene"].lower())
+        self.assertIn("Kelimutu", synth["caption"])
+        self.assertIn("Update seru hari ini!", synth["caption"])
+        self.assertIn(synth["outfit"], ["outdoor_nature", "night_stargaze"])
+
+    def test_fresh_2026_internet_grounding(self):
+        """Memastikan penelusuran selalu tertambat pada data terkini 2026, bukan memori masa lalu."""
+        now = datetime(2026, 11, 10, 10, 0, tzinfo=timezone.utc)
+        topic = "Andrej Karpathy Eureka Labs & Deep Dive LLM Architecture"
+        findings = "Membahas post-training reasoning RL dan kurikulum AI native"
+
+        discovered = InterestDiscoveryEngine.discover(
+            topic=topic,
+            web_findings=findings,
+            recency="today",
+            now=now
+        )
+        self.assertEqual(discovered["interest_category"], "ai_engineering")
+        self.assertIn("10 November 2026", discovered["scene"])
+        self.assertIn("Eureka Labs", discovered["scene"])
+        self.assertIn("post-training reasoning RL", discovered["scene"])
+        self.assertNotIn("2024", discovered["scene"])
+        self.assertNotIn("micrograd", discovered["scene"].lower())
 
 
 if __name__ == "__main__":

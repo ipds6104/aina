@@ -605,6 +605,10 @@ mod tests {
         async fn get_user_groups(&self, _user_jid: &str) -> anyhow::Result<Vec<String>> { Ok(vec![]) }
         async fn get_group_members(&self, _group_jid: &str) -> anyhow::Result<Vec<crate::core::ports::GroupMemberRecord>> { Ok(vec![]) }
         async fn is_user_in_group(&self, _user_jid: &str, _group_jid: &str) -> anyhow::Result<bool> { Ok(false) }
+        async fn record_experience(&self, _exp: &crate::core::domain::NewExperienceRecord) -> anyhow::Result<String> { Ok("exp_dummy_1".to_string()) }
+        async fn get_experience(&self, _id: &str) -> anyhow::Result<Option<crate::core::domain::ExperienceRecord>> { Ok(None) }
+        async fn search_experiences(&self, _query: &str, _domain: Option<&str>, _limit: usize) -> anyhow::Result<Vec<crate::core::domain::ExperienceRecord>> { Ok(vec![]) }
+        async fn list_experiences(&self, _domain: Option<&str>, _limit: usize) -> anyhow::Result<Vec<crate::core::domain::ExperienceRecord>> { Ok(vec![]) }
     }
 
     struct DummyAgentEngine;

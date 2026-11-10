@@ -225,6 +225,17 @@ PENGGUNAAN:
                                 --limit <n>             Batas entri prediksi (default: 10)
                                 --json                  Output format JSON terstruktur
 
+    experience [list|search|get|add] Perpustakaan Pengalaman & Pelajaran Teruji (Harness² Paradigm)
+                              Subcommands:
+                                list                    Daftar pengalaman & pelajaran yang tersimpan
+                                search <query>          Pencarian teks instan cue, lesson, atau evidence
+                                get <id>                Tampilkan detail dalam format Markdown EXPERIENCE.md
+                                add                     Tambah entri pengalaman baru (--cue, --lesson, --evidence)
+                              Options:
+                                --domain <domain>       Filter domain tertentu
+                                --limit, -l <n>         Batas entri (default: 20)
+                                --json                  Output format JSON terstruktur
+
     help, --help, -h          Tampilkan panduan ini
 "#
         );
@@ -264,6 +275,7 @@ PENGGUNAAN:
             "model" => commands::handle_model(&args[2..]).await,
             "skill" | "skills" => commands::handle_skill(&args[2..]),
             "metacog" | "metacognition" => commands::handle_metacognition(&args[2..]).await,
+            "experience" | "experiences" | "exp" => commands::handle_experience(&args[2..]).await,
 
             _ => {
                 eprintln!("Subcommand tidak dikenal: `{}`. Ketik `aina help`.", cmd);

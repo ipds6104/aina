@@ -2,6 +2,7 @@ pub mod capability_registry;
 pub mod prediction_engine;
 pub mod anti_confab_gate;
 pub mod task_triage;
+pub mod experience;
 
 #[allow(unused_imports)]
 pub use capability_registry::{AgentCapabilityManifest, EnvironmentBoundaries, ModelProfile, ToolContract};
@@ -15,4 +16,7 @@ pub use prediction_engine::{
 pub use anti_confab_gate::{AntiConfabGate, AntiConfabResolution};
 #[allow(unused_imports)]
 pub use task_triage::{TaskTriageEngine, TriageDecision};
+#[allow(unused_imports)]
+pub use experience::{ExperienceRecord, NewExperienceRecord};
+
 

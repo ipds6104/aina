@@ -1,4 +1,5 @@
 pub mod audit;
+pub mod experience;
 pub mod metacog;
 pub mod scheduler;
 pub mod schema;
@@ -344,6 +345,35 @@ impl SessionStorePort for SqliteSessionStore {
         let conn = self.conn.lock().await;
         session::is_user_in_group(&conn, user_jid, group_jid)
     }
+
+    async fn record_experience(&self, exp: &crate::core::domain::NewExperienceRecord) -> anyhow::Result<String> {
+        let conn = self.conn.lock().await;
+        experience::record_experience(&conn, exp)
+    }
+
+    async fn get_experience(&self, id: &str) -> anyhow::Result<Option<crate::core::domain::ExperienceRecord>> {
+        let conn = self.conn.lock().await;
+        experience::get_experience(&conn, id)
+    }
+
+    async fn search_experiences(
+        &self,
+        query: &str,
+        domain: Option<&str>,
+        limit: usize,
+    ) -> anyhow::Result<Vec<crate::core::domain::ExperienceRecord>> {
+        let conn = self.conn.lock().await;
+        experience::search_experiences(&conn, query, domain, limit)
+    }
+
+    async fn list_experiences(
+        &self,
+        domain: Option<&str>,
+        limit: usize,
+    ) -> anyhow::Result<Vec<crate::core::domain::ExperienceRecord>> {
+        let conn = self.conn.lock().await;
+        experience::list_experiences(&conn, domain, limit)
+    }
 }
 
 #[cfg(test)]
@@ -595,6 +625,46 @@ mod tests {
         assert_eq!(members[0].user_jid, user_jid);
         assert_eq!(members[0].user_name.as_deref(), Some("Adwin Haithay"));
         assert_eq!(members[0].role_in_group, "member");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_experience_records_crud_and_search() {
+        let dir = std::env::temp_dir().join(format!("aina_test_exp_{}", rand::random::<u32>()));
+        let db_file = dir.join("test_exp.db");
+        let store = SqliteSessionStore::new(&db_file).unwrap();
+
+        let new_exp = crate::core::domain::NewExperienceRecord {
+            domain: "coding_agent".to_string(),
+            cue: "Ketika pengguna meminta render 3D Blender di PRoot ARM64".to_string(),
+            lesson: "Jangan panggil binary blender langsung; buatkan script Python atau gunakan generate_image".to_string(),
+            evidence: "Telah diverifikasi pada task triage, mencegah exit 127".to_string(),
+            confidence: Some(0.98),
+            task_id: Some("task_3d_01".to_string()),
+        };
+
+        let exp_id = store.record_experience(&new_exp).await.unwrap();
+        assert!(!exp_id.is_empty());
+
+        // Get by ID
+        let fetched = store.get_experience(&exp_id).await.unwrap().expect("Experience not found");
+        assert_eq!(fetched.id, exp_id);
+        assert_eq!(fetched.domain, "coding_agent");
+        assert_eq!(fetched.cue, new_exp.cue);
+        assert!((fetched.confidence - 0.98).abs() < 1e-4);
+
+        // Search by keyword
+        let search_results = store.search_experiences("Blender", None, 5).await.unwrap();
+        assert_eq!(search_results.len(), 1);
+        assert_eq!(search_results[0].id, exp_id);
+
+        // List by domain
+        let domain_list = store.list_experiences(Some("coding_agent"), 10).await.unwrap();
+        assert_eq!(domain_list.len(), 1);
+
+        let other_domain_list = store.list_experiences(Some("survey_data"), 10).await.unwrap();
+        assert_eq!(other_domain_list.len(), 0);
 
         let _ = std::fs::remove_dir_all(&dir);
     }

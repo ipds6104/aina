@@ -31,6 +31,15 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SKILL_DIR = os.path.abspath(os.path.join(_SCRIPT_DIR, ".."))
 PROJECT_ROOT = os.path.abspath(os.path.join(SKILL_DIR, "..", ".."))
 
+_SCRIPTS_PATH = os.path.join(PROJECT_ROOT, "scripts")
+if _SCRIPTS_PATH not in sys.path:
+    sys.path.insert(0, _SCRIPTS_PATH)
+
+try:
+    from persona.interest import InterestDiscoveryEngine
+except Exception:
+    InterestDiscoveryEngine = None
+
 # Database & Data Paths (Mendukung container /app dan lokal)
 DEFAULT_DB_PATH = os.environ.get(
     "DATABASE_PATH",
@@ -266,6 +275,83 @@ def harvest_daily_runs(db_path: str = DEFAULT_DB_PATH, limit: int = 15) -> List[
         conn.close()
 
 
+def harvest_experience_records(db_path: str = DEFAULT_DB_PATH, limit: int = 5) -> List[Dict[str, Any]]:
+    """Membaca catatan pengalaman teknis (Experience Library - Harness² format) dari SQLite."""
+    conn = get_sqlite_conn(db_path)
+    if not conn:
+        return []
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='experience_records'")
+        if not cur.fetchone():
+            return []
+        cur.execute(
+            """
+            SELECT id, domain, cue, lesson, evidence, confidence, task_id, created_at_epoch
+            FROM experience_records
+            ORDER BY created_at_epoch DESC
+            LIMIT ?
+            """,
+            (limit,)
+        )
+        rows = cur.fetchall()
+        exps = []
+        for r in rows:
+            exps.append({
+                "id": r["id"],
+                "domain": r["domain"],
+                "cue": r["cue"],
+                "lesson": r["lesson"],
+                "evidence": r["evidence"],
+                "confidence": r["confidence"],
+                "task_id": r["task_id"]
+            })
+        return exps
+    except Exception as e:
+        sys.stderr.write(f"Gagal memanen experience_records: {e}\n")
+        return []
+    finally:
+        conn.close()
+
+
+def find_matching_experience(query: str, db_path: str = DEFAULT_DB_PATH) -> Optional[Dict[str, Any]]:
+    """Mencari apakah ada pelajaran pengalaman terdahulu yang cocok dengan error/query."""
+    conn = get_sqlite_conn(db_path)
+    if not conn:
+        return None
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='experience_records'")
+        if not cur.fetchone():
+            return None
+        pattern = f"%{query.strip()}%"
+        cur.execute(
+            """
+            SELECT id, domain, cue, lesson, evidence, confidence
+            FROM experience_records
+            WHERE cue LIKE ? OR lesson LIKE ? OR evidence LIKE ?
+            ORDER BY created_at_epoch DESC
+            LIMIT 1
+            """,
+            (pattern, pattern, pattern)
+        )
+        row = cur.fetchone()
+        if row:
+            return {
+                "id": row["id"],
+                "domain": row["domain"],
+                "cue": row["cue"],
+                "lesson": row["lesson"],
+                "evidence": row["evidence"],
+                "confidence": row["confidence"]
+            }
+        return None
+    except Exception:
+        return None
+    finally:
+        conn.close()
+
+
 def harvest_recent_status_journal(journal_path: str = DEFAULT_JOURNAL_PATH, limit: int = 10) -> List[Dict[str, Any]]:
     """Membaca riwayat publikasi status WhatsApp dari file journal."""
     if not os.path.isfile(journal_path):
@@ -352,6 +438,7 @@ def evaluate_daily_experience(
     total_runs = len(runs)
     success_runs = sum(1 for r in runs if r["status"] == "success")
     failed_runs = sum(1 for r in runs if r["status"] != "success")
+    failed_task_items = [r for r in runs if r["status"] != "success"]
 
     # 2. Analisis Kejenuhan Tema & Busana dari Jurnal
     recent_themes = [j.get("theme", "") for j in journal[-5:]]
@@ -473,12 +560,21 @@ def evaluate_daily_experience(
             "reason": "Mencari inspirasi adegan stargazing khatulistiwa (fase bulan, hujan meteor, konjungsi planet)."
         })
 
+    if InterestDiscoveryEngine:
+        sampled_interest = InterestDiscoveryEngine.sample_interest()
+        web_search_prompts.append({
+            "topic": f"Penemuan Ketertarikan Baru ({sampled_interest['category'].replace('_', ' ').title()})",
+            "query": sampled_interest.get("search_query", "tren inovasi teknologi lifestyle terkini"),
+            "reason": f"Mengeksplorasi wawasan baru '{sampled_interest.get('title')}' untuk memperkaya status WhatsApp Aina."
+        })
+
     return {
         "timestamp_wib": now_wib.strftime("%Y-%m-%d %H:%M:%S WIB"),
         "performance": {
             "total_runs_today": total_runs,
             "success_runs": success_runs,
-            "failed_runs": failed_runs
+            "failed_runs": failed_runs,
+            "failed_task_items": failed_task_items
         },
         "novelty": {
             "boredom_score": round(boredom_score, 2),
@@ -551,6 +647,19 @@ def generate_adaptation_suggestions(
         "description": f"Tambahkan ketenangan malam hari di {dest['name']} ke status malam."
     })
 
+    # 4. Bridge ke Experience Library: Kristalisasi Pelajaran jika Ada Tugas yang Gagal
+    perf = eval_result.get("performance", {})
+    failed_items = perf.get("failed_task_items", [])
+    for fr in failed_items:
+        err_msg = (fr.get("error") or "execution error").replace('"', "'")[:40]
+        sug_cmd = f'aina experience add --cue "{fr["title"]} gagal: {err_msg}" --lesson "<solusi perbaikan>" --evidence "Tercatat di run #{fr["id"]}" --domain "system"'
+        suggestions.append({
+            "slug": f"experience_{fr['id']}",
+            "action": "experience_distill",
+            "cmd": sug_cmd,
+            "description": f"Kristalisasi kegagalan teknis tugas `{fr['title']}` ke dalam Experience Library (Harness² format)."
+        })
+
     return suggestions
 
 
@@ -586,8 +695,23 @@ def cmd_inspect(args: argparse.Namespace) -> None:
             print(f"   {icon} [{r['time_str']}] {r['title']} ({r['duration_secs']:.1f}s)")
             if r["error"]:
                 print(f"      ⚠️ Error: {r['error']}")
+                matching = find_matching_experience(r["error"][:30], args.db) or find_matching_experience(r["title"], args.db)
+                if matching:
+                    print(f"      💡 Solusi Teruji (Experience Library): \"{matching['lesson']}\"")
+                else:
+                    print(f"      👉 Rekomendasi: `aina experience add --cue \"{r['title']} error: {r['error'][:40]}\" --lesson \"<solusi>\" --evidence \"Run {r['id']}\"`")
             elif r["output_preview"]:
                 print(f"      💬 Output: {r['output_preview']}")
+
+    print("-" * 68)
+    exps = harvest_experience_records(args.db, limit=3)
+    print(f"🧠 Perpustakaan Pengalaman Teknis Terkini ({len(exps)} entri teruji):")
+    if not exps:
+        print("   (Belum ada entri pengalaman. Simpan via `aina experience add`)")
+    else:
+        for e in exps:
+            print(f"   • [{e['domain']}] Pemicu: \"{e['cue']}\"")
+            print(f"     -> Pelajaran: \"{e['lesson']}\" (Confidence: {e['confidence']:.2f})")
 
     print("-" * 68)
     print(f"📸 Riwayat Status WhatsApp ({len(journal)} publikasi terakhir):")
@@ -760,6 +884,31 @@ def cmd_search_queries(args: argparse.Namespace) -> None:
         print()
     print("=" * 68)
 
+
+def cmd_experience(args: argparse.Namespace) -> None:
+    """Bridge ke Experience Library (Harness² Paradigm): memantau pelajaran teknis teruji."""
+    exps = harvest_experience_records(args.db, limit=args.limit)
+    if args.json:
+        print(json.dumps(exps, indent=2, ensure_ascii=False))
+        return
+
+    print("=" * 68)
+    print("🧠 BRIDGE: EXPERIENCE LIBRARY AINA (HARNESS² PARADIGM)")
+    print("=" * 68)
+    if not exps:
+        print("Belum ada pelajaran teknis teruji di perpustakaan pengalaman.")
+        print("Tambahkan dengan perintah: aina experience add --cue ... --lesson ... --evidence ...")
+    else:
+        print(f"Ditemukan {len(exps)} entri pelajaran teruji tersimpan:\n")
+        for i, e in enumerate(exps, 1):
+            print(f"[{i}] ID: `{e['id']}` (Domain: `{e['domain']}` | Confidence: {e['confidence']:.2f})")
+            print(f"    🎯 Pemicu   : \"{e['cue']}\"")
+            print(f"    💡 Pelajaran : \"{e['lesson']}\"")
+            print(f"    🔬 Bukti     : \"{e['evidence']}\"")
+            print()
+    print("=" * 68)
+
+
 def main():
     parent_parser = argparse.ArgumentParser(add_help=False)
     parent_parser.add_argument("--db", default=DEFAULT_DB_PATH, help="Path ke database SQLite aina.db")
@@ -793,6 +942,10 @@ def main():
     # Subcommand: search-queries
     p_search = subparsers.add_parser("search-queries", parents=[parent_parser], help="Rekomendasi query pencarian web terarah")
     p_search.set_defaults(func=cmd_search_queries)
+
+    # Subcommand: experience (Bridge ke Harness² Experience Library)
+    p_exp = subparsers.add_parser("experience", parents=[parent_parser], help="Pantau pelajaran teknis teruji dari Experience Library")
+    p_exp.set_defaults(func=cmd_experience)
 
     # Subcommand: adapt
     p_adapt = subparsers.add_parser("adapt", parents=[parent_parser], help="Terapkan adaptasi aktivitas ke scheduler dan database")

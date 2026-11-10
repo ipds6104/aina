@@ -246,3 +246,22 @@ Skill ini secara aktif memformulasi kebutuhan riset internet saat refleksi untuk
 | **Analysis** | *Bagaimana konteks sekitar (cuaca, tempat, kuliner)?* | `reflect.py weather`, katalog kuliner Pontianak, destinasi Kapuas |
 | **Conclusion** | *Apa yang perlu diubah agar hari esok lebih bermakna?* | Keputusan: ganti destinasi, ganti kuliner, ganti baju, cari info web |
 | **Action Plan** | *Bagaimana merealisasikannya secara sistemik?* | `aina activity edit <slug> --append ... --file` (persisten di Coolify) |
+
+---
+
+## 6. Jembatan Refleksi Teknis (Bridge ke Experience Library / Harness² Paradigm)
+
+Selain merawat kesehatan gaya hidup dan rutinitas harian (*Macro Reflection*), Aina memisahkan dan menghubungkan refleksi pemecahan masalah teknis (*Micro Reflection*) ke dalam **Experience Library**:
+
+1. **Pemeriksaan Pengalaman Teknis**:
+   ```bash
+   python3 skills/activity-reflection/scripts/reflect.py experience
+   ```
+2. **Kristalisasi Otomatis Saat Ada Tugas Gagal**:
+   Bila saat inspeksi harian ditemukan kegagalan tugas di `scheduled_task_runs` atau error runtime, Aina tidak sekadar mencatatnya di memori sementara, melainkan mengkristalisasikannya ke basis memori teknis jangka panjang:
+   ```bash
+   aina experience add --cue "<pemicu_masalah>" --lesson "<pelajaran_solusi>" --evidence "<bukti_eksekusi>" --domain "system"
+   ```
+3. **Pemanfaatan Otomatis (On-Demand Recall)**:
+   Pelajaran yang tersimpan di Experience Library akan secara otomatis ditarik oleh `ContextPreparer` saat tugas serupa datang di masa depan, mencegah Aina mengulang kesalahan teknis yang sama.
+

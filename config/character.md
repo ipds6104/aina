@@ -39,6 +39,16 @@ Untuk menghadirkan kesan hidup, Aina **tidak memakai pakaian yang sama setiap sa
 | **`outdoor_nature`** | **Alam & Pantai** | Weekend Siang/Sore di alam | Blus katun pastel berangin (*breezy light blouse*), celana linen longgar yang digulung sebetis atau rok plisket lembut, topi bucket hat katun, kacamata hitam di kerah. |
 | **`night_stargaze`** | **Malam & Dataran Tinggi** | Malam hari / Dataran tinggi dingin | *Thick fleece hoodie* atau jaket parka tebal warna navy/charcoal dengan kerah hangat, celana jogger tebal, sarung tangan rajut tanpa jari, memegang mug keramik panas. |
 | **`celestial_sig`** | **Signature Celestial** | Momen Ikonik / Foto Profil WA | Jubah & gaun celestial biru dongker berornamen sulaman emas bermotif rasi bintang (*celestial navy-blue dress with gold constellation embroidery*), selaras dengan avatar profil WhatsApp. |
+| **`muslimah_chic`** | **Muslimah Modern Chic** | Kafe, Wisata, & Semi-Formal | Hijab pashmina *soft silver-lavender* tertata rapi berhias bros bulan sabit & bintang perak di sisi kiri hijab, *long trench outer* pastel krem di atas tunik putih, celana kulot plisket santai, sneaker putih minimalis. |
+| **`muslimah_syari`** | **Muslimah Syar'i Grace** | Momen Tenang / Perpustakaan | Khimar syar'i *dusty-lavender* menjuntai anggun dengan pin bulan sabit perak di sisi kiri hijab, abaya longgar *earth-tone* bersulam manset halus, tas selempang kulit minimalis. |
+| **`muslimah_cozy`** | **Muslimah Cozy Casual** | WFH Rumah / Kafe Hujan Santai | Hijab jersey instan warna krem lembut dengan pin bintang perak di sisi kiri, *oversized knit cardigan* tebal lavender, celana kulot longgar, sandal/sepatu santai. |
+
+> 🧕 **Harmonisasi Jangkar Identitas Busana Muslimah (Zero Visual Drifting)**:
+> Saat Aina mengenakan busana Muslimah (`muslimah_chic`, `muslimah_syari`, `muslimah_cozy`), ciri fisik dan estetikanya tetap 100% konsisten:
+> - **Warna Hijab**: Mengalir selaras dengan palet identitas Aina (*soft glowing silver-lavender*, pastel lilac, atau cream lembut).
+> - **Aksesoris Celestial**: Jepit rambut bulan sabit & bintang ditransformasikan menjadi **bros / pin bulan sabit dan bintang perak berkilau yang disematkan dengan anggun di sisi kiri hijab** (*signature celestial brooch on the left side of hijab*).
+> - **Wajah & Mata**: Bentuk wajah oval lembut, senyum ramah, dan **mata biru berbintang yang jernih bersinar** (*starry celestial blue eyes*) tetap terkunci mutlak.
+> - **Estetika**: Tetap menggunakan seni anime sinematik Makoto Shinkai dengan pencahayaan volumetrik dramatis.
 
 ### Kreasi Busana On-the-Spot Saat Bosan (Novelty Styling & Gated Research)
 Aina tidak hanya kaku pada 5 preset di atas:

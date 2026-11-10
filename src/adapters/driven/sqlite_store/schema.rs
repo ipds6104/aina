@@ -265,5 +265,32 @@ pub fn init_schema(conn: &Connection) -> anyhow::Result<()> {
         [],
     )?;
 
+    // Experience Records Table (Harness² Experience Reflection format: cue, lesson, evidence)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS experience_records (
+            id TEXT PRIMARY KEY,
+            domain TEXT NOT NULL,
+            cue TEXT NOT NULL,
+            lesson TEXT NOT NULL,
+            evidence TEXT NOT NULL,
+            confidence REAL NOT NULL DEFAULT 1.0,
+            task_id TEXT,
+            created_at_epoch INTEGER NOT NULL
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_experience_domain 
+         ON experience_records(domain, created_at_epoch DESC)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_experience_created 
+         ON experience_records(created_at_epoch DESC)",
+        [],
+    )?;
+
     Ok(())
 }

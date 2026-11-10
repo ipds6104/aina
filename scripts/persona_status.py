@@ -18,6 +18,7 @@ import json
 import time
 import random
 import argparse
+from pathlib import Path
 from datetime import datetime, timezone, timedelta
 
 # Sisipkan direktori skrip ke sys.path agar modul persona dapat diimpor langsung
@@ -34,6 +35,8 @@ from persona import (
     WardrobeManager,
     WARDROBE_PRESETS,
     ImageCaptionEngine,
+    InterestDiscoveryEngine,
+    INTEREST_CATEGORIES,
 )
 
 # Default Timezone: WIB (UTC+7)
@@ -502,10 +505,26 @@ def build_makoto_shinkai_prompt(activity, weekend, force_clouds=False):
             WARDROBE_PRESETS["wfh_cozy"] if not weekend else WARDROBE_PRESETS["outdoor_nature"]
         )
 
+    clothes_lower = (clothes_desc or "").lower()
+    outfit_key_str = str(outfit_key or "").lower()
+    is_hijab = (
+        "hijab" in clothes_lower
+        or "khimar" in clothes_lower
+        or "pashmina" in clothes_lower
+        or "abaya" in clothes_lower
+        or "muslimah" in outfit_key_str
+    )
+
     if framing_key == "pov":
         subject_desc = (
             "First-person perspective (POV). Aina's hands are visible interacting with the scene, "
             f"wearing {clothes_desc}. "
+        )
+    elif is_hijab:
+        subject_desc = (
+            f"Featuring Aina, a young Indonesian woman in her early 20s with starry deep blue eyes with celestial sparkle, "
+            f"radiant natural smile, wearing an elegant modest Muslimah style: {clothes_desc}, with her signature "
+            f"luminous silver crescent moon and star brooch pinned gracefully on the left side of her hijab. "
         )
     else:
         subject_desc = (
@@ -714,7 +733,13 @@ def main():
     p_gen.add_argument("--weekend", action="store_true", help="Paksa mode weekend")
     p_gen.add_argument("--weekday", action="store_true", help="Paksa mode weekday")
     p_gen.add_argument("--framing", choices=list(FRAMING_STYLES.keys()), help="Sudut pandang kamera / framing foto solo (selfie, tripod, desk_prop, pov, mirror, cinematic)")
-    p_gen.add_argument("--outfit", choices=list(WARDROBE_STYLES.keys()), help="Pilihan busana dari lemari pakaian dinamis Aina (wfh_cozy, smart_casual, outdoor_nature, night_stargaze, celestial_sig)")
+    p_gen.add_argument("--outfit", choices=list(WARDROBE_STYLES.keys()), help="Pilihan busana dari lemari pakaian dinamis Aina")
+    p_gen.add_argument("--discover", action="store_true", help="Gunakan adegan berbasis penemuan ketertarikan baru (Novelty Curiosity Engine)")
+    p_gen.add_argument("--topic", "-t", help="Topik bebas hasil eksplorasi / temuan baru untuk dijadikan status (Zero Hardcode)")
+    p_gen.add_argument("--interest", choices=list(INTEREST_CATEGORIES.keys()) + ["ai", "food", "culinary", "fashion", "muslimah", "travel", "indonesia", "asia", "europe", "all", "any"], help="Kategori domain ketertarikan (AI, kuliner, fashion muslimah, spot wisata)")
+    p_gen.add_argument("--today", action="store_true", help="Filter penelusuran minat/tren khusus HARI INI")
+    p_gen.add_argument("--recency", choices=["today", "week", "month", "all"], default="today", help="Rentang waktu kebaruan (today=24 jam terakhir, week=7 hari, month=bulan ini)")
+    p_gen.add_argument("--findings", help="Temuan riset aktual web terkini untuk disuntikkan ke adegan dan caption")
     p_gen.add_argument("--custom", action="store_true", help="Gunakan adegan hasil imajinasi bebas Aina sendiri")
     p_gen.add_argument("--theme", help="Nama tema imajinasi")
     p_gen.add_argument("--scene", help="Deskripsi adegan visual hasil imajinasi Aina")
@@ -731,7 +756,13 @@ def main():
     p_post.add_argument("--dry-run", action="store_true", help="Simulasi tanpa generate/upload nyata")
     p_post.add_argument("--image", help="Jalur berkas gambar yang telah selesai di-generate untuk diposting")
     p_post.add_argument("--framing", choices=list(FRAMING_STYLES.keys()), help="Sudut pandang kamera / framing foto solo (selfie, tripod, desk_prop, pov, mirror, cinematic)")
-    p_post.add_argument("--outfit", choices=list(WARDROBE_STYLES.keys()), help="Pilihan busana dari lemari pakaian dinamis Aina (wfh_cozy, smart_casual, outdoor_nature, night_stargaze, celestial_sig)")
+    p_post.add_argument("--outfit", choices=list(WARDROBE_STYLES.keys()), help="Pilihan busana dari lemari pakaian dinamis Aina")
+    p_post.add_argument("--discover", action="store_true", help="Gunakan adegan berbasis penemuan ketertarikan baru (Novelty Curiosity Engine)")
+    p_post.add_argument("--topic", "-t", help="Topik bebas hasil eksplorasi / temuan baru untuk dijadikan status (Zero Hardcode)")
+    p_post.add_argument("--interest", choices=list(INTEREST_CATEGORIES.keys()) + ["ai", "food", "culinary", "fashion", "muslimah", "travel", "indonesia", "asia", "europe", "all", "any"], help="Kategori domain ketertarikan (AI, kuliner, fashion muslimah, spot wisata)")
+    p_post.add_argument("--today", action="store_true", help="Filter penelusuran minat/tren khusus HARI INI")
+    p_post.add_argument("--recency", choices=["today", "week", "month", "all"], default="today", help="Rentang waktu kebaruan (today=24 jam terakhir, week=7 hari, month=bulan ini)")
+    p_post.add_argument("--findings", help="Temuan riset aktual web terkini untuk disuntikkan ke adegan dan caption")
     p_post.add_argument("--custom", action="store_true", help="Gunakan adegan hasil imajinasi bebas Aina sendiri")
     p_post.add_argument("--theme", help="Nama tema imajinasi")
     p_post.add_argument("--scene", help="Deskripsi adegan visual hasil imajinasi Aina")
@@ -740,6 +771,22 @@ def main():
     p_post.add_argument("--reflection", help="Refleksi rasa bosan / alasan memilih momen ini")
     p_post.add_argument("--search-query", help="Inspirasi hasil riset internet terarah untuk memperkaya adegan")
     p_post.add_argument("--force-clouds", action="store_true", help="Paksa elemen awan kumulus pada estetika prompt")
+
+    # discover (Eksplorasi Ketertarikan & Minat Baru Otonom)
+    p_disc = subparsers.add_parser("discover", help="Eksplorasi ketertarikan & minat baru Aina (AI, kuliner, fashion muslimah, spot wisata)")
+    p_disc.add_argument("--topic", "-t", help="Topik bebas hasil eksplorasi / temuan baru (tanpa template hardcode)")
+    p_disc.add_argument("--category", "-c", choices=list(INTEREST_CATEGORIES.keys()) + ["ai", "food", "culinary", "fashion", "muslimah", "travel", "indonesia", "asia", "europe", "all", "any"], help="Domain minat")
+    p_disc.add_argument("--today", action="store_true", help="Filter penelusuran minat/tren khusus HARI INI")
+    p_disc.add_argument("--recency", choices=["today", "week", "month", "all"], default="today", help="Rentang waktu kebaruan (today=24 jam terakhir, week=7 hari, month=bulan ini)")
+    p_disc.add_argument("--query", "-q", help="Pencarian spesifik atau query riset web")
+    p_disc.add_argument("--findings", help="Temuan riset aktual web terkini untuk disuntikkan ke adegan dan caption")
+    p_disc.add_argument("--notes", "-n", help="Catatan wawasan / fakta baru yang dipelajari")
+    p_disc.add_argument("--json", action="store_true", help="Output format JSON terstruktur")
+
+    # interests (Katalog Domain & Benih Minat)
+    p_ints = subparsers.add_parser("interests", help="Daftar domain minat dan katalog benih ketertarikan")
+    p_ints.add_argument("--category", "-c", help="Filter per kategori")
+    p_ints.add_argument("--json", action="store_true", help="Output format JSON")
 
     # wardrobe (Inspeksi & Diagnostik Busana Dinamis)
     p_ward = subparsers.add_parser("wardrobe", help="Status lemari pakaian dinamis, kuota kreasi busana mingguan, dan deteksi kebosanan")
@@ -912,6 +959,83 @@ def main():
         print("================================================================================")
         return
 
+    elif args.command == "discover":
+        cat = getattr(args, "category", None)
+        topic = getattr(args, "topic", None)
+        query = getattr(args, "query", None)
+        findings = getattr(args, "findings", None)
+        notes = getattr(args, "notes", None)
+        rec = "today" if getattr(args, "today", False) else getattr(args, "recency", "today")
+        slot = get_time_slot(now)
+        weekend = is_weekend(now)
+
+        chosen = InterestDiscoveryEngine.discover(
+            category=cat,
+            topic=topic,
+            search_query=query,
+            web_findings=findings or query,
+            notes=notes,
+            recency=rec,
+            now=now,
+            slot=slot,
+            weekend=weekend
+        )
+        outfit_key, clothes_desc, is_custom, w_reflection = WardrobeManager.resolve_outfit(
+            slot=slot,
+            weekend=weekend,
+            activity=chosen,
+            journal=journal,
+        )
+        chosen["slot"] = slot
+        chosen["outfit"] = outfit_key
+        chosen["anchor_clothes"] = clothes_desc
+        chosen["is_custom_outfit"] = is_custom
+        chosen["wardrobe_reflection"] = w_reflection
+
+        if getattr(args, "json", False):
+            print(json.dumps(chosen, indent=2, ensure_ascii=False))
+            return
+
+        print("🌟 [EKSPLORASI KETERTARIKAN BARU AINA - CURIOSITY ENGINE]")
+        print("================================================================================")
+        print(f"• Domain Kategori   : {chosen.get('interest_category', '').upper()}")
+        print(f"• Topik Minat       : {chosen.get('interest_title')}")
+        print(f"• Filter Waktu      : {rec.upper()} ({now.strftime('%d %B %Y')})")
+        print(f"• Query Terarah     : search_web: \"{chosen.get('search_query_formatted')}\"")
+        print(f"• Tema Slug         : {chosen.get('theme')}")
+        print(f"• Rekomendasi Busana: {chosen.get('outfit', 'smart_casual').upper()} ({chosen.get('anchor_clothes')})")
+        print(f"• Framing Kamera    : {chosen.get('framing', 'selfie').upper()}")
+        print(f"• Wawasan Kunci     : {chosen.get('key_learning')}")
+        print(f"• Detail Adegan     : {chosen.get('scene')}")
+        print(f"• Draf Caption      : \"{chosen.get('caption')}\"")
+        print("--------------------------------------------------------------------------------")
+        prompt = build_makoto_shinkai_prompt(chosen, weekend=weekend)
+        print(f"🎨 Prompt Makoto Shinkai Siap Generate:\n{prompt}\n")
+        print("💡 Cara Memposting Langsung ke WhatsApp Status:")
+        print(f"   python3 scripts/persona_status.py post --discover --interest {chosen.get('interest_category')} --today")
+        print("================================================================================")
+        return
+
+    elif args.command == "interests":
+        cat = getattr(args, "category", None)
+        catalog = InterestDiscoveryEngine.list_catalog(cat)
+        if getattr(args, "json", False):
+            print(json.dumps(catalog, indent=2, ensure_ascii=False))
+            return
+
+        print(f"📚 Katalog Domain & Benih Minat Aina ({len(catalog)} topik tersedia):")
+        print("================================================================================")
+        for i, item in enumerate(catalog, 1):
+            print(f"{i}. [{item['category'].upper()}] {item['title']}")
+            print(f"   • Topik  : {item['topic']}")
+            print(f"   • Query  : \"{item['search_query']}\"")
+            print(f"   • Busana : {item['outfit_key']} | Framing: {item['framing']}")
+            print(f"   • Caption: \"{item['caption'][:70]}...\"")
+            print()
+        print("💡 Gunakan `python3 scripts/persona_status.py discover --category <kategori>` untuk eksplorasi.")
+        print("================================================================================")
+        return
+
     elif args.command == "caption":
         img_file = args.file
         slot = getattr(args, "slot", None) or get_time_slot(now)
@@ -929,7 +1053,35 @@ def main():
         slot = args.slot or get_time_slot(now)
         weekend = True if args.weekend else (False if args.weekday else is_weekend(now))
 
-        if getattr(args, "custom", False) and getattr(args, "scene", None):
+        if getattr(args, "discover", False) or getattr(args, "interest", None) or getattr(args, "topic", None):
+            rec = "today" if getattr(args, "today", False) else getattr(args, "recency", "today")
+            findings = getattr(args, "findings", None)
+            topic = getattr(args, "topic", None)
+            chosen = InterestDiscoveryEngine.discover(
+                category=getattr(args, "interest", None),
+                topic=topic,
+                search_query=getattr(args, "search_query", None),
+                web_findings=findings or getattr(args, "search_query", None),
+                notes=getattr(args, "reflection", None),
+                recency=rec,
+                now=now,
+                slot=slot,
+                weekend=weekend
+            )
+            outfit_key, clothes_desc, is_custom, w_reflection = WardrobeManager.resolve_outfit(
+                slot=slot,
+                weekend=weekend,
+                activity=chosen,
+                journal=journal,
+                custom_clothes=getattr(args, "clothes", None),
+                requested_outfit=getattr(args, "outfit", None),
+            )
+            chosen["slot"] = slot
+            chosen["outfit"] = outfit_key
+            chosen["anchor_clothes"] = clothes_desc
+            chosen["is_custom_outfit"] = is_custom
+            chosen["wardrobe_reflection"] = w_reflection
+        elif getattr(args, "custom", False) and getattr(args, "scene", None):
             raw_c = getattr(args, "caption", None)
             clean_c = StatusSafetyGuard.sanitize_caption(raw_c) if raw_c else "Rehat sejenak dan nikmati momen hari ini ✨"
             chosen = {
@@ -985,7 +1137,35 @@ def main():
             print("🛑 Melewati pembuatan status untuk slot waktu ini.")
             sys.exit(0)
 
-        if getattr(args, "custom", False) and getattr(args, "scene", None):
+        if getattr(args, "discover", False) or getattr(args, "interest", None) or getattr(args, "topic", None):
+            rec = "today" if getattr(args, "today", False) else getattr(args, "recency", "today")
+            findings = getattr(args, "findings", None)
+            topic = getattr(args, "topic", None)
+            chosen = InterestDiscoveryEngine.discover(
+                category=getattr(args, "interest", None),
+                topic=topic,
+                search_query=getattr(args, "search_query", None),
+                web_findings=findings or getattr(args, "search_query", None),
+                notes=getattr(args, "reflection", None),
+                recency=rec,
+                now=now,
+                slot=slot,
+                weekend=weekend
+            )
+            outfit_key, clothes_desc, is_custom, w_reflection = WardrobeManager.resolve_outfit(
+                slot=slot,
+                weekend=weekend,
+                activity=chosen,
+                journal=journal,
+                custom_clothes=getattr(args, "clothes", None),
+                requested_outfit=getattr(args, "outfit", None),
+            )
+            chosen["slot"] = slot
+            chosen["outfit"] = outfit_key
+            chosen["anchor_clothes"] = clothes_desc
+            chosen["is_custom_outfit"] = is_custom
+            chosen["wardrobe_reflection"] = w_reflection
+        elif getattr(args, "custom", False) and getattr(args, "scene", None):
             raw_c = getattr(args, "caption", None)
             clean_c = StatusSafetyGuard.sanitize_caption(raw_c) if raw_c else "Rehat sejenak dan nikmati momen hari ini ✨"
             chosen = {

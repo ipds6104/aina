@@ -206,6 +206,38 @@ impl ContextPreparer {
             }
         }
 
+        // 6. On-Demand Experience Reflection Recall (Harness² Paradigm)
+        let words: Vec<&str> = msg.text
+            .split_whitespace()
+            .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()))
+            .filter(|w| w.len() >= 4)
+            .collect();
+
+        let mut recalled_experiences = Vec::new();
+        for word in words.iter().take(4) {
+            if let Ok(exps) = session_store.search_experiences(word, None, 2).await {
+                for exp in exps {
+                    if !recalled_experiences.iter().any(|e: &crate::core::domain::ExperienceRecord| e.id == exp.id) {
+                        recalled_experiences.push(exp);
+                    }
+                }
+            }
+            if recalled_experiences.len() >= 3 {
+                break;
+            }
+        }
+
+        if !recalled_experiences.is_empty() {
+            prompt.push_str("\n\n---\n[PELAJARAN PENGALAMAN SEBELUMNYA (EXPERIENCE RECALL)]:\n");
+            prompt.push_str("Berikut pengalaman dan pelajaran teknis teruji dari tugas serupa sebelumnya (Gunakan untuk memandu solusi agar tidak mengulang kesalahan):\n");
+            for exp in recalled_experiences {
+                prompt.push_str(&format!(
+                    "• [Domain: {}] Pemicu: \"{}\"\n  -> Pelajaran: \"{}\"\n  -> Bukti: \"{}\" (Confidence: {:.2})\n",
+                    exp.domain, exp.cue, exp.lesson, exp.evidence, exp.confidence
+                ));
+            }
+            prompt.push_str("(Terapkan pelajaran di atas jika situasi saat ini relevan).\n");
+        }
 
         // 3. Epistemic Vigilance & Anti-Confabulation Gate
         let resolution = AntiConfabGate::evaluate_discrepancy(

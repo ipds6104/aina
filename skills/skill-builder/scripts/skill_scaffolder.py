@@ -826,6 +826,31 @@ def cmd_validate(args):
                 except Exception:
                     pass
 
+    # 4. Harness² Autotrigger Invariant Check:
+    # A skill is dead weight if never referenced in GEMINI.md, AGENTS.md, or skills.json
+    has_trigger_reference = False
+    rules_files = [
+        PROJECT_ROOT / "GEMINI.md",
+        PROJECT_ROOT / "gemini.md",
+        PROJECT_ROOT / "workspaces" / "default" / ".agents" / "skills.json",
+        PROJECT_ROOT / ".agents" / "skills.json",
+    ]
+    for rf in rules_files:
+        if rf.is_file():
+            try:
+                r_text = rf.read_text(encoding="utf-8", errors="ignore")
+                if skill_name in r_text:
+                    has_trigger_reference = True
+                    break
+            except Exception:
+                pass
+
+    if not has_trigger_reference:
+        warnings.append(
+            f"Autotrigger warning (Harness² Invariant): Skill '{skill_name}' is never named in GEMINI.md or skills.json. "
+            f"Add a trigger line (e.g., 'When <situation>, load the `{skill_name}` skill') or ensure discovery mapping to avoid dead weight."
+        )
+
     is_persistent = False
     for p in CUSTOM_SKILLS_PATHS:
         try:
@@ -943,6 +968,162 @@ def cmd_test(args):
         "passed_count": sum(1 for t in test_results if t["passed"]),
         "failed_count": sum(1 for t in test_results if not t["passed"]),
         "results": test_results
+    }
+    print(json.dumps(report, indent=2))
+
+    if not all_passed:
+        sys.exit(1)
+
+
+def cmd_probe(args):
+    """Run contrastive probing verification gate (Harness² Paradigm).
+
+    Probes the skill by executing:
+    1. Base structural validation.
+    2. Deterministic invalid-flag probe (must fail fast with non-zero exit).
+    3. Status command probe with strict JSON schema verification.
+    4. Execution bounding (must terminate within timeout).
+    5. Anti-leakage OpSec verification on outputs (no sensitive key dumps).
+    """
+    skill_name = sanitize_skill_name(args.name)
+    custom_dir = get_custom_skills_dir()
+    skill_dir = custom_dir / skill_name
+
+    if not skill_dir.is_dir():
+        repo_skill = PROJECT_ROOT / "skills" / skill_name
+        if repo_skill.is_dir():
+            skill_dir = repo_skill
+        else:
+            cand = Path(args.name)
+            if cand.is_dir():
+                skill_dir = cand
+                skill_name = skill_dir.name
+            else:
+                print(json.dumps({
+                    "status": "error",
+                    "message": f"Skill directory not found at {skill_dir}"
+                }))
+                sys.exit(1)
+
+    probes = []
+    all_passed = True
+
+    # Probe 1: Frontmatter & autotrigger integrity
+    skill_md = skill_dir / "SKILL.md"
+    if not skill_md.is_file():
+        probes.append({
+            "probe": "Component Manifest (SKILL.md)",
+            "passed": False,
+            "contrast": "SKILL.md missing"
+        })
+        all_passed = False
+    else:
+        content = skill_md.read_text(encoding="utf-8")
+        has_name = bool(re.search(r"^name:\s*\S+", content, re.M))
+        has_desc = bool(re.search(r"^description:\s*\S+", content, re.M))
+        fm_ok = has_name and has_desc
+        probes.append({
+            "probe": "Frontmatter Specification (name + description)",
+            "passed": fm_ok,
+            "contrast": "YAML frontmatter valid" if fm_ok else "Missing name or description in YAML frontmatter"
+        })
+        if not fm_ok:
+            all_passed = False
+
+    scripts_dir = skill_dir / "scripts"
+    scripts = list(scripts_dir.glob("*.py")) if scripts_dir.is_dir() else []
+
+    if not scripts:
+        probes.append({
+            "probe": "Executable Component Discovery",
+            "passed": False,
+            "contrast": "No scripts found in scripts/"
+        })
+        all_passed = False
+    else:
+        for s in scripts:
+            # Probe 2: Contrastive Negative Argument Test
+            # The tool MUST reject invalid arguments with non-zero exit code (Fail-Fast invariant)
+            try:
+                res_neg = subprocess.run(
+                    [sys.executable, str(s), "--invalid-probe-flag-fail-fast"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                neg_ok = res_neg.returncode != 0
+                probes.append({
+                    "probe": f"Fail-Fast Negative Probe ({s.name})",
+                    "passed": neg_ok,
+                    "contrast": f"Correctly exited with code {res_neg.returncode} on invalid input"
+                    if neg_ok else "FAILED: Exited 0 on invalid argument (silent success anti-pattern)"
+                })
+                if not neg_ok:
+                    all_passed = False
+            except Exception as e:
+                probes.append({
+                    "probe": f"Fail-Fast Negative Probe ({s.name})",
+                    "passed": False,
+                    "contrast": f"Exception: {e}"
+                })
+                all_passed = False
+
+            # Probe 3: Positive Status & Structured Output Contract
+            try:
+                t0 = os.times().elapsed
+                res_pos = subprocess.run(
+                    [sys.executable, str(s), "status"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                elapsed = os.times().elapsed - t0
+                pos_ok = res_pos.returncode == 0
+                is_json = False
+                try:
+                    json.loads(res_pos.stdout.strip())
+                    is_json = True
+                except Exception:
+                    pass
+
+                json_contract_ok = pos_ok and is_json
+                probes.append({
+                    "probe": f"Structured Output JSON Contract ({s.name})",
+                    "passed": json_contract_ok,
+                    "contrast": f"Valid JSON returned in {elapsed:.3f}s" if json_contract_ok
+                    else f"Exit {res_pos.returncode}, valid_json={is_json}, stdout={res_pos.stdout[:150]}"
+                })
+                if not json_contract_ok:
+                    all_passed = False
+
+                # Probe 4: Zero Secret Leakage on stdout/stderr
+                output_dump = (res_pos.stdout + " " + res_pos.stderr).lower()
+                leak_detected = any(k in output_dump for k in ["bearer ", "api_key=", "password=", "secret="])
+                probes.append({
+                    "probe": f"Zero Secret Leakage Probe ({s.name})",
+                    "passed": not leak_detected,
+                    "contrast": "Clean output, zero raw tokens detected" if not leak_detected else "WARNING: Potential secret leakage detected in stdout/stderr!"
+                })
+                if leak_detected:
+                    all_passed = False
+
+            except Exception as e:
+                probes.append({
+                    "probe": f"Execution Bounding Probe ({s.name})",
+                    "passed": False,
+                    "contrast": f"Exception: {e}"
+                })
+                all_passed = False
+
+    report = {
+        "status": "passed" if all_passed else "failed",
+        "paradigm": "Harness² Contrastive Probing Gate",
+        "skill_name": skill_name,
+        "path": str(skill_dir),
+        "probes_evaluated": len(probes),
+        "passed_probes": sum(1 for p in probes if p["passed"]),
+        "failed_probes": sum(1 for p in probes if not p["passed"]),
+        "probes": probes
     }
     print(json.dumps(report, indent=2))
 
@@ -1105,6 +1286,10 @@ def main():
     p_test = subparsers.add_parser("test", help="Run automated test suite on custom skill")
     p_test.add_argument("name", help="Name of the custom skill to test")
 
+    # probe (Harness² Contrastive Probing Gate)
+    p_probe = subparsers.add_parser("probe", help="Run contrastive probing verification gate (Harness² Paradigm)")
+    p_probe.add_argument("name", help="Name of the custom skill to probe")
+
     # delete
     p_del = subparsers.add_parser("delete", help="Delete a custom skill from persistent storage")
     p_del.add_argument("name", help="Name of the custom skill to delete")
@@ -1128,6 +1313,8 @@ def main():
         cmd_validate(args)
     elif args.command == "test":
         cmd_test(args)
+    elif args.command == "probe":
+        cmd_probe(args)
     elif args.command == "delete":
         cmd_delete(args)
     elif args.command == "list":

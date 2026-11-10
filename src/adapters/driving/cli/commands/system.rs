@@ -216,6 +216,8 @@ pub async fn handle_persona(args: &[String]) -> anyhow::Result<()> {
     aina persona check [--slot <slot>]          Periksa kuota & evaluasi posting slot waktu saat ini
     aina persona post [--slot <slot>]           Eksekusi pembuatan & publikasi status WhatsApp
     aina persona inspire                        Panduan konteks ruang imajinasi kreatif Aina
+    aina persona discover [--category <cat>]    Eksplorasi ketertarikan & minat baru Aina (AI, kuliner, muslimah, wisata)
+    aina persona interests [--category <cat>]   Daftar katalog domain minat & benih ketertarikan Aina
 "#
         );
         return Ok(());
@@ -313,6 +315,18 @@ pub async fn handle_persona(args: &[String]) -> anyhow::Result<()> {
         }
         "generate" => {
             cmd.arg("generate");
+            for a in &args[1..] {
+                cmd.arg(a);
+            }
+        }
+        "discover" => {
+            cmd.arg("discover");
+            for a in &args[1..] {
+                cmd.arg(a);
+            }
+        }
+        "interests" | "catalog" => {
+            cmd.arg("interests");
             for a in &args[1..] {
                 cmd.arg(a);
             }

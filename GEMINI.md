@@ -36,7 +36,7 @@ src/
    - Usecase tidak boleh bergantung langsung pada struct adapter konkrit, melainkan melalui `Arc<dyn PortTrait>`.
 3. **Pemisahan Peran: Skills vs Rules vs Persona**:
    - **`GEMINI.md` (Rules)**: Menetapkan batasan arsitektur, kebijakan keamanan (OpSec), dan aturan baku yang selalu aktif.
-   - **`skills/<name>/SKILL.md` (Skills)**: Menampung prosedur operasional multi-langkah dan pemanggilan alat eksternal (misal: REST API Whatsmeow, Google Drive, atau ekstraksi dokumen VLM via `skills/vision-document-extractor`) dengan prinsip *Progressive Disclosure* untuk menghemat token.
+   - **`skills/<name>/SKILL.md` (Skills)**: Menampung prosedur operasional multi-langkah dan pemanggilan alat eksternal (misal: REST API Whatsmeow, Google Drive, ekstraksi dokumen VLM via `skills/vision-document-extractor`, atau evaluasi rutinitas via `skills/activity-reflection`) dengan prinsip *Progressive Disclosure* untuk menghemat token.
    - **`config/persona.md` (Persona)**: Menentukan gaya bahasa, karakter rekan kerja, dan keramahan komunikasi.
 4. **Isolasi Core Upstream vs Downstream Custom Skills (Netralitas Repositori Utama)**:
    - Repositori utama `aina` adalah repositori *upstream core engine* yang wajib bersifat **netral & agnostik terhadap instansi/organisasi**.
