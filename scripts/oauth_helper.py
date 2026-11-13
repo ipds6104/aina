@@ -144,7 +144,7 @@ def do_exchange(base_dir: str, code: str, verifier: str):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: oauth_helper.py <session_id> OR oauth_helper.py exchange <session_id> <code>", file=sys.stderr)
+        print("Usage: oauth_helper.py [init] <session_id> OR oauth_helper.py exchange <session_id> <code>", file=sys.stderr)
         sys.exit(1)
 
     if sys.argv[1] == "exchange":
@@ -156,6 +156,8 @@ def main():
         base_dir = get_base_dir(session_id)
         verifier_file = os.path.join(base_dir, "verifier.txt")
         if not os.path.exists(verifier_file):
+            verifier_file = os.path.join(base_dir, "code_verifier.txt")
+        if not os.path.exists(verifier_file):
             print(f"Verifier file not found in {base_dir}", file=sys.stderr)
             sys.exit(1)
         with open(verifier_file, "r") as f:
@@ -163,7 +165,14 @@ def main():
         ok = do_exchange(base_dir, code, verifier)
         sys.exit(0 if ok else 1)
 
-    session_id = sys.argv[1]
+    if sys.argv[1] == "init":
+        if len(sys.argv) < 3:
+            print("Usage: oauth_helper.py init <session_id>", file=sys.stderr)
+            sys.exit(1)
+        session_id = sys.argv[2]
+    else:
+        session_id = sys.argv[1]
+
     base_dir = get_base_dir(session_id)
     os.makedirs(base_dir, exist_ok=True)
 
@@ -173,8 +182,10 @@ def main():
     challenge = base64.urlsafe_b64encode(digest).decode("utf-8").rstrip("=")
     state = base64.urlsafe_b64encode(secrets.token_bytes(16)).decode("utf-8").rstrip("=")
 
-    # Simpan verifier ke file sesi
+    # Simpan verifier ke file sesi (tulis kedua nama agar kompatibel dengan backend Rust)
     with open(os.path.join(base_dir, "verifier.txt"), "w") as f:
+        f.write(verifier)
+    with open(os.path.join(base_dir, "code_verifier.txt"), "w") as f:
         f.write(verifier)
 
     # Bangun URL Google OAuth

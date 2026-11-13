@@ -109,6 +109,16 @@ pub fn get_scripts() -> &'static str {
                 return;
             }
 
+            localStorage.setItem('aina_admin_key', key);
+
+            // Pre-buka tab baru secara sinkronis pada interaksi pengguna untuk mencegah pemblokiran popup browser
+            let newTab = null;
+            try {
+                newTab = window.open('about:blank', '_blank');
+            } catch(e) {
+                console.log('Popup pre-open prevented:', e);
+            }
+
             startBtn.disabled = true;
             startBtn.innerText = 'Menyiapkan URL Google...';
             alertEl.style.display = 'none';
@@ -121,10 +131,23 @@ pub fn get_scripts() -> &'static str {
                 if (res.ok && data.success && data.auth_url) {
                     currentOAuthSessionId = data.session_id;
                     const anchor = document.getElementById('oauth-link-anchor');
-                    if (anchor) anchor.href = data.auth_url;
+                    if (anchor) {
+                        anchor.href = data.auth_url;
+                        anchor.style.display = 'inline-block';
+                    }
 
                     document.getElementById('oauth-step-2').style.display = 'block';
                     document.getElementById('oauth-code-input').value = '';
+
+                    // Buka URL OAuth di tab yang telah disiapkan, atau pandu pengguna mengklik tautan langsung
+                    if (newTab && !newTab.closed) {
+                        newTab.location.href = data.auth_url;
+                        alertEl.innerHTML = 'ℹ️ Tab login Google telah dibuka. Pilih salah satu akun Google Anda, klik <strong>Izinkan</strong>, lalu salin kode yang muncul ke kotak di bawah.<br><small style="color: #94a3b8;">(Jika tab tidak muncul, klik tombol biru <strong>"🔗 Buka Halaman Login Google ↗"</strong> di bawah)</small>';
+                    } else {
+                        alertEl.innerHTML = '⚠️ Tab otomatis diblokir oleh browser Anda. Silakan <strong>klik tombol biru di bawah ("🔗 Buka Halaman Login Google ↗")</strong> untuk login ke akun Google.';
+                    }
+                    alertEl.style.color = '#38bdf8';
+                    alertEl.style.display = 'block';
 
                     // 300-second (5-minute) countdown for user convenience
                     if (oauthCountdownInterval) clearInterval(oauthCountdownInterval);
@@ -156,18 +179,14 @@ pub fn get_scripts() -> &'static str {
                             }
                         }
                     }, 1000);
-
-                    window.open(data.auth_url, '_blank');
-
-                    alertEl.innerHTML = 'ℹ️ Tab login Google telah dibuka. Pilih salah satu akun Anda, klik <strong>Izinkan</strong>, lalu salin kode yang muncul ke kotak di atas.';
-                    alertEl.style.color = '#38bdf8';
-                    alertEl.style.display = 'block';
                 } else {
+                    if (newTab && !newTab.closed) newTab.close();
                     alertEl.innerText = '❌ ' + (data.error || 'Gagal memulai sesi login.');
                     alertEl.style.color = '#ef4444';
                     alertEl.style.display = 'block';
                 }
             } catch(e) {
+                if (newTab && !newTab.closed) newTab.close();
                 alertEl.innerText = '❌ Error: ' + e;
                 alertEl.style.color = '#ef4444';
                 alertEl.style.display = 'block';
@@ -874,17 +893,18 @@ pub fn get_scripts() -> &'static str {
                         let totalUsecases = 0;
                         for (let i = 0; i < s.top_usecases.length; i++) {
                             const item = s.top_usecases[i];
-                            totalUsecases += (Array.isArray(item) ? item[1] : 0);
+                            const count = Array.isArray(item) ? item[1] : (typeof item === 'object' && item ? (item.count || 0) : 0);
+                            totalUsecases += count;
                         }
                         if (totalUsecases <= 0) totalUsecases = 1;
 
                         let htmlUsecases = '';
                         for (let i = 0; i < s.top_usecases.length; i++) {
                             const item = s.top_usecases[i];
-                            const name = Array.isArray(item) ? item[0] : (item.usecase || item.name || 'other');
-                            const count = Array.isArray(item) ? item[1] : (item.count || 0);
+                            const rawName = Array.isArray(item) ? item[0] : (typeof item === 'object' && item ? (item.key || item.usecase || item.name || 'other') : String(item));
+                            const count = Array.isArray(item) ? item[1] : (typeof item === 'object' && item ? (item.count || 0) : 0);
                             const pct = Math.round((count / totalUsecases) * 100);
-                            const label = formatUsecaseLabel(name);
+                            const label = formatUsecaseLabel(rawName);
                             htmlUsecases += '<div style="margin-bottom: 8px;">' +
                                 '<div style="display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 3px;">' +
                                     '<span style="font-weight: 500; color: #f1f5f9;">' + label + '</span>' +
@@ -901,14 +921,17 @@ pub fn get_scripts() -> &'static str {
                     // Render Top Tools
                     const toolList = (s.tool_call_frequency && s.tool_call_frequency.length > 0)
                         ? s.tool_call_frequency
-                        : (s.unique_tools_used || []).map(t => [t, 1]);
+                        : ((s.top_tools_used && s.top_tools_used.length > 0)
+                            ? s.top_tools_used
+                            : (s.unique_tools_used || []));
 
-                    if (toolList.length === 0) {
+                    if (!toolList || toolList.length === 0) {
                         toolsEl.innerHTML = '<span style="color: #94a3b8; font-size: 0.82rem;">Belum ada pemanggilan alat AI tercatat.</span>';
                     } else {
                         let maxCalls = 1;
                         for (let i = 0; i < toolList.length; i++) {
-                            const count = Array.isArray(toolList[i]) ? toolList[i][1] : 1;
+                            const t = toolList[i];
+                            const count = Array.isArray(t) ? t[1] : (typeof t === 'object' && t ? (t.count || 1) : 1);
                             if (count > maxCalls) maxCalls = count;
                         }
 
@@ -916,8 +939,9 @@ pub fn get_scripts() -> &'static str {
                         const limitTools = Math.min(toolList.length, 10);
                         for (let i = 0; i < limitTools; i++) {
                             const t = toolList[i];
-                            const name = Array.isArray(t) ? t[0] : t;
-                            const count = Array.isArray(t) ? t[1] : 1;
+                            const rawName = Array.isArray(t) ? t[0] : (typeof t === 'object' && t ? (t.key || t.name || 'unknown') : String(t));
+                            const name = String(rawName || '');
+                            const count = Array.isArray(t) ? t[1] : (typeof t === 'object' && t ? (t.count || 1) : 1);
                             const pct = Math.round((count / maxCalls) * 100);
                             const isBuiltin = name.startsWith('builtin:');
                             const badgeColor = isBuiltin ? '#f59e0b' : '#10b981';

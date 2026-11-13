@@ -304,7 +304,7 @@ mod tests {
             let _ = axum::serve(listener, app).await;
         });
 
-        let client = reqwest::Client::new();
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
         // Generate a 5MB payload (exceeds standard 2MB Axum default limit)
         let payload_size = 5 * 1024 * 1024;
         let large_data = "x".repeat(payload_size);
@@ -720,7 +720,7 @@ mod tests {
             let _ = axum::serve(aina_listener, app).await;
         });
 
-        let client = reqwest::Client::new();
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
         let payload = json!({
             "id": "MSG_CC_TEST_001",
             "chat_jid": "user123@s.whatsapp.net",
@@ -833,7 +833,7 @@ mod tests {
             let _ = axum::serve(aina_listener, app).await;
         });
 
-        let client = reqwest::Client::new();
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
 
         // 1. Unauthorized request without key should return 401
         let unauth_resp = client

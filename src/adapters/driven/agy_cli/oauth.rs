@@ -106,6 +106,16 @@ pub async fn init_oauth_session() -> anyhow::Result<(String, String)> {
         return Ok((session_id, auth_url.trim().to_string()));
     }
 
+    // Fallback: parse from stdout if url_file check didn't catch it
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for line in stdout.lines() {
+        if let Some(url) = line.strip_prefix("AUTH_URL:") {
+            let clean_url = url.trim();
+            let _ = tokio::fs::write(&url_file, clean_url).await;
+            return Ok((session_id, clean_url.to_string()));
+        }
+    }
+
     let stderr = String::from_utf8_lossy(&output.stderr);
     let _ = tokio::fs::remove_dir_all(&base_dir).await;
     anyhow::bail!("Gagal menginisialisasi sesi login OAuth: {}", stderr);
@@ -115,7 +125,10 @@ pub async fn init_oauth_session() -> anyhow::Result<(String, String)> {
 pub async fn exchange_oauth_code(session_id: &str, code: &str) -> anyhow::Result<String> {
     let base_dir = get_oauth_session_dir(session_id);
     let verifier_file = base_dir.join("code_verifier.txt");
-    if !tokio::fs::try_exists(&verifier_file).await.unwrap_or(false) {
+    let alt_verifier_file = base_dir.join("verifier.txt");
+    if !tokio::fs::try_exists(&verifier_file).await.unwrap_or(false)
+        && !tokio::fs::try_exists(&alt_verifier_file).await.unwrap_or(false)
+    {
         anyhow::bail!(
             "Sesi login tidak valid atau sudah kedaluwarsa. Silakan klik tombol 'Mulai Login Baru'."
         );

@@ -115,6 +115,7 @@ pub fn render_html(is_authenticated: bool, state: &WebhookServerState, current_m
                             <a id="oauth-link-anchor" href="javascript:void(0)" target="_blank" class="btn" style="background: #3b82f6; color: #fff; text-decoration: none; display: inline-block; padding: 6px 14px; font-size: 0.82rem; border-radius: 4px;">
                                 🔗 Buka Halaman Login Google ↗
                             </a>
+                        </div>
                         <div style="margin-bottom: 8px;">
                             <button type="button" id="paste-submit-oauth-btn" class="btn" style="width: 100%; background: #059669; color: #fff; font-size: 0.82rem; padding: 8px 14px; font-weight: 600; cursor: pointer; border-radius: 4px; border: none; display: flex; align-items: center; justify-content: center; gap: 6px;" onclick="pasteAndSubmitOAuth()">
                                 📋 Tempel dari Clipboard &amp; Simpan (1-Klik Cepat)
