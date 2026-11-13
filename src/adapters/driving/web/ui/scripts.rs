@@ -386,6 +386,7 @@ pub fn get_scripts() -> &'static str {
                 if (res.ok && data.success) {
                     localStorage.setItem('aina_admin_key', val);
                     checkAdminAuth();
+                    loadSimModelOptions();
                 } else {
                     errEl.innerText = data.message || 'Admin Key tidak valid!';
                     errEl.style.display = 'block';
@@ -588,6 +589,46 @@ pub fn get_scripts() -> &'static str {
             return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         }
         // ── End Model Picker Modal ──────────────────────────────────────────
+
+        // Dynamically populate the simulator's model <select> from /api/models,
+        // so it always reflects what AGY actually exposes (no hardcoded list).
+        async function loadSimModelOptions() {
+            const sel = document.getElementById('sim-model-select');
+            if (!sel) return;
+            const loadingOpt = sel.querySelector('option[value="__loading__"]');
+
+            const key = localStorage.getItem('aina_admin_key');
+            if (!key) {
+                // No admin key yet — keep only the "default" option; the list
+                // will refresh once the user authenticates.
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/models?key=${encodeURIComponent(key)}`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+
+                if (loadingOpt) loadingOpt.remove();
+                const current = data.current || '';
+                const available = data.available || [];
+                const frag = document.createDocumentFragment();
+                available.forEach(model => {
+                    const opt = document.createElement('option');
+                    opt.value = model.id;
+                    opt.textContent = (model.id === current ? '✓ ' : '') + model.name;
+                    frag.appendChild(opt);
+                });
+                sel.appendChild(frag);
+            } catch (e) {
+                // Discovery failed — drop the loading placeholder so the user
+                // still has a working "default" choice; the modal remains the
+                // primary path for switching models.
+                if (loadingOpt) loadingOpt.remove();
+                console.warn('sim-model-select: failed to load model list:', e);
+            }
+        }
+        // ── End Simulator Model Options Loader ──────────────────────────────
 
         function onChatTypeChange(val) {
             const el = document.getElementById('mention-toggle-wrapper');
@@ -1144,6 +1185,7 @@ pub fn get_scripts() -> &'static str {
         function initPage() {
             checkAdminAuth();
             loadObservabilityMetrics();
+            loadSimModelOptions();
             const textEl = document.getElementById('sim-text');
             if (textEl && !textEl.dataset.bound) {
                 textEl.dataset.bound = 'true';

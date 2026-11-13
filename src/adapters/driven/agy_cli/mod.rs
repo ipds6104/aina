@@ -19,7 +19,8 @@ pub use account_pool::{
 pub use adapter::AntigravityCliAdapter;
 #[allow(unused_imports)]
 pub use models::{
-    fetch_models_from_agy_cli, get_available_models, resolve_model_name,
+    fetch_models_from_agy_cli, fetch_models_from_agy_cli_with_binary,
+    get_available_models, resolve_model_name,
     DynamicModelDiscovery, DynamicModelEntry, ModelSource,
 };
 #[allow(unused_imports)]

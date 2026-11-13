@@ -246,12 +246,7 @@ pub fn render_html(is_authenticated: bool, state: &WebhookServerState, current_m
                     <label class="form-label">Pilihan Model AI (Sesi Simulasi Ini)</label>
                     <select id="sim-model-select" class="form-input">
                         <option value="default">Mengikuti Model Aktif Default ({model})</option>
-                        <option value="gemini-3.8-flash-medium">Gemini 3.8 Flash (Medium) - Default Cepat &amp; Seimbang (5-15s)</option>
-                        <option value="gemini-3.8-flash-high">Gemini 3.8 Flash (High) - Penalaran Tinggi / Deep Thinking</option>
-                        <option value="gemini-3.8-flash-low">Gemini 3.8 Flash (Low) - Respons Kilat &amp; Kasual (&lt;3s)</option>
-                        <option value="gemini-3.1-pro-high">Gemini 3.1 Pro (High) - Deep Coding &amp; Arsitektur Sistem</option>
-                        <option value="claude-opus-4-6-thinking">Claude Opus 4.6 (Thinking) - Khusus Tugas Sangat Kompleks (Eksplisit)</option>
-                        <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (Thinking)</option>
+                        <option value="__loading__" disabled>Memuat daftar model…</option>
                     </select>
                 </div>
 

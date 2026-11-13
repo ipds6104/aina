@@ -87,16 +87,22 @@ pub struct DynamicModelDiscovery {
     pub source: ModelSource,
 }
 
-/// Calls `agy models` as a subprocess and parses the tab-separated output.
+/// Calls `agy models` using the configured `AGY_BIN` env var (or the default
+/// `/usr/local/bin/agy`) as a subprocess and parses the tab-separated output.
 /// Falls back to the static catalog (reported via `DynamicModelDiscovery::source`)
 /// if the CLI is unavailable, times out, or produces fewer than 2 valid entries
 /// (guards against partial output).
 pub async fn fetch_models_from_agy_cli() -> DynamicModelDiscovery {
     let agy_bin = std::env::var("AGY_BIN").unwrap_or_else(|_| "/usr/local/bin/agy".to_string());
+    fetch_models_from_agy_cli_with_binary(&agy_bin).await
+}
 
+/// Discovers live models by shelling out to `agy models` at the given binary
+/// path. Same fallback semantics as [`fetch_models_from_agy_cli`].
+pub async fn fetch_models_from_agy_cli_with_binary(agy_bin: &str) -> DynamicModelDiscovery {
     let result = tokio::time::timeout(
         std::time::Duration::from_secs(8),
-        tokio::process::Command::new(&agy_bin)
+        tokio::process::Command::new(agy_bin)
             .arg("models")
             .output(),
     )
@@ -138,6 +144,27 @@ pub async fn fetch_models_from_agy_cli() -> DynamicModelDiscovery {
 /// `StaticFallback` source marker.
 fn static_catalog_fallback() -> DynamicModelDiscovery {
     DynamicModelDiscovery { models: static_model_catalog(), source: ModelSource::StaticFallback }
+}
+
+/// Converts a discovery result into the engine-agnostic `ModelCatalog` exposed
+/// through `AgentEnginePort::list_models()`.
+impl From<DynamicModelDiscovery> for crate::core::ports::ModelCatalog {
+    fn from(d: DynamicModelDiscovery) -> Self {
+        let source = match d.source {
+            ModelSource::Dynamic => "dynamic",
+            ModelSource::StaticFallback => "static_fallback",
+        };
+        let models = d
+            .models
+            .into_iter()
+            .map(|e| crate::core::ports::ModelInfo {
+                id: e.id,
+                name: e.name,
+                category: e.category,
+            })
+            .collect();
+        crate::core::ports::ModelCatalog { models, source }
+    }
 }
 
 // ---------------------------------------------------------------------------

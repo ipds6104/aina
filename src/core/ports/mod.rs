@@ -4,7 +4,7 @@ pub mod knowledge;
 pub mod session_store;
 pub mod whatsapp;
 
-pub use agent_engine::{AccountPoolStatus, AgentEnginePort, AgentResponse};
+pub use agent_engine::{AccountPoolStatus, AgentEnginePort, AgentResponse, ModelCatalog, ModelInfo};
 #[allow(unused_imports)]
 pub use ingestion::*;
 pub use knowledge::KnowledgePort;

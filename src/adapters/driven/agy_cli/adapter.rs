@@ -14,7 +14,7 @@ use super::account_pool::{
     extract_email_from_token, extract_quota_cooldown_duration, is_auth_error, is_quota_error,
     is_transient_error, TokenPoolManager,
 };
-use super::models::resolve_model_name;
+use super::models::{fetch_models_from_agy_cli_with_binary, resolve_model_name};
 use super::oauth;
 use super::sanitizer::sanitize_agent_response;
 
@@ -424,6 +424,12 @@ impl AgentEnginePort for AntigravityCliAdapter {
         let mut lock = self.model.write().await;
         *lock = validated;
         Ok(())
+    }
+
+    async fn list_models(&self) -> crate::core::ports::ModelCatalog {
+        let bin = self.resolve_binary();
+        let discovery = fetch_models_from_agy_cli_with_binary(&bin.to_string_lossy()).await;
+        discovery.into()
     }
 
     async fn is_authenticated(&self) -> bool {

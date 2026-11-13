@@ -56,9 +56,16 @@ pub async fn try_handle_builtin_command(
         let parts: Vec<&str> = trimmed_text.split_whitespace().collect();
         if parts.len() == 1 || (parts.len() >= 2 && (parts[1] == "status" || parts[1] == "list")) {
             let current = agent_engine.get_model().await;
+            let catalog = agent_engine.list_models().await;
+            let available = catalog.whatsapp_model_list(&current);
+            let source_note = match catalog.source {
+                "dynamic" => "_Sumber: Antigravity CLI (live)_".to_string(),
+                "static_fallback" => "_Sumber: katalog bawaan (fallback)_".to_string(),
+                _ => String::new(),
+            };
             let reply = format!(
-                "🤖 *Status Model AI Aina*\n\nModel aktif saat ini: *{}*\n\n*Pilihan Model Tersedia:*\n• `gemini-3.8-flash-medium` (Default Cepat & Seimbang)\n• `gemini-3.8-flash-high` (Penalaran Tinggi / Deep Thinking)\n• `gemini-3.8-flash-low` (Respons Kilat & Kasual)\n• `gemini-3.1-pro-high` (Deep Coding & Arsitektur)\n• `claude-opus-4-6-thinking` (Claude Opus Thinking - Khusus Eksplisit)\n• `claude-sonnet-4-6` (Claude Sonnet 4.6)\n\n_Untuk mengganti model, ketik:_ `/model <nama_model>`",
-                current
+                "🤖 *Status Model AI Aina*\n\nModel aktif saat ini: *{}*\n\n*Pilihan Model Tersedia:*\n{}\n\n{} _Untuk mengganti model, ketik:_ `/model <nama_model>`",
+                current, available, source_note
             );
             return Some(BuiltinCommandOutcome {
                 reply,

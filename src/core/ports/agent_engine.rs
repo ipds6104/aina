@@ -58,6 +58,45 @@ pub struct AgentResponse {
     pub duration_seconds: f64,
 }
 
+/// A single model entry exposed by the agent engine (live or fallback catalog).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelInfo {
+    pub id: String,
+    pub name: String,
+    /// Inferred family: "gemini" | "claude" | "gpt" | "other".
+    pub category: String,
+}
+
+/// Result of a model-discovery call, including where the list came from.
+///
+/// `source` is one of:
+/// - `"dynamic"` — parsed live from the agent CLI (`agy models`)
+/// - `"static_fallback"` — built-in catalog used because the CLI was unreachable
+/// - `"unavailable"` — the engine does not support discovery
+#[derive(Debug, Clone)]
+pub struct ModelCatalog {
+    pub models: Vec<ModelInfo>,
+    pub source: &'static str,
+}
+
+impl ModelCatalog {
+    /// Formats the catalog as a WhatsApp-friendly bullet list, marking the
+    /// currently-active model. Used by user-facing `/model status` commands so
+    /// the reply always reflects live discovery instead of a hardcoded list.
+    pub fn whatsapp_model_list(&self, current: &str) -> String {
+        if self.models.is_empty() {
+            return "• _Daftar model tidak dapat dimuat dari engine._".to_string();
+        }
+        self.models
+            .iter()
+            .map(|m| {
+                let marker = if m.id == current { " *(aktif)*" } else { "" };
+                format!("• `{}` — {}{}", m.id, m.name, marker)
+            })
+            .collect()
+    }
+}
+
 #[async_trait]
 pub trait AgentEnginePort: Send + Sync {
     /// Executes a prompt through the Antigravity agent CLI.
@@ -83,6 +122,15 @@ pub trait AgentEnginePort: Send + Sync {
 
     /// Sets the current active default model name.
     async fn set_model(&self, model: &str) -> anyhow::Result<()>;
+
+    /// Returns the live list of models available to the engine.
+    ///
+    /// Engines backed by the Antigravity CLI discover models by shelling out
+    /// to `agy models` (source `"dynamic"`); any engine that does not support
+    /// discovery returns an empty catalog marked `"unavailable"`.
+    async fn list_models(&self) -> ModelCatalog {
+        ModelCatalog { models: vec![], source: "unavailable" }
+    }
 
     /// Checks if the agent has a valid authentication token stored.
     async fn is_authenticated(&self) -> bool;
