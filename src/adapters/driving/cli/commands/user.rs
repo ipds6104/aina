@@ -4,7 +4,7 @@ pub fn handle_user(args: &[String]) -> anyhow::Result<()> {
             r#"Penggunaan manajemen profil & wewenang rekan kerja (Aina Profiling Memory):
     aina user list [--json]
     aina user get <jid_atau_nama> [--json]
-    aina user set <jid> [--name <nama>] [--role <peran>] [--authority <admin|staff|guest>] [--notes <catatan>]
+    aina user set <jid> [--name <nama>] [--role <peran>] [--authority <admin|atasan|staff|guest>] [--notes <catatan>] [--granted-by <jid>]
     aina user search <query> [--json]
 "#
         );
@@ -23,24 +23,14 @@ pub fn handle_user(args: &[String]) -> anyhow::Result<()> {
         }
     };
 
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS user_profiles (
-            sender_jid TEXT PRIMARY KEY,
-            name TEXT,
-            role TEXT,
-            authority_level TEXT NOT NULL DEFAULT 'staff',
-            notes TEXT,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )",
-        [],
-    )?;
+    crate::adapters::driven::sqlite_store::schema::init_schema(&conn)?;
 
     let subcmd = args[0].as_str();
     match subcmd {
         "list" | "ls" => {
             let as_json = args.iter().any(|a| a == "--json");
             let mut stmt = conn.prepare(
-                "SELECT sender_jid, name, role, authority_level, notes, updated_at
+                "SELECT sender_jid, name, role, authority_level, notes, granted_by, updated_at
                  FROM user_profiles
                  ORDER BY updated_at DESC",
             )?;
@@ -52,7 +42,8 @@ pub fn handle_user(args: &[String]) -> anyhow::Result<()> {
                     "role": row.get::<_, Option<String>>(2)?,
                     "authority_level": row.get::<_, String>(3)?,
                     "notes": row.get::<_, Option<String>>(4)?,
-                    "updated_at": row.get::<_, Option<String>>(5)?,
+                    "granted_by": row.get::<_, Option<String>>(5)?,
+                    "updated_at": row.get::<_, Option<String>>(6)?,
                 }))
             })?;
 
@@ -75,10 +66,11 @@ pub fn handle_user(args: &[String]) -> anyhow::Result<()> {
                     let jid = p["sender_jid"].as_str().unwrap_or("-");
                     let name = p["name"].as_str().unwrap_or("-");
                     let role = p["role"].as_str().unwrap_or("-");
-                    let auth = p["authority_level"].as_str().unwrap_or("staff").to_uppercase();
+                    let auth = p["authority_level"].as_str().unwrap_or("guest").to_uppercase();
                     let notes = p["notes"].as_str().unwrap_or("-");
+                    let granter = p["granted_by"].as_str().unwrap_or("Otomatis/None");
                     println!("• {} ({})", name, jid);
-                    println!("  Peran: {} | Otoritas: {}", role, auth);
+                    println!("  Peran: {} | Otoritas: {} | Izin Oleh: {}", role, auth, granter);
                     println!("  Catatan / Izin: {}", notes);
                     println!("--------------------------------------------------------------------------------");
                 }
@@ -95,7 +87,7 @@ pub fn handle_user(args: &[String]) -> anyhow::Result<()> {
             let target_like = format!("%{}%", target);
 
             let mut stmt = conn.prepare(
-                "SELECT sender_jid, name, role, authority_level, notes, updated_at
+                "SELECT sender_jid, name, role, authority_level, notes, granted_by, updated_at
                  FROM user_profiles
                  WHERE sender_jid = ?1 OR sender_jid LIKE ?2 OR name LIKE ?2
                  LIMIT 1",
@@ -108,7 +100,8 @@ pub fn handle_user(args: &[String]) -> anyhow::Result<()> {
                 let role: Option<String> = row.get(2)?;
                 let auth: String = row.get(3)?;
                 let notes: Option<String> = row.get(4)?;
-                let updated: Option<String> = row.get(5)?;
+                let granter: Option<String> = row.get(5)?;
+                let updated: Option<String> = row.get(6)?;
 
                 if as_json {
                     let val = serde_json::json!({
@@ -117,6 +110,7 @@ pub fn handle_user(args: &[String]) -> anyhow::Result<()> {
                         "role": role,
                         "authority_level": auth,
                         "notes": notes,
+                        "granted_by": granter,
                         "updated_at": updated,
                     });
                     println!("{}", serde_json::to_string_pretty(&val)?);
@@ -126,6 +120,7 @@ pub fn handle_user(args: &[String]) -> anyhow::Result<()> {
                     println!("• Nama         : {}", name.as_deref().unwrap_or("-"));
                     println!("• Peran / Tim  : {}", role.as_deref().unwrap_or("-"));
                     println!("• Otoritas     : {}", auth.to_uppercase());
+                    println!("• Izin Dari    : {}", granter.as_deref().unwrap_or("Otomatis/None"));
                     println!("• Catatan/Izin : {}", notes.as_deref().unwrap_or("-"));
                     println!("• Terakhir Update: {}", updated.as_deref().unwrap_or("-"));
                 }
@@ -136,7 +131,7 @@ pub fn handle_user(args: &[String]) -> anyhow::Result<()> {
         }
         "set" => {
             if args.len() < 2 {
-                eprintln!("Format salah. Contoh: aina user set 628123456789@s.whatsapp.net --name 'Budi' --role 'Developer' --authority staff --notes 'Diizinkan akses rekap'");
+                eprintln!("Format salah. Contoh: aina user set 628123456789@s.whatsapp.net --name 'Budi' --role 'Developer' --authority staff --notes 'Diizinkan akses rekap' --granted-by 6289625345646@s.whatsapp.net");
                 std::process::exit(1);
             }
             let jid = if args[1].contains('@') {
@@ -149,6 +144,7 @@ pub fn handle_user(args: &[String]) -> anyhow::Result<()> {
             let mut role: Option<String> = None;
             let mut authority: Option<String> = None;
             let mut notes: Option<String> = None;
+            let mut granted_by: Option<String> = None;
 
             let mut i = 2;
             while i < args.len() {
@@ -169,20 +165,28 @@ pub fn handle_user(args: &[String]) -> anyhow::Result<()> {
                         notes = Some(args[i + 1].clone());
                         i += 2;
                     }
+                    "--granted-by" | "-g" if i + 1 < args.len() => {
+                        granted_by = Some(args[i + 1].clone());
+                        i += 2;
+                    }
                     _ => i += 1,
                 }
             }
 
+            let role_hierarchy = authority.clone();
+
             conn.execute(
-                "INSERT INTO user_profiles (sender_jid, name, role, authority_level, notes, updated_at)
-                 VALUES (?1, ?2, ?3, COALESCE(?4, 'staff'), ?5, CURRENT_TIMESTAMP)
+                "INSERT INTO user_profiles (sender_jid, name, role, authority_level, notes, granted_by, role_hierarchy, updated_at)
+                 VALUES (?1, ?2, ?3, COALESCE(?4, 'guest'), ?5, ?6, ?7, CURRENT_TIMESTAMP)
                  ON CONFLICT(sender_jid) DO UPDATE SET
                      name = COALESCE(?2, user_profiles.name),
                      role = COALESCE(?3, user_profiles.role),
                      authority_level = COALESCE(?4, user_profiles.authority_level),
                      notes = COALESCE(?5, user_profiles.notes),
+                     granted_by = COALESCE(?6, user_profiles.granted_by),
+                     role_hierarchy = COALESCE(?7, user_profiles.role_hierarchy),
                      updated_at = CURRENT_TIMESTAMP",
-                rusqlite::params![jid, name, role, authority, notes],
+                rusqlite::params![jid, name, role, authority, notes, granted_by, role_hierarchy],
             )?;
 
             println!("✅ Profil pengguna `{}` berhasil diperbarui di Aina Profiling Memory.", jid);

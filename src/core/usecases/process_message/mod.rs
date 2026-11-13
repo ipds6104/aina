@@ -139,12 +139,21 @@ impl ProcessIncomingMessageUseCase {
                                 }
                             }
                             None => {
+                                let is_trusted_group = self.session_store.is_group_trusted(&msg.chat_jid).await.unwrap_or(false);
+                                let (authority_level, role) = if is_trusted_group {
+                                    ("staff".to_string(), Some("Rekan Tim".to_string()))
+                                } else {
+                                    ("guest".to_string(), Some("Anggota Grup".to_string()))
+                                };
                                 let new_profile = crate::core::ports::UserProfile {
                                     sender_jid: msg.sender.jid.clone(),
                                     name: Some(clean_name.to_string()),
-                                    role: Some("Rekan Tim".to_string()),
-                                    authority_level: "staff".to_string(),
-                                    notes: Some("Terdaftar otomatis dari obrolan grup".to_string()),
+                                    role,
+                                    authority_level,
+                                    notes: Some("Terdaftar otomatis dari obrolan grup (Zero Implicit Trust)".to_string()),
+                                    granted_by: None,
+                                    granted_at: None,
+                                    role_hierarchy: Some("guest".to_string()),
                                 };
                                 let _ = self.session_store.save_user_profile(&new_profile).await;
                             }
@@ -210,7 +219,7 @@ impl ProcessIncomingMessageUseCase {
 
                 // 1. Intercept local administrative / quick commands
                 if let Some(outcome) =
-                    try_handle_builtin_command(&msg, &self.session_store, &self.agent_engine).await
+                    try_handle_builtin_command(&msg, &self.session_store, &self.agent_engine, self.persona_engine.admin_jid()).await
                 {
                     audit_tracker
                         .complete_handled(

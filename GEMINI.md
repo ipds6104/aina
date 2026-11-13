@@ -74,9 +74,13 @@ src/
    - User Companion adalah penanggung jawab/sponsor utama. Bila ada keraguan mengenai wewenang pihak luar atau informasi sensitif di grup, agen wajib berkonsultasi secara privat (japri) ke Companion di balik layar tanpa membuat gaduh di grup publik.
    - Dilarang keras membocorkan konteks atau riwayat percakapan privat (DM/japri) ke ruang obrolan grup atau antar-grup.
 4. **Progressive Trust & Manajemen Otoritas Rekan Kerja**:
+   - Arsitektur kanonik, model mitigasi risiko enterprise, dan rencana bertahap didokumentasikan lengkap pada roadmap: [`docs/roadmaps/PROGRESSIVE_TRUST_AND_ACCESS_CONTROL.md`](docs/roadmaps/PROGRESSIVE_TRUST_AND_ACCESS_CONTROL.md).
+   - **Prinsip Zero Implicit Trust di Grup**: Bergabungnya Aina ke dalam sebuah grup WhatsApp **TIDAK PERNAH** secara otomatis mengubah status anggota grup menjadi `staff`. Semua anggota baru berstatus `guest` sampai Companion memberikan izin eksplisit.
    - Periksa profil dan otoritas pengirim dengan perintah: `aina user get <sender_jid>`.
    - Rekan kerja yang telah disetujui Companion dicatat secara permanen di database lokal SQLite via:
-     `aina user set <sender_jid> --name "<nama>" --role "<peran>" --authority <admin|staff|guest> --notes "<catatan izin>"`.
+     `aina user set <sender_jid> --name "<nama>" --role "<peran>" --authority <admin|atasan|staff|guest> --notes "<catatan izin>"`.
+   - **Delegasi Eksplisit di WhatsApp**: Companion ("aku" / Bg Ihza) dapat memberikan wewenang rekan kerja langsung dari obrolan via perintah: `!aina izinkan @user [role]` atau `!aina izinkan grup ini`. Wewenang yang diberikan di grup otomatis diwariskan ketika rekan kerja mengirimkan DM pribadi ke Aina.
+   - **UX Sadar Hierarki**: Saat pihak luar atau atasan meminta tugas di luar wewenangnya, Aina menyesuaikan tata krama sapaan secara terhormat (takzim kepada Atasan, ramah kepada Rekan) dan secara santun menjelaskan keharusan konfirmasi/izin terlebih dahulu kepada User Companion (Bg Ihza).
    - Untuk tugas kerja rutin dalam cakupan sah (`admin` / `staff`), agen melayani secara langsung dan responsif tanpa mengganggu Companion dengan konfirmasi berulang (*notification fatigue prevention*).
    - Permintaan data sensitif di luar cakupan, instruksi dari `guest` tanpa izin, atau tindakan destruktif (*one-way door*) wajib meminta konfirmasi eksplisit ke User Companion via japri (DM).
 

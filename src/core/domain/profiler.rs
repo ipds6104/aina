@@ -94,9 +94,23 @@ impl AutonomousProfiler {
             }
         }
 
-        // 3. Detect Role & Department / Organization:
-        // Patterns: "saya dari [X]", "staf [X]", "tim [X]", "divisi [X]", "seksi [X]", "bagian [X]"
+        // 3. Detect Role & Department / Organization (including leadership / atasan indicators):
+        // Patterns: "saya kepala [X]", "saya kabag [X]", "saya pimpinan [X]", "saya staf [X]", "tim [X]", etc.
         let role_triggers = [
+            "saya kepala bagian ",
+            "saya kepala seksi ",
+            "saya kepala dinas ",
+            "saya kepala bps ",
+            "saya kepala ",
+            "saya kabag ",
+            "saya pimpinan ",
+            "saya ketua ",
+            "saya direktur ",
+            "kepala bagian ",
+            "kepala seksi ",
+            "kepala dinas ",
+            "kepala ",
+            "kabag ",
             "saya staf ",
             "saya bagian ",
             "saya divisi ",
@@ -167,8 +181,22 @@ impl AutonomousProfiler {
                 || existing.role.as_deref() == Some("Rekan Kerja")
                 || existing.role.as_deref() == Some("Tamu")
                 || existing.role.as_deref() == Some("Anggota Tim")
+                || existing.role.as_deref() == Some("Anggota Grup")
             {
                 updated.role = Some(new_role.clone());
+            }
+
+            // Detect leadership / atasan hierarchy from role without escalating authority
+            let role_lower = new_role.to_lowercase();
+            if role_lower.contains("kepala")
+                || role_lower.contains("kabag")
+                || role_lower.contains("pimpinan")
+                || role_lower.contains("ketua")
+                || role_lower.contains("direktur")
+            {
+                if updated.role_hierarchy.as_deref() != Some("admin") {
+                    updated.role_hierarchy = Some("atasan".to_string());
+                }
             }
         }
 
@@ -300,6 +328,7 @@ mod tests {
             role: Some("Architect".to_string()),
             authority_level: "admin".to_string(),
             notes: Some("Owner".to_string()),
+            ..Default::default()
         };
 
         let extracted = ExtractedProfileInfo {
@@ -325,6 +354,7 @@ mod tests {
             role: Some("Tamu".to_string()),
             authority_level: "guest".to_string(),
             notes: Some("Terdaftar otomatis saat interaksi pertama (status: guest)".to_string()),
+            ..Default::default()
         };
 
         let extracted = ExtractedProfileInfo {

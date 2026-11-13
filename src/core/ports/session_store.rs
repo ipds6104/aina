@@ -1,13 +1,55 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UserProfile {
     pub sender_jid: String,
     pub name: Option<String>,
     pub role: Option<String>,
-    pub authority_level: String, // "admin", "staff", "guest", "external"
+    pub authority_level: String, // "admin", "atasan", "staff", "guest"
     pub notes: Option<String>,
+    #[serde(default)]
+    pub granted_by: Option<String>,
+    #[serde(default)]
+    pub granted_at: Option<i64>,
+    #[serde(default)]
+    pub role_hierarchy: Option<String>,
+}
+
+impl Default for UserProfile {
+    fn default() -> Self {
+        Self {
+            sender_jid: String::new(),
+            name: None,
+            role: None,
+            authority_level: "guest".to_string(),
+            notes: None,
+            granted_by: None,
+            granted_at: None,
+            role_hierarchy: None,
+        }
+    }
+}
+
+impl UserProfile {
+    pub fn new(
+        sender_jid: String,
+        name: Option<String>,
+        role: Option<String>,
+        authority_level: String,
+        notes: Option<String>,
+    ) -> Self {
+        Self {
+            sender_jid,
+            name,
+            role,
+            authority_level,
+            notes,
+            granted_by: None,
+            granted_at: None,
+            role_hierarchy: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -231,6 +273,15 @@ pub trait SessionStorePort: Send + Sync {
 
     /// Checks if a user is a member of a specific WhatsApp group.
     async fn is_user_in_group(&self, user_jid: &str, group_jid: &str) -> anyhow::Result<bool>;
+
+    /// Checks if a WhatsApp group is explicitly designated as trusted by Companion.
+    async fn is_group_trusted(&self, group_jid: &str) -> anyhow::Result<bool>;
+
+    /// Designates a WhatsApp group as trusted or untrusted by Companion.
+    async fn set_group_trusted(&self, group_jid: &str, is_trusted: bool, authorized_by: Option<&str>) -> anyhow::Result<()>;
+
+    /// Authorizes a user profile with an explicit authority level granted by Companion.
+    async fn authorize_user(&self, user_jid: &str, role: &str, authority: &str, notes: Option<&str>, granted_by: &str) -> anyhow::Result<()>;
 
     /// Records a new experience reflection (Harness² format: cue, lesson, evidence).
     async fn record_experience(&self, exp: &crate::core::domain::NewExperienceRecord) -> anyhow::Result<String>;

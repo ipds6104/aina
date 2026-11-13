@@ -12,14 +12,211 @@ pub struct BuiltinCommandOutcome {
     pub error_detail: Option<String>,
 }
 
+fn is_admin_sender(msg: &IncomingMessage, admin_jid: &str) -> bool {
+    if msg.is_from_me {
+        return true;
+    }
+    if admin_jid.trim().is_empty() {
+        return false;
+    }
+    let s_clean = msg.sender.jid.split('@').next().unwrap_or(&msg.sender.jid);
+    let a_clean = admin_jid.split('@').next().unwrap_or(admin_jid);
+    s_clean == a_clean
+}
+
+fn extract_target_jid(msg: &IncomingMessage, text: &str) -> Option<String> {
+    if let Some(first_mention) = msg.mentioned_jids.first() {
+        if !first_mention.trim().is_empty() {
+            let jid = if first_mention.contains('@') {
+                first_mention.clone()
+            } else {
+                format!("{}@s.whatsapp.net", first_mention)
+            };
+            return Some(jid);
+        }
+    }
+
+    for word in text.split_whitespace() {
+        let clean = word.trim_matches(|c: char| !c.is_numeric() && c != '@');
+        if clean.starts_with('@') && clean.len() >= 9 {
+            let num = &clean[1..];
+            if num.chars().all(|c| c.is_numeric()) {
+                return Some(format!("{}@s.whatsapp.net", num));
+            }
+        } else if clean.len() >= 9 && clean.chars().all(|c| c.is_numeric()) {
+            return Some(format!("{}@s.whatsapp.net", clean));
+        }
+    }
+    None
+}
+
 /// Evaluates if the incoming message is a local administrative / quick command.
 /// Returns Some(outcome) if handled, or None if it should proceed to AI agent processing.
 pub async fn try_handle_builtin_command(
     msg: &IncomingMessage,
     session_store: &Arc<dyn SessionStorePort>,
     agent_engine: &Arc<dyn AgentEnginePort>,
+    admin_jid: &str,
 ) -> Option<BuiltinCommandOutcome> {
     let trimmed_text = msg.text.trim();
+    let lower_text = trimmed_text.to_lowercase();
+
+    // 0. Companion Delegation Commands (!aina izinkan, !aina cabut, !aina trust group, etc.)
+    if lower_text.starts_with("!aina izinkan grup ini")
+        || lower_text.starts_with("!aina authorize group")
+        || lower_text.starts_with("!aina trust group")
+    {
+        if !is_admin_sender(msg, admin_jid) {
+            return Some(BuiltinCommandOutcome {
+                reply: "⚠️ *Akses Ditolak*\n\nHanya User Companion / Administrator (Bg Ihza) yang berwenang memverifikasi status kepercayaan grup.".to_string(),
+                tool_name: "builtin:auth_group",
+                usecase: "system_and_control",
+                is_error: true,
+                error_detail: Some("Unauthorized attempt to trust group".to_string()),
+            });
+        }
+
+        let _ = session_store.set_group_trusted(&msg.chat_jid, true, Some(&msg.sender.jid)).await;
+        return Some(BuiltinCommandOutcome {
+            reply: "🛡️ *Grup Tim Kerja Terverifikasi*\n\nGrup ini sekarang telah diverifikasi sebagai grup tim kerja sah oleh Bg Ihza.\nAnggota di dalam grup ini diakui memiliki wewenang staf untuk tugas-tugas koordinasi kerja bersama Aina.".to_string(),
+            tool_name: "builtin:auth_group",
+            usecase: "system_and_control",
+            is_error: false,
+            error_detail: None,
+        });
+    }
+
+    if lower_text.starts_with("!aina cabut grup ini")
+        || lower_text.starts_with("!aina revoke group")
+        || lower_text.starts_with("!aina untrust group")
+    {
+        if !is_admin_sender(msg, admin_jid) {
+            return Some(BuiltinCommandOutcome {
+                reply: "⚠️ *Akses Ditolak*\n\nHanya User Companion / Administrator (Bg Ihza) yang berwenang mencabut status kepercayaan grup.".to_string(),
+                tool_name: "builtin:auth_group",
+                usecase: "system_and_control",
+                is_error: true,
+                error_detail: Some("Unauthorized attempt to untrust group".to_string()),
+            });
+        }
+
+        let _ = session_store.set_group_trusted(&msg.chat_jid, false, Some(&msg.sender.jid)).await;
+        return Some(BuiltinCommandOutcome {
+            reply: "🔒 *Status Kepercayaan Grup Dicabut*\n\nGrup ini kembali berstatus umum (Zero Implicit Trust).\nAnggota grup memerlukan izin personal untuk mengakses tugas-tugas staf internal.".to_string(),
+            tool_name: "builtin:auth_group",
+            usecase: "system_and_control",
+            is_error: false,
+            error_detail: None,
+        });
+    }
+
+    if lower_text.starts_with("!aina izinkan") || lower_text.starts_with("!aina authorize") {
+        if !is_admin_sender(msg, admin_jid) {
+            return Some(BuiltinCommandOutcome {
+                reply: "⚠️ *Akses Ditolak*\n\nHanya User Companion / Administrator (Bg Ihza) yang berwenang mendelegasikan hak akses rekan kerja.".to_string(),
+                tool_name: "builtin:auth_user",
+                usecase: "system_and_control",
+                is_error: true,
+                error_detail: Some("Unauthorized attempt to authorize user".to_string()),
+            });
+        }
+
+        let target_opt = extract_target_jid(msg, trimmed_text);
+        if let Some(target) = target_opt {
+            let (authority, role) = if lower_text.contains("atasan") || lower_text.contains("pimpinan") {
+                ("atasan", "Pimpinan / Atasan Organisasi")
+            } else if lower_text.contains("admin") {
+                ("admin", "Administrator Sistem")
+            } else {
+                ("staff", "Rekan Tim")
+            };
+
+            let _ = session_store.authorize_user(&target, role, authority, Some("Diizinkan oleh Companion via WhatsApp"), &msg.sender.jid).await;
+            return Some(BuiltinCommandOutcome {
+                reply: format!(
+                    "✅ *Otorisasi Rekan Kerja Berhasil*\n\nPengguna *{}* telah diverifikasi sebagai *{}* (Tingkat Otoritas: *{}*) oleh Bg Ihza.\n\nWewenang ini aktif di grup ini dan berlaku penuh saat pengguna mengirim pesan pribadi (DM) ke Aina.",
+                    target, role, authority.to_uppercase()
+                ),
+                tool_name: "builtin:auth_user",
+                usecase: "system_and_control",
+                is_error: false,
+                error_detail: None,
+            });
+        } else {
+            return Some(BuiltinCommandOutcome {
+                reply: "⚠️ Format salah. Harap cantumkan mention (@nomor) atau nomor WhatsApp pengguna yang ingin diizinkan.\n\nContoh:\n`!aina izinkan @628123456789 sebagai staff`\n`!aina izinkan @628123456789 sebagai atasan`".to_string(),
+                tool_name: "builtin:auth_user",
+                usecase: "system_and_control",
+                is_error: true,
+                error_detail: Some("Missing target JID".to_string()),
+            });
+        }
+    }
+
+    if lower_text.starts_with("!aina cabut izin") || lower_text.starts_with("!aina revoke") {
+        if !is_admin_sender(msg, admin_jid) {
+            return Some(BuiltinCommandOutcome {
+                reply: "⚠️ *Akses Ditolak*\n\nHanya User Companion / Administrator (Bg Ihza) yang berwenang mencabut izin rekan kerja.".to_string(),
+                tool_name: "builtin:revoke_user",
+                usecase: "system_and_control",
+                is_error: true,
+                error_detail: Some("Unauthorized attempt to revoke user".to_string()),
+            });
+        }
+
+        let target_opt = extract_target_jid(msg, trimmed_text);
+        if let Some(target) = target_opt {
+            let _ = session_store.authorize_user(&target, "Tamu", "guest", Some("Wewenang dicabut oleh Companion"), &msg.sender.jid).await;
+            return Some(BuiltinCommandOutcome {
+                reply: format!(
+                    "🔒 *Otorisasi Pengguna Dicabut*\n\nWewenang untuk *{}* telah dikembalikan ke status *Tamu (Guest)*.",
+                    target
+                ),
+                tool_name: "builtin:revoke_user",
+                usecase: "system_and_control",
+                is_error: false,
+                error_detail: None,
+            });
+        } else {
+            return Some(BuiltinCommandOutcome {
+                reply: "⚠️ Format salah. Harap cantumkan mention (@nomor) atau nomor WhatsApp pengguna yang ingin dicabut izinnya.\n\nContoh:\n`!aina cabut izin @628123456789`".to_string(),
+                tool_name: "builtin:revoke_user",
+                usecase: "system_and_control",
+                is_error: true,
+                error_detail: Some("Missing target JID".to_string()),
+            });
+        }
+    }
+
+    if lower_text.starts_with("!aina siapa") || lower_text.starts_with("!aina cek izin") || lower_text.starts_with("!aina status user") {
+        let target = extract_target_jid(msg, trimmed_text).unwrap_or_else(|| msg.sender.jid.clone());
+        if let Ok(Some(prof)) = session_store.get_user_profile(&target).await {
+            let granter_str = prof.granted_by.as_deref().unwrap_or("Otomatis / Belum Ada");
+            return Some(BuiltinCommandOutcome {
+                reply: format!(
+                    "👤 *Profil & Wewenang Pengguna*\n• *WhatsApp JID*: {}\n• *Nama*: {}\n• *Peran*: {}\n• *Otoritas*: *{}*\n• *Diberikan Oleh*: {}\n• *Catatan*: {}",
+                    prof.sender_jid,
+                    prof.name.as_deref().unwrap_or("-"),
+                    prof.role.as_deref().unwrap_or("Tamu"),
+                    prof.authority_level.to_uppercase(),
+                    granter_str,
+                    prof.notes.as_deref().unwrap_or("-")
+                ),
+                tool_name: "builtin:check_user",
+                usecase: "system_and_control",
+                is_error: false,
+                error_detail: None,
+            });
+        } else {
+            return Some(BuiltinCommandOutcome {
+                reply: format!("ℹ️ Belum ada profil tersimpan untuk `{}` (status default: Tamu/Guest).", target),
+                tool_name: "builtin:check_user",
+                usecase: "system_and_control",
+                is_error: false,
+                error_detail: None,
+            });
+        }
+    }
 
     // 1. Heavy Audio/Video messages skip
     if msg.text.starts_with("[Pesan Audio/Voice Note diabaikan")
@@ -300,4 +497,135 @@ pub async fn try_handle_builtin_command(
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::adapters::driven::SqliteSessionStore;
+    use crate::core::domain::message::{ChatType, Platform, Sender, SessionRole};
+
+    struct DummyAgent;
+    #[async_trait::async_trait]
+    impl AgentEnginePort for DummyAgent {
+        async fn execute_with_model(
+            &self,
+            _: Option<&str>,
+            _: &str,
+            _: Option<&str>,
+        ) -> anyhow::Result<crate::core::ports::AgentResponse> {
+            Ok(crate::core::ports::AgentResponse {
+                conversation_id: "test".into(),
+                response_text: "ok".into(),
+                duration_seconds: 0.1,
+            })
+        }
+        async fn get_model(&self) -> String {
+            "default".into()
+        }
+        async fn set_model(&self, _: &str) -> anyhow::Result<()> {
+            Ok(())
+        }
+        async fn is_authenticated(&self) -> bool {
+            true
+        }
+        async fn save_auth_token(&self, _: &str) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn make_msg(sender: &str, text: &str, is_from_me: bool, mentions: Vec<String>) -> IncomingMessage {
+        IncomingMessage {
+            id: "msg_test_1".into(),
+            platform: Platform::WhatsApp,
+            session_role: SessionRole::PrimaryBot,
+            chat_jid: "12036399999@g.us".into(),
+            chat_type: ChatType::Group,
+            sender: Sender {
+                jid: sender.to_string(),
+                name: Some("Tester".into()),
+            },
+            text: text.to_string(),
+            timestamp: 1726000000,
+            quoted_message: None,
+            mentioned_jids: mentions,
+            is_bot_mentioned: true,
+            bot_lid: None,
+            is_from_me,
+            has_media: false,
+            media_type: None,
+            media_path: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_companion_can_trust_and_untrust_group() {
+        let dir = std::env::temp_dir().join(format!("aina_test_trust_group_{}", rand::random::<u32>()));
+        let db_file = dir.join("test.db");
+        let store: Arc<dyn SessionStorePort> = Arc::new(SqliteSessionStore::new(&db_file).unwrap());
+        let agent: Arc<dyn AgentEnginePort> = Arc::new(DummyAgent);
+        let admin_jid = "6289625345646@s.whatsapp.net";
+
+        let trust_msg = make_msg(admin_jid, "!aina izinkan grup ini", false, vec![]);
+        let outcome = try_handle_builtin_command(&trust_msg, &store, &agent, admin_jid).await.unwrap();
+        assert!(outcome.reply.contains("Grup Tim Kerja Terverifikasi"));
+        assert!(!outcome.is_error);
+
+        // Check store
+        assert!(store.is_group_trusted("12036399999@g.us").await.unwrap());
+
+        // Revoke
+        let revoke_msg = make_msg(admin_jid, "!aina cabut grup ini", false, vec![]);
+        let outcome_rev = try_handle_builtin_command(&revoke_msg, &store, &agent, admin_jid).await.unwrap();
+        assert!(outcome_rev.reply.contains("Status Kepercayaan Grup Dicabut"));
+        assert!(!store.is_group_trusted("12036399999@g.us").await.unwrap());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_non_companion_cannot_trust_group() {
+        let dir = std::env::temp_dir().join(format!("aina_test_unauth_trust_{}", rand::random::<u32>()));
+        let db_file = dir.join("test.db");
+        let store: Arc<dyn SessionStorePort> = Arc::new(SqliteSessionStore::new(&db_file).unwrap());
+        let agent: Arc<dyn AgentEnginePort> = Arc::new(DummyAgent);
+        let admin_jid = "6289625345646@s.whatsapp.net";
+
+        let stranger_msg = make_msg("628111222333@s.whatsapp.net", "!aina izinkan grup ini", false, vec![]);
+        let outcome = try_handle_builtin_command(&stranger_msg, &store, &agent, admin_jid).await.unwrap();
+        assert!(outcome.reply.contains("Akses Ditolak"));
+        assert!(outcome.is_error);
+        assert!(!store.is_group_trusted("12036399999@g.us").await.unwrap());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_companion_can_authorize_and_revoke_user() {
+        let dir = std::env::temp_dir().join(format!("aina_test_auth_user_{}", rand::random::<u32>()));
+        let db_file = dir.join("test.db");
+        let store: Arc<dyn SessionStorePort> = Arc::new(SqliteSessionStore::new(&db_file).unwrap());
+        let agent: Arc<dyn AgentEnginePort> = Arc::new(DummyAgent);
+        let admin_jid = "6289625345646@s.whatsapp.net";
+        let target_jid = "6287711223344@s.whatsapp.net";
+
+        let auth_msg = make_msg(admin_jid, &format!("!aina izinkan @{}", target_jid), false, vec![target_jid.to_string()]);
+        let outcome = try_handle_builtin_command(&auth_msg, &store, &agent, admin_jid).await.unwrap();
+        assert!(outcome.reply.contains("Otorisasi Rekan Kerja Berhasil"));
+        assert!(!outcome.is_error);
+
+        let prof = store.get_user_profile(target_jid).await.unwrap().unwrap();
+        assert_eq!(prof.authority_level, "staff");
+        assert_eq!(prof.granted_by.as_deref(), Some(admin_jid));
+
+        // Revoke
+        let rev_msg = make_msg(admin_jid, &format!("!aina cabut izin @{}", target_jid), false, vec![target_jid.to_string()]);
+        let outcome_rev = try_handle_builtin_command(&rev_msg, &store, &agent, admin_jid).await.unwrap();
+        assert!(outcome_rev.reply.contains("Otorisasi Pengguna Dicabut"));
+
+        let prof_rev = store.get_user_profile(target_jid).await.unwrap().unwrap();
+        assert_eq!(prof_rev.authority_level, "guest");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

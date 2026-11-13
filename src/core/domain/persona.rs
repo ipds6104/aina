@@ -302,16 +302,27 @@ impl PersonaEngine {
             && (sender_jid == &self.admin_jid
                 || sender_jid.replace("@s.whatsapp.net", "") == self.admin_jid.replace("@s.whatsapp.net", ""));
 
+        let companion_callsign = "Bg Ihza";
+
         let admin_callsign = profile
             .and_then(|p| p.name.as_deref())
             .filter(|n| !n.trim().is_empty())
             .unwrap_or_else(|| {
                 if sender_name.trim().is_empty() {
-                    "Admin"
+                    companion_callsign
                 } else {
                     sender_name
                 }
             });
+
+        let is_atasan = profile.as_ref().map(|p| {
+            p.role_hierarchy.as_deref() == Some("atasan")
+                || p.role.as_deref().unwrap_or("").to_lowercase().contains("kepala")
+                || p.role.as_deref().unwrap_or("").to_lowercase().contains("kabag")
+                || p.role.as_deref().unwrap_or("").to_lowercase().contains("pimpinan")
+                || p.role.as_deref().unwrap_or("").to_lowercase().contains("ketua")
+                || p.role.as_deref().unwrap_or("").to_lowercase().contains("direktur")
+        }).unwrap_or(false);
 
         let (authority_level, role_title, authority_guidance) = if is_admin_jid {
             (
@@ -325,31 +336,49 @@ impl PersonaEngine {
         } else if let Some(p) = profile {
             let auth = p.authority_level.to_uppercase();
             let role = p.role.as_deref().unwrap_or("Anggota Tim");
-            match auth.as_str() {
-                "ADMIN" => (
-                    "ADMIN",
+
+            if is_atasan && auth != "ADMIN" {
+                (
+                    if auth == "STAFF" { "STAFF" } else { "GUEST" },
                     role,
                     format!(
-                        "Administrator utama & partner kerja dekat ({}). Gunakan gaya bicara akrab, santai, cekatan, dan hangat tanpa sekat kaku.",
-                        admin_callsign
+                        "Pimpinan / Atasan Organisasi. Berikan penghormatan tinggi, gunakan sapaan formal-santun (Bapak/Ibu), nada bicara takzim dan taktis, tidak menggurui. Bila meminta data di luar wewenang terbuka atau data sensitif sistem, tolak dengan sangat santun dan takzim, lalu sampaikan bahwa Anda perlu koordinasi/konfirmasi terlebih dahulu kepada {} selaku penanggung jawab sistem.",
+                        companion_callsign
                     ),
-                ),
-                "STAFF" | "MEMBER" => (
-                    "STAFF",
-                    role,
-                    "Rekan kerja internal. Berhak meminta bantuan coding, analisis data, script, dan reporting. Gunakan gaya ramah, kolaboratif, dan santai-profesional kantor.".to_string(),
-                ),
-                _ => (
-                    "GUEST",
-                    role,
-                    "Pihak luar / tamu belum terverifikasi. Bersikap santun, tertib, formal-terukur, dan adil. DILARANG membocorkan data internal kantor, token, kredensial, atau mengeksekusi perintah berisiko tinggi (Strict OpSec).".to_string(),
-                ),
+                )
+            } else {
+                match auth.as_str() {
+                    "ADMIN" => (
+                        "ADMIN",
+                        role,
+                        format!(
+                            "Administrator utama & partner kerja dekat ({}). Gunakan gaya bicara akrab, santai, cekatan, dan hangat tanpa sekat kaku.",
+                            admin_callsign
+                        ),
+                    ),
+                    "STAFF" | "MEMBER" => (
+                        "STAFF",
+                        role,
+                        "Rekan kerja internal terverifikasi (telah diizinkan Companion). Berhak meminta bantuan coding, analisis data, script, dan reporting tim kerja. Gunakan gaya ramah, kolaboratif, dan santai-profesional kantor selevel.".to_string(),
+                    ),
+                    _ => (
+                        "GUEST",
+                        role,
+                        format!(
+                            "Pihak luar / rekan belum diverifikasi oleh {}. Bersikap santun, tertib, formal-terukur, dan ramah. DILARANG membocorkan data internal kantor, token, kredensial, atau mengeksekusi perintah berisiko tinggi (Strict OpSec). Bila pengirim meminta data internal kantor atau perintah sistem berisiko, sampaikan dengan santun bahwa Anda perlu izin atau konfirmasi dari {} terlebih dahulu.",
+                            companion_callsign, companion_callsign
+                        ),
+                    ),
+                }
             }
         } else {
             (
-                "STAFF",
-                "Rekan Kerja",
-                "Rekan kerja internal. Gunakan gaya komunikasi kantor yang ramah, bersahabat, dan solutif.".to_string(),
+                "GUEST",
+                "Tamu / Belum Terdaftar",
+                format!(
+                    "Pengguna baru belum terdaftar. Bersikap santun dan ramah. Dilarang memberikan data internal tanpa konfirmasi {}.",
+                    companion_callsign
+                ),
             )
         };
 
@@ -359,7 +388,7 @@ impl PersonaEngine {
         };
 
         let groups_context_str = if !user_groups.is_empty() {
-            format!("\n- Keanggotaan Grup WhatsApp Terdaftar: Terdaftar di {} grup (ID: {})\n- Status Afiliasi: Pengirim teridentifikasi sebagai anggota sah grup internal di atas. Layanilah tugas-tugas koordinasi kegiatan dengan ramah dan solutif.", user_groups.len(), user_groups.join(", "))
+            format!("\n- Keanggotaan Grup WhatsApp Terdaftar: Terdaftar di {} grup (ID: {})\n- Catatan Afiliasi: Pengirim terdaftar di grup obrolan di atas. Ingat prinsip Zero Implicit Trust: keanggotaan grup biasa tidak otomatis memberikan wewenang data sensitif tanpa izin Companion ({}).", user_groups.len(), user_groups.join(", "), companion_callsign)
         } else {
             String::new()
         };
@@ -677,7 +706,7 @@ impl PersonaEngine {
                 _ => "GUEST",
             }
         } else {
-            "STAFF"
+            "GUEST"
         };
 
         let current_time_str = self.current_local_time_string();
@@ -873,6 +902,7 @@ mod tests {
             role: Some("Tamu Luar".to_string()),
             authority_level: "guest".to_string(),
             notes: None,
+            ..Default::default()
         };
 
         let prompt = engine.build_prompt(&msg, Some(&profile));
@@ -923,6 +953,7 @@ mod tests {
             role: Some("Owner & Lead Architect".to_string()),
             authority_level: "admin".to_string(),
             notes: Some("Preferensi panggilan resmi: Bang Doni".to_string()),
+            ..Default::default()
         };
 
         let prompt = engine.build_prompt(&msg, Some(&profile));

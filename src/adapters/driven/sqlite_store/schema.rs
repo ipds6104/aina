@@ -62,12 +62,20 @@ pub fn init_schema(conn: &Connection) -> anyhow::Result<()> {
             sender_jid TEXT PRIMARY KEY,
             name TEXT,
             role TEXT,
-            authority_level TEXT NOT NULL DEFAULT 'staff',
+            authority_level TEXT NOT NULL DEFAULT 'guest',
             notes TEXT,
+            granted_by TEXT,
+            granted_at INTEGER,
+            role_hierarchy TEXT DEFAULT 'guest',
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )",
         [],
     )?;
+
+    // Ensure columns exist on legacy databases for progressive trust & delegation
+    let _ = conn.execute("ALTER TABLE user_profiles ADD COLUMN granted_by TEXT", []);
+    let _ = conn.execute("ALTER TABLE user_profiles ADD COLUMN granted_at INTEGER", []);
+    let _ = conn.execute("ALTER TABLE user_profiles ADD COLUMN role_hierarchy TEXT DEFAULT 'guest'", []);
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS scheduled_tasks (
@@ -247,11 +255,19 @@ pub fn init_schema(conn: &Connection) -> anyhow::Result<()> {
             user_jid TEXT NOT NULL,
             user_name TEXT,
             role_in_group TEXT NOT NULL DEFAULT 'member',
+            is_group_trusted BOOLEAN NOT NULL DEFAULT 0,
+            authorized_by TEXT,
+            authorized_at INTEGER,
             last_synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (group_jid, user_jid)
         )",
         [],
     )?;
+
+    // Ensure columns exist on legacy databases for group delegation
+    let _ = conn.execute("ALTER TABLE group_memberships ADD COLUMN is_group_trusted BOOLEAN NOT NULL DEFAULT 0", []);
+    let _ = conn.execute("ALTER TABLE group_memberships ADD COLUMN authorized_by TEXT", []);
+    let _ = conn.execute("ALTER TABLE group_memberships ADD COLUMN authorized_at INTEGER", []);
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_group_memberships_user 

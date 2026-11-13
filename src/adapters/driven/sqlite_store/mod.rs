@@ -346,6 +346,21 @@ impl SessionStorePort for SqliteSessionStore {
         session::is_user_in_group(&conn, user_jid, group_jid)
     }
 
+    async fn is_group_trusted(&self, group_jid: &str) -> anyhow::Result<bool> {
+        let conn = self.conn.lock().await;
+        session::is_group_trusted(&conn, group_jid)
+    }
+
+    async fn set_group_trusted(&self, group_jid: &str, is_trusted: bool, authorized_by: Option<&str>) -> anyhow::Result<()> {
+        let conn = self.conn.lock().await;
+        session::set_group_trusted(&conn, group_jid, is_trusted, authorized_by)
+    }
+
+    async fn authorize_user(&self, user_jid: &str, role: &str, authority: &str, notes: Option<&str>, granted_by: &str) -> anyhow::Result<()> {
+        let conn = self.conn.lock().await;
+        session::authorize_user(&conn, user_jid, role, authority, notes, granted_by)
+    }
+
     async fn record_experience(&self, exp: &crate::core::domain::NewExperienceRecord) -> anyhow::Result<String> {
         let conn = self.conn.lock().await;
         experience::record_experience(&conn, exp)

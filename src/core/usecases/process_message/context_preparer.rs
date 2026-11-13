@@ -28,33 +28,42 @@ impl ContextPreparer {
         // 1. Retrieve cross-channel WhatsApp group memberships for sender
         let user_groups = session_store.get_user_groups(&msg.sender.jid).await.unwrap_or_default();
 
+        // Zero Implicit Trust: Check if sender is member of any group explicitly marked as trusted by Companion
+        let mut has_trusted_group = false;
+        for g in &user_groups {
+            if session_store.is_group_trusted(g).await.unwrap_or(false) {
+                has_trusted_group = true;
+                break;
+            }
+        }
+
         // Retrieve or auto-seed sender profile
         let mut profile = match session_store.get_user_profile(&msg.sender.jid).await {
             Ok(Some(mut p)) => {
-                // Seamless promotion: if user was previously a guest, but now has confirmed group memberships,
-                // automatically verify them as staff!
-                if p.authority_level == "guest" && !user_groups.is_empty() {
+                // Progressive Trust: if user was previously a guest, but belongs to a Companion-verified group,
+                // verify them as staff!
+                if p.authority_level == "guest" && has_trusted_group {
                     p.authority_level = "staff".to_string();
-                    if p.role.as_deref().unwrap_or("Tamu") == "Tamu" {
+                    if p.role.as_deref().unwrap_or("Tamu") == "Tamu" || p.role.as_deref() == Some("Anggota Grup") {
                         p.role = Some("Rekan Tim".to_string());
                     }
-                    p.notes = Some(format!(
-                        "Otomatis diverifikasi sebagai rekan internal melalui keanggotaan {} grup WhatsApp",
-                        user_groups.len()
-                    ));
+                    p.notes = Some("Diverifikasi sebagai staf melalui keanggotaan grup terpercaya".to_string());
                     let _ = session_store.save_user_profile(&p).await;
                 }
                 p
             }
             Ok(None) => {
-                let (authority_level, role, notes) = if !user_groups.is_empty() {
+                let (authority_level, role, notes) = if has_trusted_group {
                     (
                         "staff".to_string(),
                         Some("Rekan Tim".to_string()),
-                        Some(format!(
-                            "Terdaftar otomatis dari keanggotaan {} grup WhatsApp",
-                            user_groups.len()
-                        )),
+                        Some("Terdaftar dari grup WhatsApp terpercaya oleh Companion".to_string()),
+                    )
+                } else if !user_groups.is_empty() {
+                    (
+                        "guest".to_string(),
+                        Some("Anggota Grup".to_string()),
+                        Some(format!("Terdaftar dari keanggotaan {} grup WhatsApp (status: guest)", user_groups.len())),
                     )
                 } else {
                     (
@@ -69,13 +78,16 @@ impl ContextPreparer {
                     role,
                     authority_level,
                     notes,
+                    granted_by: None,
+                    granted_at: None,
+                    role_hierarchy: Some("guest".to_string()),
                 };
                 let _ = session_store.save_user_profile(&new_profile).await;
                 new_profile
             }
             Err(e) => {
                 warn!("Failed to fetch user profile for {}: {}", msg.sender.jid, e);
-                let (authority_level, role) = if !user_groups.is_empty() {
+                let (authority_level, role) = if has_trusted_group {
                     ("staff".to_string(), Some("Rekan Tim".to_string()))
                 } else {
                     ("guest".to_string(), Some("Tamu".to_string()))
@@ -86,6 +98,9 @@ impl ContextPreparer {
                     role,
                     authority_level,
                     notes: None,
+                    granted_by: None,
+                    granted_at: None,
+                    role_hierarchy: Some("guest".to_string()),
                 }
             }
         };
@@ -577,6 +592,7 @@ mod tests {
             role: Some("Pegawai Senior".to_string()),
             authority_level: "staff".to_string(),
             notes: None,
+            ..Default::default()
         };
         store.save_user_profile(&adwin_prof).await.unwrap();
 
@@ -586,6 +602,7 @@ mod tests {
             role: Some("Rekan Tim".to_string()),
             authority_level: "staff".to_string(),
             notes: None,
+            ..Default::default()
         };
         store.save_user_profile(&syihab_prof).await.unwrap();
 
@@ -674,11 +691,23 @@ mod tests {
         // Seed group membership for Adwin
         store.record_group_membership(group_jid, adwin_jid, Some("Adwin Haithay"), Some("member")).await.unwrap();
 
-        // Adwin sends a private DM to Aina
+        // 1. Untrusted group: Adwin in untrusted group must STAY GUEST (Zero Implicit Trust!)
         let adwin_dm_msg = make_test_message(adwin_jid, Some("Adwin Haithay"), "Aina bisa bantu saya di dokter-V?");
+        let prep1 = ContextPreparer::prepare(&adwin_dm_msg, &engine, &store, false).await.unwrap();
+        match prep1 {
+            ContextPreparation::Ready { prompt } => {
+                assert!(prompt.contains("Tingkat Otoritas: GUEST"));
+                assert!(prompt.contains("Strict OpSec"));
+            }
+            _ => panic!("Expected Ready for untrusted group member DM"),
+        }
 
-        let prep = ContextPreparer::prepare(&adwin_dm_msg, &engine, &store, false).await.unwrap();
-        match prep {
+        // 2. Companion explicitly trusts group
+        store.set_group_trusted(group_jid, true, Some("6281234567890@s.whatsapp.net")).await.unwrap();
+
+        // Now Adwin is verified as STAFF!
+        let prep2 = ContextPreparer::prepare(&adwin_dm_msg, &engine, &store, false).await.unwrap();
+        match prep2 {
             ContextPreparation::Ready { prompt } => {
                 // Adwin must be recognized as STAFF / Rekan Tim, NOT a guest with Strict OpSec!
                 assert!(prompt.contains("Tingkat Otoritas: STAFF"));
@@ -686,7 +715,7 @@ mod tests {
                 assert!(prompt.contains("Keanggotaan Grup WhatsApp Terdaftar"));
                 assert!(prompt.contains("120363253842861469@g.us"));
             }
-            _ => panic!("Expected Ready for Adwin DM"),
+            _ => panic!("Expected Ready for trusted group member DM"),
         }
 
         // Verify stored profile in SQLite is now promoted to staff

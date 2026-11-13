@@ -291,7 +291,8 @@ pub fn get_recent_messages(
 
 pub fn get_user_profile(conn: &Connection, sender_jid: &str) -> anyhow::Result<Option<UserProfile>> {
     let mut stmt = conn.prepare(
-        "SELECT sender_jid, name, role, authority_level, notes FROM user_profiles WHERE sender_jid = ?1 LIMIT 1"
+        "SELECT sender_jid, name, role, authority_level, notes, granted_by, granted_at, role_hierarchy 
+         FROM user_profiles WHERE sender_jid = ?1 LIMIT 1"
     )?;
     let mut rows = stmt.query(params![sender_jid])?;
     if let Some(row) = rows.next()? {
@@ -301,6 +302,9 @@ pub fn get_user_profile(conn: &Connection, sender_jid: &str) -> anyhow::Result<O
             role: row.get(2)?,
             authority_level: row.get(3)?,
             notes: row.get(4)?,
+            granted_by: row.get(5)?,
+            granted_at: row.get(6)?,
+            role_hierarchy: row.get(7)?,
         }))
     } else {
         Ok(None)
@@ -309,21 +313,90 @@ pub fn get_user_profile(conn: &Connection, sender_jid: &str) -> anyhow::Result<O
 
 pub fn save_user_profile(conn: &Connection, profile: &UserProfile) -> anyhow::Result<()> {
     conn.execute(
-        "INSERT INTO user_profiles (sender_jid, name, role, authority_level, notes, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, CURRENT_TIMESTAMP)
+        "INSERT INTO user_profiles (sender_jid, name, role, authority_level, notes, granted_by, granted_at, role_hierarchy, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, CURRENT_TIMESTAMP)
          ON CONFLICT(sender_jid) DO UPDATE SET
             name = COALESCE(excluded.name, user_profiles.name),
             role = COALESCE(excluded.role, user_profiles.role),
             authority_level = excluded.authority_level,
             notes = COALESCE(excluded.notes, user_profiles.notes),
+            granted_by = COALESCE(excluded.granted_by, user_profiles.granted_by),
+            granted_at = COALESCE(excluded.granted_at, user_profiles.granted_at),
+            role_hierarchy = COALESCE(excluded.role_hierarchy, user_profiles.role_hierarchy),
             updated_at = CURRENT_TIMESTAMP",
         params![
             profile.sender_jid,
             profile.name,
             profile.role,
             profile.authority_level,
-            profile.notes
+            profile.notes,
+            profile.granted_by,
+            profile.granted_at,
+            profile.role_hierarchy
         ],
+    )?;
+    Ok(())
+}
+
+pub fn is_group_trusted(conn: &Connection, group_jid: &str) -> anyhow::Result<bool> {
+    let mut stmt = conn.prepare(
+        "SELECT is_group_trusted FROM group_memberships WHERE group_jid = ?1 AND is_group_trusted = 1 LIMIT 1"
+    )?;
+    let exists = stmt.exists(params![group_jid])?;
+    Ok(exists)
+}
+
+pub fn set_group_trusted(
+    conn: &Connection,
+    group_jid: &str,
+    is_trusted: bool,
+    authorized_by: Option<&str>,
+) -> anyhow::Result<()> {
+    let now = chrono::Utc::now().timestamp();
+    let updated = conn.execute(
+        "UPDATE group_memberships 
+         SET is_group_trusted = ?1, authorized_by = ?2, authorized_at = ?3 
+         WHERE group_jid = ?4",
+        params![is_trusted, authorized_by, now, group_jid],
+    )?;
+
+    if updated == 0 {
+        // Ensure trust flag is persisted even if group has no prior members recorded yet
+        conn.execute(
+            "INSERT INTO group_memberships (group_jid, user_jid, user_name, role_in_group, is_group_trusted, authorized_by, authorized_at, last_synced_at)
+             VALUES (?1, '__group_status__', 'GROUP_SYSTEM', 'system', ?2, ?3, ?4, CURRENT_TIMESTAMP)
+             ON CONFLICT(group_jid, user_jid) DO UPDATE SET
+                is_group_trusted = excluded.is_group_trusted,
+                authorized_by = excluded.authorized_by,
+                authorized_at = excluded.authorized_at,
+                last_synced_at = CURRENT_TIMESTAMP",
+            params![group_jid, is_trusted, authorized_by, now],
+        )?;
+    }
+    Ok(())
+}
+
+pub fn authorize_user(
+    conn: &Connection,
+    user_jid: &str,
+    role: &str,
+    authority: &str,
+    notes: Option<&str>,
+    granted_by: &str,
+) -> anyhow::Result<()> {
+    let now = chrono::Utc::now().timestamp();
+    conn.execute(
+        "INSERT INTO user_profiles (sender_jid, name, role, authority_level, notes, granted_by, granted_at, role_hierarchy, updated_at)
+         VALUES (?1, NULL, ?2, ?3, ?4, ?5, ?6, ?7, CURRENT_TIMESTAMP)
+         ON CONFLICT(sender_jid) DO UPDATE SET
+            role = ?2,
+            authority_level = ?3,
+            notes = COALESCE(?4, user_profiles.notes),
+            granted_by = ?5,
+            granted_at = ?6,
+            role_hierarchy = ?7,
+            updated_at = CURRENT_TIMESTAMP",
+        params![user_jid, role, authority, notes, granted_by, now, authority],
     )?;
     Ok(())
 }

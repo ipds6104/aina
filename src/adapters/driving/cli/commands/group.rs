@@ -7,6 +7,8 @@ pub fn handle_group(args: &[String]) -> anyhow::Result<()> {
     aina group list [--json]
     aina group members <group_jid> [--json]
     aina group user <user_jid> [--json]
+    aina group trust <group_jid> [--by <admin_jid>]
+    aina group untrust <group_jid>
     aina group add <group_jid> <user_jid> [--name <nama>] [--role <peran>]
     aina group remove <group_jid> <user_jid>
 "#
@@ -33,7 +35,7 @@ pub fn handle_group(args: &[String]) -> anyhow::Result<()> {
         "list" | "ls" => {
             let as_json = args.iter().any(|a| a == "--json");
             let mut stmt = conn.prepare(
-                "SELECT group_jid, COUNT(user_jid) as member_count, MAX(last_synced_at) as last_sync
+                "SELECT group_jid, COUNT(user_jid) as member_count, MAX(last_synced_at) as last_sync, MAX(is_group_trusted) as is_trusted
                  FROM group_memberships
                  GROUP BY group_jid
                  ORDER BY member_count DESC",
@@ -44,6 +46,7 @@ pub fn handle_group(args: &[String]) -> anyhow::Result<()> {
                     "group_jid": row.get::<_, String>(0)?,
                     "member_count": row.get::<_, i64>(1)?,
                     "last_synced_at": row.get::<_, Option<String>>(2)?,
+                    "is_group_trusted": row.get::<_, bool>(3)?,
                 }))
             })?;
 
@@ -57,7 +60,7 @@ pub fn handle_group(args: &[String]) -> anyhow::Result<()> {
                 return Ok(());
             }
 
-            println!("👥 Direktori Grup WhatsApp Terdaftar (Aina Group Directory Cache)");
+            println!("👥 Direktori Grup WhatsApp Terdaftar (Aina Group Directory & Trust Cache)");
             println!("================================================================================");
             if groups.is_empty() {
                 println!("(Belum ada grup yang tersinkronisasi di direktori lokal)");
@@ -66,11 +69,34 @@ pub fn handle_group(args: &[String]) -> anyhow::Result<()> {
                     let jid = g["group_jid"].as_str().unwrap_or("-");
                     let count = g["member_count"].as_i64().unwrap_or(0);
                     let sync = g["last_synced_at"].as_str().unwrap_or("-");
-                    println!("• {} ({} anggota)", jid, count);
-                    println!("  Terakhir Sinkron: {}", sync);
+                    let is_trusted = g["is_group_trusted"].as_bool().unwrap_or(false);
+                    let trust_badge = if is_trusted { " [🛡️ TERPERCAYA/TIM]" } else { " [Umum/Zero-Trust]" };
+                    println!("• {}{}", jid, trust_badge);
+                    println!("  Jumlah Anggota: {} | Terakhir Sinkron: {}", count, sync);
                     println!("--------------------------------------------------------------------------------");
                 }
             }
+            Ok(())
+        }
+        "trust" => {
+            if args.len() < 2 {
+                eprintln!("Format salah. Contoh: aina group trust 120363253842861469@g.us [--by <companion_jid>]");
+                std::process::exit(1);
+            }
+            let group_jid = &args[1];
+            let by = args.get(2).and_then(|a| if a == "--by" { args.get(3) } else { None }).map(|s| s.as_str());
+            crate::adapters::driven::sqlite_store::session::set_group_trusted(&conn, group_jid, true, by)?;
+            println!("🛡️ Grup `{}` sekarang berstatus TERPERCAYA (Trusted Team Group).", group_jid);
+            Ok(())
+        }
+        "untrust" => {
+            if args.len() < 2 {
+                eprintln!("Format salah. Contoh: aina group untrust 120363253842861469@g.us");
+                std::process::exit(1);
+            }
+            let group_jid = &args[1];
+            crate::adapters::driven::sqlite_store::session::set_group_trusted(&conn, group_jid, false, None)?;
+            println!("🔒 Status kepercayaan grup `{}` telah dicabut (Zero Implicit Trust).", group_jid);
             Ok(())
         }
         "members" => {
