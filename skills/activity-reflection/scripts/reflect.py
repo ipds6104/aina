@@ -647,7 +647,19 @@ def generate_adaptation_suggestions(
         "description": f"Tambahkan ketenangan malam hari di {dest['name']} ke status malam."
     })
 
-    # 4. Bridge ke Experience Library: Kristalisasi Pelajaran jika Ada Tugas yang Gagal
+    # 4. Injeksi Kebaruan (Novelty Discovery) jika jenuh atau memasuki akhir pekan
+    novelty_info = eval_result.get("novelty", {})
+    if novelty_info.get("boredom_score", 0.0) >= 0.5 or now_wib.weekday() in [4, 5, 6]:
+        prompts = eval_result.get("web_search_prompts", [])
+        top_query = prompts[-1]["query"] if prompts else "tren teknologi AI inovasi gaya hidup 2026"
+        suggestions.append({
+            "slug": "novelty_discovery",
+            "action": "discover_interest",
+            "cmd": 'python3 scripts/persona_status.py discover --today --recency today',
+            "description": f"Picu eksplorasi minat baru (Novelty Curiosity Engine) untuk memperkaya wawasan dan variasi status Aina (rekomendasi query: {top_query})."
+        })
+
+    # 5. Bridge ke Experience Library: Kristalisasi Pelajaran jika Ada Tugas yang Gagal
     perf = eval_result.get("performance", {})
     failed_items = perf.get("failed_task_items", [])
     for fr in failed_items:

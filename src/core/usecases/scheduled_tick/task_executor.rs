@@ -208,6 +208,10 @@ impl TaskExecutor {
             .unwrap_or_else(|| format!("Epoch: {}", now_epoch));
 
         let is_story = task.target_jid == "status@broadcast" || task.target_jid == "status";
+        let is_internal_silent = task.target_jid == "self"
+            || task.target_jid == "internal"
+            || task.target_jid.is_empty()
+            || task.payload.contains("[NO_SEND]");
 
         let story_delivery_rule = if is_story {
             "Target adalah Status/Story WhatsApp (24 jam).\n\
@@ -220,25 +224,42 @@ impl TaskExecutor {
             4. ATURAN PENGIRIMAN: Untuk pesan teks biasa, DILARANG memanggil 'wa_tool.py send-text' di terminal karena teks respons Anda akan dikirim otomatis oleh scheduler backend! Namun, jika tugas ini secara spesifik meminta pengiriman berkas, dokumen, atau GAMBAR/SCREENSHOT, Anda DIPERBOLEHKAN memanggil 'python3 skills/whatsmeow/scripts/wa_tool.py send-media --to <target> --file <path_file> --caption <keterangan_singkat>'.\n"
         };
 
-        let prompt = format!(
-            "🔔 [TUGAS TERJADWAL OTOMATIS - WAKE UP CALL]\n\
-            Judul Tugas: {}\n\
-            Waktu Eksekusi: {}\n\
-            Target Pengiriman: WhatsApp ({})\n\
-            Instruksi Utama:\n{}\n\n\
-            PETUNJUK FORMAT RESPON & EFISIENSI KUOTA UNTUK AINA:\n\
-            1. EFISIENSI KUOTA: Lakukan maksimal 1 hingga 2 kali pencarian web (search_web) yang paling esensial. DILARANG KERAS melakukan pencarian berulang-ulang tanpa henti!\n\
-            2. Susun hasil akhir secara rapi, padat, dan ramah ponsel (format WhatsApp: *tebal*, bullet points •).\n\
-            3. {}\
-            4. PROTOKOL NO-OP / SILENT SKIP: Jika kondisi tugas tidak terpenuhi (misalnya data tidak ada, atau hasil analisis/pengecekan kalender menunjukkan tidak perlu mengirim pesan), Anda WAJIB menjawab HANYA dengan kata '[NO_SEND]' tanpa teks lain, agar sistem tidak mengirimkan pesan yang tidak perlu ke chat WhatsApp.\n\
-            5. DILARANG KERAS menyertakan laporan status teknis internal seperti 'Status: Terkirim', 'Pesan berhasil dikirim', 'Memproses pengunggahan...', dsb.\n\
-            6. Berikan langsung teks hasil riset atau informasi akhir yang siap dibaca oleh penerima.",
-            task.title,
-            current_time_str,
-            task.target_jid,
-            task.payload,
-            story_delivery_rule,
-        );
+        let prompt = if is_internal_silent {
+            format!(
+                "🔔 [TUGAS TERJADWAL OTOMATIS - WAKE UP CALL (INTERNAL BACKGROUND WORKER)]\n\
+                Judul Tugas: {}\n\
+                Waktu Eksekusi: {}\n\
+                Tipe Tugas: Pemeliharaan & Adaptasi Internal (Silent)\n\
+                Instruksi Utama:\n{}\n\n\
+                PETUNJUK EKSEKUSI TUGAS INTERNAL (BACKGROUND WORKER):\n\
+                1. FOKUS EKSEKUSI & MUTASI STATE: Jalankan tool / CLI yang diperlukan secara aktif untuk mengevaluasi data, menguji sistem, memperbarui jadwal, atau merefleksikan aktivitas.\n\
+                2. RISET AKTUAL: Lakukan 1 kali pencarian web (search_web) jika tugas memerlukan wawasan atau fakta terkini (tahun 2026).\n\
+                3. SELESAI SECARA SILENT: Setelah seluruh mutasi file, database, atau pendaftaran aktivitas selesai dijalankan dengan sukses, akhiri jawaban Anda murni dengan kata '[NO_SEND]' agar sistem backend tidak mengirimkan pesan obrolan ke chat WhatsApp.",
+                task.title,
+                current_time_str,
+                task.payload,
+            )
+        } else {
+            format!(
+                "🔔 [TUGAS TERJADWAL OTOMATIS - WAKE UP CALL]\n\
+                Judul Tugas: {}\n\
+                Waktu Eksekusi: {}\n\
+                Target Pengiriman: WhatsApp ({})\n\
+                Instruksi Utama:\n{}\n\n\
+                PETUNJUK FORMAT RESPON & EFISIENSI KUOTA UNTUK AINA:\n\
+                1. EFISIENSI KUOTA: Lakukan maksimal 1 hingga 2 kali pencarian web (search_web) yang paling esensial. DILARANG KERAS melakukan pencarian berulang-ulang tanpa henti!\n\
+                2. Susun hasil akhir secara rapi, padat, dan ramah ponsel (format WhatsApp: *tebal*, bullet points •).\n\
+                3. {}\
+                4. PROTOKOL NO-OP / SILENT SKIP: Jika kondisi tugas tidak terpenuhi (misalnya data tidak ada, atau hasil analisis/pengecekan kalender menunjukkan tidak perlu mengirim pesan), Anda WAJIB menjawab HANYA dengan kata '[NO_SEND]' tanpa teks lain, agar sistem tidak mengirimkan pesan yang tidak perlu ke chat WhatsApp.\n\
+                5. DILARANG KERAS menyertakan laporan status teknis internal seperti 'Status: Terkirim', 'Pesan berhasil dikirim', 'Memproses pengunggahan...', dsb.\n\
+                6. Berikan langsung teks hasil riset atau informasi akhir yang siap dibaca oleh penerima.",
+                task.title,
+                current_time_str,
+                task.target_jid,
+                task.payload,
+                story_delivery_rule,
+            )
+        };
 
         let pred_id = format!("sched_{}_{}", task.id, now_epoch);
         let pred = NewMetacognitivePrediction {
