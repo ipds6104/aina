@@ -116,7 +116,7 @@ pub async fn api_audit_action_detail_handler(
 
     match audit_res {
         Ok(Some(audit)) => {
-            let brain_path = crate::core::domain::AuditEngine::default_brain_path();
+            let brain_path = state.brain_dir.clone();
             let (raw_steps, _) = if let Some(ref conv_id) = audit.conversation_id {
                 crate::core::domain::AuditEngine::load_transcript_for_conversation(&brain_path, conv_id)
             } else {
@@ -231,7 +231,7 @@ pub async fn api_audit_diagnostics_handler(
         );
     }
 
-    let brain_path = crate::core::domain::AuditEngine::default_brain_path();
+    let brain_path = state.brain_dir.clone();
     let (rss, virt) = crate::core::domain::AuditEngine::read_process_memory();
     let db_size = std::fs::metadata("data/aina.db")
         .or_else(|_| std::fs::metadata("aina.db"))
@@ -294,7 +294,7 @@ pub async fn api_audit_transcripts_handler(
         );
     }
 
-    let brain_path = crate::core::domain::AuditEngine::default_brain_path();
+    let brain_path = state.brain_dir.clone();
     let limit = query.limit.unwrap_or(50).min(500);
     let steps = crate::core::domain::AuditEngine::query_audit_trail(
         &brain_path,

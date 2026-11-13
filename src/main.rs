@@ -40,6 +40,18 @@ async fn main() -> anyhow::Result<()> {
 
     let persona_text = config.load_persona();
     let org_text = config.load_organization();
+
+    // Root of Trust sanity check: without ADMIN_JID nobody can delegate access,
+    // and Companion-only commands (/model, /token, group trust) become unusable.
+    if config.agent.admin_jid.trim().is_empty() {
+        tracing::warn!(
+            "ADMIN_JID is not set and no Companion JID fallback exists. No principal will \
+             resolve to `admin`, so `aina policy` mutations and Companion commands will be \
+             refused. Set ADMIN_JID (phone JID + LID, comma separated) or AINA_ADMIN_JID."
+        );
+    } else {
+        tracing::info!("Root of Trust (admin identities): {}", config.agent.admin_jid);
+    }
     info!(
         "Loaded persona with {} characters, organization context with {} characters",
         persona_text.len(),
@@ -188,6 +200,7 @@ async fn main() -> anyhow::Result<()> {
         active_tasks: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
         presence_tracker: Arc::clone(&presence_tracker),
         workspace_dir: std::path::PathBuf::from(&config.agent.workspace_dir),
+        brain_dir: crate::core::domain::AuditEngine::default_brain_path(),
     });
     let app = create_router(state);
 

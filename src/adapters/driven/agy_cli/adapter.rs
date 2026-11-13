@@ -153,13 +153,14 @@ impl AntigravityCliAdapter {
     }
 }
 
-#[async_trait]
-impl AgentEnginePort for AntigravityCliAdapter {
-    async fn execute_with_model(
+impl AntigravityCliAdapter {
+    /// Core execution path shared by both `AgentEnginePort` entry points.
+    async fn run_agent(
         &self,
         conversation_id: Option<&str>,
         prompt: &str,
         model_override: Option<&str>,
+        turn_token: Option<&str>,
     ) -> anyhow::Result<AgentResponse> {
         let active_model = match model_override {
             Some(m) if !m.trim().is_empty() => resolve_model_name(m)?,
@@ -228,6 +229,11 @@ impl AgentEnginePort for AntigravityCliAdapter {
             }
             if let Some(ref comp_key) = self.companion_api_key {
                 cmd.env("WHATSMEOW_COMPANION_KEY", comp_key);
+            }
+            // Scoped, short-lived authorization proof for agent-proposed policy
+            // changes (`aina policy ...`). Absent token => guest-level actions only.
+            if let Some(token) = turn_token {
+                cmd.env("AINA_TURN_TOKEN", token);
             }
 
             let start_instant = std::time::Instant::now();
@@ -413,6 +419,36 @@ impl AgentEnginePort for AntigravityCliAdapter {
         }
 
         anyhow::bail!("All account attempts exhausted.");
+    }
+}
+
+#[async_trait]
+impl AgentEnginePort for AntigravityCliAdapter {
+    async fn execute_with_model(
+        &self,
+        conversation_id: Option<&str>,
+        prompt: &str,
+        model_override: Option<&str>,
+    ) -> anyhow::Result<AgentResponse> {
+        self.run_agent(conversation_id, prompt, model_override, None)
+            .await
+    }
+
+    async fn execute_with_capability(
+        &self,
+        conversation_id: Option<&str>,
+        prompt: &str,
+        capability: Option<&crate::core::domain::capability::TurnCapability>,
+    ) -> anyhow::Result<AgentResponse> {
+        // The token is injected only into this child process environment, so a
+        // turn can never inherit (or escalate into) another turn's authority.
+        self.run_agent(
+            conversation_id,
+            prompt,
+            None,
+            capability.map(|c| c.token.as_str()),
+        )
+        .await
     }
 
     async fn get_model(&self) -> String {

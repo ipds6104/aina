@@ -1,5 +1,23 @@
 use rusqlite::Connection;
 
+/// `aina group trust|untrust` is an operator escape hatch, not an agent tool.
+///
+/// Authorization must go through `aina policy`, which validates a turn
+/// capability. Walking up to an unvalidated command would silently bypass the
+/// whole gate, so this path only accepts a human at an interactive terminal.
+fn require_local_operator(command: &str) -> anyhow::Result<()> {
+    use std::io::IsTerminal;
+    if !(std::io::stdin().is_terminal() && std::io::stdout().is_terminal()) {
+        eprintln!(
+            "⛔ `aina {command}` hanya tersedia bagi operator manusia di terminal interaktif.\n\
+             Untuk konteks agen/WhatsApp gunakan `aina policy trust-group` / `aina policy untrust-group`,\n\
+             yang memvalidasi capability tur terlebih dahulu."
+        );
+        std::process::exit(2);
+    }
+    Ok(())
+}
+
 pub fn handle_group(args: &[String]) -> anyhow::Result<()> {
     if args.is_empty() {
         println!(
@@ -79,6 +97,7 @@ pub fn handle_group(args: &[String]) -> anyhow::Result<()> {
             Ok(())
         }
         "trust" => {
+            require_local_operator("group trust")?;
             if args.len() < 2 {
                 eprintln!("Format salah. Contoh: aina group trust 120363253842861469@g.us [--by <companion_jid>]");
                 std::process::exit(1);
@@ -90,6 +109,7 @@ pub fn handle_group(args: &[String]) -> anyhow::Result<()> {
             Ok(())
         }
         "untrust" => {
+            require_local_operator("group untrust")?;
             if args.len() < 2 {
                 eprintln!("Format salah. Contoh: aina group untrust 120363253842861469@g.us");
                 std::process::exit(1);

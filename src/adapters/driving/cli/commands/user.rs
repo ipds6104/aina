@@ -175,6 +175,17 @@ pub fn handle_user(args: &[String]) -> anyhow::Result<()> {
 
             let role_hierarchy = authority.clone();
 
+            // `admin` is the Root of Trust and is bound to ADMIN_JID config only.
+            // Accepting it here would turn a single CLI call into full escalation.
+            if authority.as_deref() == Some("admin") {
+                eprintln!(
+                    "⛔ Otoritas `admin` tidak dapat diberikan melalui `aina user set`.\n\
+                     `admin` hanya berasal dari konfigurasi ADMIN_JID (Root of Trust).\n\
+                     Gunakan `aina policy grant-user <jid> --authority atasan|staff` untuk delegasi."
+                );
+                std::process::exit(2);
+            }
+
             conn.execute(
                 "INSERT INTO user_profiles (sender_jid, name, role, authority_level, notes, granted_by, role_hierarchy, updated_at)
                  VALUES (?1, ?2, ?3, COALESCE(?4, 'guest'), ?5, ?6, ?7, CURRENT_TIMESTAMP)

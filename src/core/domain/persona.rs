@@ -297,10 +297,9 @@ impl PersonaEngine {
             .unwrap_or("Rekan Kerja");
         let sender_jid = &msg.sender.jid;
 
-        // Determine authority level based on ADMIN_JID or stored profile
-        let is_admin_jid = !self.admin_jid.trim().is_empty()
-            && (sender_jid == &self.admin_jid
-                || sender_jid.replace("@s.whatsapp.net", "") == self.admin_jid.replace("@s.whatsapp.net", ""));
+        // Root of Trust comes from configuration only (may be a list of JIDs:
+        // phone number + LID). A stored "admin" row is never trusted here.
+        let is_admin_jid = crate::core::domain::capability::is_admin_identity(&self.admin_jid, sender_jid);
 
         let companion_callsign = "Bg Ihza";
 
@@ -693,15 +692,14 @@ impl PersonaEngine {
             .unwrap_or("Rekan Kerja");
         let sender_jid = &msg.sender.jid;
 
-        let is_admin_jid = !self.admin_jid.trim().is_empty()
-            && (sender_jid == &self.admin_jid
-                || sender_jid.replace("@s.whatsapp.net", "") == self.admin_jid.replace("@s.whatsapp.net", ""));
+        let is_admin_jid = crate::core::domain::capability::is_admin_identity(&self.admin_jid, sender_jid);
 
         let authority_level = if is_admin_jid {
             "ADMIN"
         } else if let Some(p) = profile {
             match p.authority_level.to_uppercase().as_str() {
-                "ADMIN" => "ADMIN",
+                // Legacy rows may claim ADMIN; only configuration grants it.
+                "ADMIN" | "ATASAN" => "ATASAN",
                 "STAFF" | "MEMBER" => "STAFF",
                 _ => "GUEST",
             }

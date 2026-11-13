@@ -1,6 +1,7 @@
 pub mod activity;
 pub mod archive;
 pub mod audit;
+pub mod capability;
 pub mod conversation_heuristics;
 pub mod gatekeeper;
 pub mod knowledge;
@@ -20,6 +21,11 @@ pub mod workspace;
 pub use activity::*;
 pub use archive::{ArchiveEngine, ArchiveSearchFilter};
 pub use audit::*;
+#[allow(unused_imports)]
+pub use capability::{
+    evaluate as evaluate_policy, Authority, PolicyAction, PolicyDecision, TurnCapability,
+    CAPABILITY_TTL_SECS,
+};
 pub use conversation_heuristics::*;
 pub use gatekeeper::Gatekeeper;
 pub use knowledge::KnowledgeEngine;

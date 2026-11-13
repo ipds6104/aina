@@ -608,6 +608,9 @@ mod tests {
         async fn is_group_trusted(&self, _group_jid: &str) -> anyhow::Result<bool> { Ok(false) }
         async fn set_group_trusted(&self, _group_jid: &str, _is_trusted: bool, _authorized_by: Option<&str>) -> anyhow::Result<()> { Ok(()) }
         async fn authorize_user(&self, _user_jid: &str, _role: &str, _authority: &str, _notes: Option<&str>, _granted_by: &str) -> anyhow::Result<()> { Ok(()) }
+        async fn create_turn_capability(&self, _capability: &crate::core::domain::capability::TurnCapability) -> anyhow::Result<()> { Ok(()) }
+        async fn get_turn_capability(&self, _token: &str) -> anyhow::Result<Option<crate::core::domain::capability::TurnCapability>> { Ok(None) }
+        async fn purge_expired_turn_capabilities(&self, _now: i64) -> anyhow::Result<usize> { Ok(0) }
         async fn record_experience(&self, _exp: &crate::core::domain::NewExperienceRecord) -> anyhow::Result<String> { Ok("exp_dummy_1".to_string()) }
         async fn get_experience(&self, _id: &str) -> anyhow::Result<Option<crate::core::domain::ExperienceRecord>> { Ok(None) }
         async fn search_experiences(&self, _query: &str, _domain: Option<&str>, _limit: usize) -> anyhow::Result<Vec<crate::core::domain::ExperienceRecord>> { Ok(vec![]) }
@@ -714,6 +717,7 @@ mod tests {
             active_tasks: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
             presence_tracker: Arc::new(crate::core::domain::PresenceTracker::new()),
             workspace_dir: temp_dir.clone(),
+            brain_dir: temp_dir.join("brain"),
         });
 
         let app = create_router(state);
@@ -827,6 +831,7 @@ mod tests {
             active_tasks: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
             presence_tracker: Arc::new(crate::core::domain::PresenceTracker::new()),
             workspace_dir: temp_dir.clone(),
+            brain_dir: temp_dir.join("brain"),
         });
 
         let app = create_router(state);

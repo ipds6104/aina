@@ -636,6 +636,20 @@ aina user get 6281234567890@s.whatsapp.net
 aina user list
 aina user search "Analyst"
 
+# 5b. Gerbang Otorisasi Agentic (`aina policy`) — satu-satunya jalur yang sah
+#     untuk mengubah kepercayaan grup / wewenang rekan kerja.
+#     Tanpa capability tur yang valid (dari percakapan WhatsApp terverifikasi),
+#     semua aksi yang mengubah otorisasi akan DITOLAK.
+aina policy status --json
+aina policy trust-group --reason "Tim kerja BPS Mempawah" --json
+aina policy trust-group 120363253842861469@g.us --json
+aina policy grant-user 6281234567890@s.whatsapp.net --authority staff \
+  --role "Rekan Kerja BPS Mempawah" --json
+aina policy revoke-user 6281234567890@s.whatsapp.net --json
+#     Otoritas `admin` TIDAK bisa diberikan lewat tool apa pun; hanya dari
+#     ADMIN_JID. `aina group trust|untrust` adalah escape hatch operator
+#     (wajib terminal interaktif), bukan jalur agen.
+
 # 6. Kontrol & Pengalihan Model AI Runtime
 aina model get
 aina model list
@@ -854,7 +868,8 @@ Aina didesain dengan prinsip **Privacy-First & Zero Leakage** untuk lingkungan k
 | `AGENT_TIMEOUT_SECONDS` | `300` | Batas waktu timeout eksekusi agent dalam detik |
 | `DATABASE_PATH` | `data/aina.db` | Path berkas SQLite database (`/app/data/aina.db` di container) |
 | `ADMIN_KEY` / `AINA_ADMIN_KEY` | *(Auto-generated)* | Kunci rahasia untuk membuka kunci Web Simulator & Wizard |
-| `ADMIN_JID` / `AINA_ADMIN_JID` | - | Nomor WhatsApp pemilik/admin dengan hak wewenang penuh |
+| `ADMIN_JID` / `AINA_ADMIN_JID` | - | Identitas Root of Trust yang boleh mengubah otorisasi. Boleh **daftar dipisah koma**: `628xxx@s.whatsapp.net,123456789012345@lid` (nomor telepon untuk DM + LID untuk grup). Jika kosong, otomatis memakai `WHATSMEOW_COMPANION_JID` |
+| `ADMIN_LID` / `AINA_ADMIN_LID` | - | Alternatif ringkas untuk menambahkan identitas `…@lid` ke Root of Trust tanpa menulis ulang `ADMIN_JID` |
 | `AINA_TOKEN_STRATEGY` | `round_robin` | Strategi rotasi pool akun: `round_robin` (diputar merata) atau `sticky` (prioritas sampai limit) |
 | `AINA_OAUTH_TOKEN` | - | *(Opsional)* Token OAuth Antigravity CLI mentah (JSON) untuk auto-injeksi di Coolify/Docker |
 | `ANTIGRAVITY_TOKEN_PATH` | `/root/.gemini/antigravity-cli/antigravity-oauth-token` | Path berkas token Antigravity aktif di server |
@@ -956,6 +971,13 @@ Kami sangat menyambut kontribusi dari komunitas! Baik berupa perbaikan bug, inte
 
 ```bash
 # Menjalankan pengujian regresi lokal sebelum membuat Pull Request:
-cargo test
+make test          # cargo nextest (paralel, proses-per-test) + cargo test --doc
+make test-fast     # hanya unit test library, untuk iterasi cepat
 cargo clippy --all-targets --all-features -- -D warnings
 ```
+
+`cargo test` tetap didukung, tetapi `cargo nextest` 10–20× lebih cepat pada
+suite ini karena setiap test berjalan di proses terpisah dan paralel. Konfigurasi
+timeout per test ada di `.config/nextest.toml` (warn 10 s, terminate 60 s), jadi
+satu test yang menggantung tidak lagi memblokir seluruh suite. Doc-test tetap
+dijalankan terpisah karena nextest tidak menjalankannya.

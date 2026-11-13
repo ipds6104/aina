@@ -236,6 +236,30 @@ PENGGUNAAN:
                                 --limit, -l <n>         Batas entri (default: 20)
                                 --json                  Output format JSON terstruktur
 
+    policy status             Status capability tur: siapa pengirim terverifikasi & wewenangnya
+                              Options:
+                                --json                  Output format JSON terstruktur
+
+    policy trust-group [jid]  Usulkan verifikasi grup tim kerja (wajib capability Admin)
+                              Options:
+                                --reason <teks>         Alasan / konteks keputusan
+                                --json                  Output format JSON terstruktur
+
+    policy untrust-group [jid] Cabut verifikasi grup (kembali Zero Implicit Trust)
+                              Options:
+                                --json                  Output format JSON terstruktur
+
+    policy grant-user <jid>   Beri wewenang rekan kerja (staff/atasan) — tidak bisa `admin`
+                              Options:
+                                --authority <level>     staff | atasan (default: staff)
+                                --role <peran>          Label peran, misal "Rekan Kerja BPS Mempawah"
+                                --notes <catatan>       Catatan audit
+                                --json                  Output format JSON terstruktur
+
+    policy revoke-user <jid>  Cabut wewenang pengguna (kembali guest)
+                              Options:
+                                --json                  Output format JSON terstruktur
+
     help, --help, -h          Tampilkan panduan ini
 "#
         );
@@ -269,6 +293,7 @@ PENGGUNAAN:
             "status" => commands::handle_whatsapp(&args[1..]),
             "user" | "profile" => commands::handle_user(&args[2..]),
             "group" | "groups" => commands::handle_group(&args[2..]),
+            "policy" => commands::handle_policy(&args[2..]),
             "activity" | "act" => commands::handle_activity(&args[2..]).await,
             "schedule" | "cron" => commands::handle_schedule(&args[2..]).await,
             "persona" => commands::handle_persona(&args[2..]).await,

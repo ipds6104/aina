@@ -144,3 +144,29 @@ Sesuai filosofi *Old Coder*:
 2. **Zero-Mock & Zero Technical Debt**:
    - Seluruh penyimpanan menggunakan SQLite nyata di test transaction atau temp file.
    - Tidak ada stub bohong atau hardcoded bypass.
+
+---
+
+## 7. Catatan Implementasi: Dari Deteksi Kata ke Capability Tur (Nov 2026)
+
+Roadmap Fase 2 semula mengandalkan prefix `!aina izinkan ...`. Implementasi
+produksi membuktikan pendekatan itu gagal: pesan alami tidak pernah cocok
+dengan prefix, dan `ADMIN_JID` yang kosong membuat seluruh jalur delegasi mati
+diam-diam. Penggantinya:
+
+1. **Agen memahami niat, core memutuskan izin.** Agen menerjemahkan permintaan
+   menjadi `aina policy trust-group|untrust-group|grant-user|revoke-user`.
+2. **Bukti otorisasi = `TurnCapability`** (token 192-bit, TTL 600 s) yang dibuat
+   core untuk pengirim WhatsApp yang terverifikasi dan disuntikkan hanya ke
+   proses agen lewat `AINA_TURN_TOKEN`.
+3. **`admin` tidak pernah dapat didelegasikan** — hanya berasal dari konfigurasi.
+   Baris `user_profiles.authority_level='admin'` yang lama di-clamp menjadi
+   `atasan` agar tidak menjadi jalur eskalasi.
+4. **Identitas Root of Trust bersifat jamak.** Setelah migrasi LID WhatsApp,
+   satu orang muncul sebagai `…@s.whatsapp.net` di DM dan `…@lid` di grup.
+   `ADMIN_JID` menerima daftar dipisah koma (`ADMIN_JID` + `ADMIN_LID`), dengan
+   fallback otomatis ke `WHATSMEOW_COMPANION_JID`. Tanpa ini, permintaan
+   otorisasi dari dalam grup akan ditolak meski dikirim oleh Companion himself.
+5. **Skill bawaan** `skills/policy-broker/SKILL.md` mengatur kapan agen memanggil
+   tool, cara membaca `"ok": true|false`, dan larangan mengklaim sukses tanpa
+   bukti.

@@ -283,6 +283,21 @@ pub trait SessionStorePort: Send + Sync {
     /// Authorizes a user profile with an explicit authority level granted by Companion.
     async fn authorize_user(&self, user_jid: &str, role: &str, authority: &str, notes: Option<&str>, granted_by: &str) -> anyhow::Result<()>;
 
+    /// Persists a short-lived turn capability minted for a verified sender.
+    async fn create_turn_capability(
+        &self,
+        capability: &crate::core::domain::capability::TurnCapability,
+    ) -> anyhow::Result<()>;
+
+    /// Looks up a turn capability by its opaque token.
+    async fn get_turn_capability(
+        &self,
+        token: &str,
+    ) -> anyhow::Result<Option<crate::core::domain::capability::TurnCapability>>;
+
+    /// Deletes expired capabilities and returns how many rows were removed.
+    async fn purge_expired_turn_capabilities(&self, now: i64) -> anyhow::Result<usize>;
+
     /// Records a new experience reflection (Harness² format: cue, lesson, evidence).
     async fn record_experience(&self, exp: &crate::core::domain::NewExperienceRecord) -> anyhow::Result<String>;
 

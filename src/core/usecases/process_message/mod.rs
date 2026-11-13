@@ -21,7 +21,7 @@ pub use crate::core::domain::{detect_conversational_closing, split_response_into
 use crate::core::domain::{ChatType, Gatekeeper, GatekeeperDecision, IncomingMessage, PersonaEngine, PresenceState};
 use crate::core::ports::{AgentEnginePort, SessionStorePort, WhatsAppPort};
 use std::sync::Arc;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 pub struct ProcessIncomingMessageUseCase {
     session_store: Arc<dyn SessionStorePort>,
@@ -302,7 +302,7 @@ impl ProcessIncomingMessageUseCase {
 
                 // 5. Prepare Cognitive Context (Profiling, Persona, Epistemic Gate, Task Triage)
                 let is_resumed = existing_conv_id.is_some();
-                let prompt = match ContextPreparer::prepare(
+                let (prompt, capability) = match ContextPreparer::prepare(
                     &msg,
                     &self.persona_engine,
                     &self.session_store,
@@ -324,8 +324,18 @@ impl ProcessIncomingMessageUseCase {
                             .await?;
                         return Ok(());
                     }
-                    ContextPreparation::Ready { prompt } => prompt,
+                    ContextPreparation::Ready { prompt, capability } => (prompt, capability),
                 };
+
+                // Persist the scoped capability so `aina policy` can validate it,
+                // and sweep stale rows to keep the table small.
+                if let Err(e) = self.session_store.create_turn_capability(&capability).await {
+                    warn!("Failed to persist turn capability: {}", e);
+                }
+                let _ = self
+                    .session_store
+                    .purge_expired_turn_capabilities(chrono::Utc::now().timestamp())
+                    .await;
 
                 // 6. Background typing presence heartbeat + progressive reassurance
                 let mut heartbeat_guard = start_presence_heartbeat(
@@ -338,7 +348,7 @@ impl ProcessIncomingMessageUseCase {
                 // 7. Execute Antigravity agent CLI
                 let agent_res = match self
                     .agent_engine
-                    .execute(existing_conv_id.as_deref(), &prompt)
+                    .execute_with_capability(existing_conv_id.as_deref(), &prompt, Some(&capability))
                     .await
                 {
                     Ok(res) => {

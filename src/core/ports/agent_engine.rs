@@ -117,6 +117,18 @@ pub trait AgentEnginePort: Send + Sync {
         model_override: Option<&str>,
     ) -> anyhow::Result<AgentResponse>;
 
+    /// Executes a prompt while exposing the verified turn capability to the
+    /// agent process (e.g. via `AINA_TURN_TOKEN`). Engines that do not support
+    /// capability injection simply ignore it.
+    async fn execute_with_capability(
+        &self,
+        conversation_id: Option<&str>,
+        prompt: &str,
+        _capability: Option<&crate::core::domain::capability::TurnCapability>,
+    ) -> anyhow::Result<AgentResponse> {
+        self.execute_with_model(conversation_id, prompt, None).await
+    }
+
     /// Gets the current active default model name.
     async fn get_model(&self) -> String;
 

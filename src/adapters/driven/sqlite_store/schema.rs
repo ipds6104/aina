@@ -281,6 +281,28 @@ pub fn init_schema(conn: &Connection) -> anyhow::Result<()> {
         [],
     )?;
 
+    // Short-lived turn capabilities: the only proof the agent may present for a
+    // privileged action. Minted by the core for the verified sender of a turn.
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS turn_capabilities (
+            token TEXT PRIMARY KEY,
+            principal_jid TEXT NOT NULL,
+            authority TEXT NOT NULL,
+            chat_jid TEXT NOT NULL,
+            chat_type TEXT NOT NULL,
+            message_id TEXT NOT NULL,
+            issued_at INTEGER NOT NULL,
+            expires_at INTEGER NOT NULL
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_turn_capabilities_expiry
+         ON turn_capabilities(expires_at)",
+        [],
+    )?;
+
     // Experience Records Table (Harness² Experience Reflection format: cue, lesson, evidence)
     conn.execute(
         "CREATE TABLE IF NOT EXISTS experience_records (

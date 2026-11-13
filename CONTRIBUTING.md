@@ -25,12 +25,20 @@ Terima kasih atas minat Anda untuk berkontribusi pada proyek **Aina**! Proyek in
 Sebelum mengirimkan Pull Request (PR), seluruh unit test dan regression test wajib lulus 100%:
 
 ```bash
-# Menjalankan seluruh test suite
-cargo test
+# Menjalankan seluruh test suite (paralel, proses-per-test) + doc-test
+make test
 
-# Menjalankan test dengan output detail
-cargo test -- --nocapture
+# Iterasi cepat: hanya unit test library
+make test-fast
+
+# Melihat output (stdout/stderr) dari satu test
+cargo nextest run --no-capture -E 'test(nama_test)'
 ```
+
+Runner utama adalah [`cargo-nextest`](https://nexte.st/): setiap test berjalan di
+proses terpisah, dieksekusi paralel, dan dibatasi timeout per test
+(`.config/nextest.toml`: warning 10 s, terminate 60 s). `cargo test` masih bisa
+dipakai, tetapi lebih lambat dan tidak punya timeout per test.
 
 ---
 

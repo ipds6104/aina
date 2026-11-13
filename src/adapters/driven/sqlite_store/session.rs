@@ -465,3 +465,65 @@ pub fn is_user_in_group(conn: &Connection, user_jid: &str, group_jid: &str) -> a
     let exists = stmt.exists(params![user_jid, group_jid])?;
     Ok(exists)
 }
+
+// ---------------------------------------------------------------------------
+// Turn capabilities (agentic-but-deterministic authorization)
+// ---------------------------------------------------------------------------
+
+pub fn create_turn_capability(
+    conn: &Connection,
+    capability: &crate::core::domain::capability::TurnCapability,
+) -> anyhow::Result<()> {
+    conn.execute(
+        "INSERT OR REPLACE INTO turn_capabilities
+            (token, principal_jid, authority, chat_jid, chat_type, message_id, issued_at, expires_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![
+            capability.token,
+            capability.principal_jid,
+            capability.authority.as_str(),
+            capability.chat_jid,
+            capability.chat_type,
+            capability.message_id,
+            capability.issued_at,
+            capability.expires_at,
+        ],
+    )?;
+    Ok(())
+}
+
+pub fn get_turn_capability(
+    conn: &Connection,
+    token: &str,
+) -> anyhow::Result<Option<crate::core::domain::capability::TurnCapability>> {
+    if token.trim().is_empty() {
+        return Ok(None);
+    }
+    let mut stmt = conn.prepare(
+        "SELECT token, principal_jid, authority, chat_jid, chat_type, message_id, issued_at, expires_at
+         FROM turn_capabilities WHERE token = ?1 LIMIT 1",
+    )?;
+    let mut rows = stmt.query(params![token])?;
+    if let Some(row) = rows.next()? {
+        Ok(Some(crate::core::domain::capability::TurnCapability {
+            token: row.get(0)?,
+            principal_jid: row.get(1)?,
+            authority: crate::core::domain::capability::Authority::parse(&row.get::<_, String>(2)?),
+            chat_jid: row.get(3)?,
+            chat_type: row.get(4)?,
+            message_id: row.get(5)?,
+            issued_at: row.get(6)?,
+            expires_at: row.get(7)?,
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn purge_expired_turn_capabilities(conn: &Connection, now: i64) -> anyhow::Result<usize> {
+    let removed = conn.execute(
+        "DELETE FROM turn_capabilities WHERE expires_at <= ?1",
+        params![now],
+    )?;
+    Ok(removed)
+}

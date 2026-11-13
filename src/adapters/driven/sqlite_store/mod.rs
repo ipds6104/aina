@@ -30,6 +30,10 @@ impl SqliteSessionStore {
         }
 
         let conn = Connection::open(path_ref)?;
+        // Agent-spawned CLIs (`aina policy ...`) open a second connection while
+        // the daemon may be writing. A busy timeout turns an instant
+        // SQLITE_BUSY into a bounded wait instead of a spurious failure.
+        conn.busy_timeout(std::time::Duration::from_secs(5))?;
         schema::init_schema(&conn)?;
 
         info!("SQLite database initialized at {:?}", path_ref);
@@ -359,6 +363,27 @@ impl SessionStorePort for SqliteSessionStore {
     async fn authorize_user(&self, user_jid: &str, role: &str, authority: &str, notes: Option<&str>, granted_by: &str) -> anyhow::Result<()> {
         let conn = self.conn.lock().await;
         session::authorize_user(&conn, user_jid, role, authority, notes, granted_by)
+    }
+
+    async fn create_turn_capability(
+        &self,
+        capability: &crate::core::domain::capability::TurnCapability,
+    ) -> anyhow::Result<()> {
+        let conn = self.conn.lock().await;
+        session::create_turn_capability(&conn, capability)
+    }
+
+    async fn get_turn_capability(
+        &self,
+        token: &str,
+    ) -> anyhow::Result<Option<crate::core::domain::capability::TurnCapability>> {
+        let conn = self.conn.lock().await;
+        session::get_turn_capability(&conn, token)
+    }
+
+    async fn purge_expired_turn_capabilities(&self, now: i64) -> anyhow::Result<usize> {
+        let conn = self.conn.lock().await;
+        session::purge_expired_turn_capabilities(&conn, now)
     }
 
     async fn record_experience(&self, exp: &crate::core::domain::NewExperienceRecord) -> anyhow::Result<String> {

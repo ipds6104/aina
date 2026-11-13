@@ -65,4 +65,10 @@ pub struct WebhookServerState {
     pub active_tasks: Arc<tokio::sync::Mutex<HashMap<String, ActiveTaskInfo>>>,
     pub presence_tracker: Arc<crate::core::domain::PresenceTracker>,
     pub workspace_dir: PathBuf,
+    /// Root directory of the agent transcript "brain".
+    ///
+    /// Injected instead of resolved on demand so tests can point it at a
+    /// temporary directory. Walking the real per-user brain made the audit
+    /// diagnostics endpoint (and its test) depend on ambient machine state.
+    pub brain_dir: PathBuf,
 }

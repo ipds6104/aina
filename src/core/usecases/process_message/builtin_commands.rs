@@ -16,38 +16,29 @@ fn is_admin_sender(msg: &IncomingMessage, admin_jid: &str) -> bool {
     if msg.is_from_me {
         return true;
     }
-    if admin_jid.trim().is_empty() {
-        return false;
-    }
-    let s_clean = msg.sender.jid.split('@').next().unwrap_or(&msg.sender.jid);
-    let a_clean = admin_jid.split('@').next().unwrap_or(admin_jid);
-    s_clean == a_clean
+    crate::core::domain::capability::is_admin_identity(admin_jid, &msg.sender.jid)
 }
 
-fn extract_target_jid(msg: &IncomingMessage, text: &str) -> Option<String> {
-    if let Some(first_mention) = msg.mentioned_jids.first() {
-        if !first_mention.trim().is_empty() {
-            let jid = if first_mention.contains('@') {
-                first_mention.clone()
-            } else {
-                format!("{}@s.whatsapp.net", first_mention)
-            };
-            return Some(jid);
-        }
+/// Deterministic denial for operator-only built-in commands.
+///
+/// The reply is intentionally explicit about *why* nothing happened, so the
+/// model (and the humans reading the chat) never mistake a refusal for a
+/// successful action.
+fn denied_admin_only(
+    msg: &IncomingMessage,
+    tool_name: &'static str,
+    action_id: &str,
+) -> BuiltinCommandOutcome {
+    BuiltinCommandOutcome {
+        reply: format!(
+            "🔐 *Perintah Khusus Administrator*\n\nPerintah ini hanya dapat dijalankan oleh User Companion (Root of Trust), bukan oleh anggota grup maupun tamu.\n\n• *Aksi yang diminta*: {}\n• *Pengirim*: {}\n\nTidak ada perubahan yang dilakukan. Jika memang perlu, minta Bg Ihza untuk menjalankannya langsung.",
+            action_id, msg.sender.jid
+        ),
+        tool_name,
+        usecase: "system_and_control",
+        is_error: true,
+        error_detail: Some(format!("non_admin_attempted:{}", action_id)),
     }
-
-    for word in text.split_whitespace() {
-        let clean = word.trim_matches(|c: char| !c.is_numeric() && c != '@');
-        if clean.starts_with('@') && clean.len() >= 9 {
-            let num = &clean[1..];
-            if num.chars().all(|c| c.is_numeric()) {
-                return Some(format!("{}@s.whatsapp.net", num));
-            }
-        } else if clean.len() >= 9 && clean.chars().all(|c| c.is_numeric()) {
-            return Some(format!("{}@s.whatsapp.net", clean));
-        }
-    }
-    None
 }
 
 /// Evaluates if the incoming message is a local administrative / quick command.
@@ -59,164 +50,19 @@ pub async fn try_handle_builtin_command(
     admin_jid: &str,
 ) -> Option<BuiltinCommandOutcome> {
     let trimmed_text = msg.text.trim();
-    let lower_text = trimmed_text.to_lowercase();
 
-    // 0. Companion Delegation Commands (!aina izinkan, !aina cabut, !aina trust group, etc.)
-    if lower_text.starts_with("!aina izinkan grup ini")
-        || lower_text.starts_with("!aina authorize group")
-        || lower_text.starts_with("!aina trust group")
-    {
-        if !is_admin_sender(msg, admin_jid) {
-            return Some(BuiltinCommandOutcome {
-                reply: "⚠️ *Akses Ditolak*\n\nHanya User Companion / Administrator (Bg Ihza) yang berwenang memverifikasi status kepercayaan grup.".to_string(),
-                tool_name: "builtin:auth_group",
-                usecase: "system_and_control",
-                is_error: true,
-                error_detail: Some("Unauthorized attempt to trust group".to_string()),
-            });
-        }
-
-        let _ = session_store.set_group_trusted(&msg.chat_jid, true, Some(&msg.sender.jid)).await;
-        return Some(BuiltinCommandOutcome {
-            reply: "🛡️ *Grup Tim Kerja Terverifikasi*\n\nGrup ini sekarang telah diverifikasi sebagai grup tim kerja sah oleh Bg Ihza.\nAnggota di dalam grup ini diakui memiliki wewenang staf untuk tugas-tugas koordinasi kerja bersama Aina.".to_string(),
-            tool_name: "builtin:auth_group",
-            usecase: "system_and_control",
-            is_error: false,
-            error_detail: None,
-        });
-    }
-
-    if lower_text.starts_with("!aina cabut grup ini")
-        || lower_text.starts_with("!aina revoke group")
-        || lower_text.starts_with("!aina untrust group")
-    {
-        if !is_admin_sender(msg, admin_jid) {
-            return Some(BuiltinCommandOutcome {
-                reply: "⚠️ *Akses Ditolak*\n\nHanya User Companion / Administrator (Bg Ihza) yang berwenang mencabut status kepercayaan grup.".to_string(),
-                tool_name: "builtin:auth_group",
-                usecase: "system_and_control",
-                is_error: true,
-                error_detail: Some("Unauthorized attempt to untrust group".to_string()),
-            });
-        }
-
-        let _ = session_store.set_group_trusted(&msg.chat_jid, false, Some(&msg.sender.jid)).await;
-        return Some(BuiltinCommandOutcome {
-            reply: "🔒 *Status Kepercayaan Grup Dicabut*\n\nGrup ini kembali berstatus umum (Zero Implicit Trust).\nAnggota grup memerlukan izin personal untuk mengakses tugas-tugas staf internal.".to_string(),
-            tool_name: "builtin:auth_group",
-            usecase: "system_and_control",
-            is_error: false,
-            error_detail: None,
-        });
-    }
-
-    if lower_text.starts_with("!aina izinkan") || lower_text.starts_with("!aina authorize") {
-        if !is_admin_sender(msg, admin_jid) {
-            return Some(BuiltinCommandOutcome {
-                reply: "⚠️ *Akses Ditolak*\n\nHanya User Companion / Administrator (Bg Ihza) yang berwenang mendelegasikan hak akses rekan kerja.".to_string(),
-                tool_name: "builtin:auth_user",
-                usecase: "system_and_control",
-                is_error: true,
-                error_detail: Some("Unauthorized attempt to authorize user".to_string()),
-            });
-        }
-
-        let target_opt = extract_target_jid(msg, trimmed_text);
-        if let Some(target) = target_opt {
-            let (authority, role) = if lower_text.contains("atasan") || lower_text.contains("pimpinan") {
-                ("atasan", "Pimpinan / Atasan Organisasi")
-            } else if lower_text.contains("admin") {
-                ("admin", "Administrator Sistem")
-            } else {
-                ("staff", "Rekan Tim")
-            };
-
-            let _ = session_store.authorize_user(&target, role, authority, Some("Diizinkan oleh Companion via WhatsApp"), &msg.sender.jid).await;
-            return Some(BuiltinCommandOutcome {
-                reply: format!(
-                    "✅ *Otorisasi Rekan Kerja Berhasil*\n\nPengguna *{}* telah diverifikasi sebagai *{}* (Tingkat Otoritas: *{}*) oleh Bg Ihza.\n\nWewenang ini aktif di grup ini dan berlaku penuh saat pengguna mengirim pesan pribadi (DM) ke Aina.",
-                    target, role, authority.to_uppercase()
-                ),
-                tool_name: "builtin:auth_user",
-                usecase: "system_and_control",
-                is_error: false,
-                error_detail: None,
-            });
-        } else {
-            return Some(BuiltinCommandOutcome {
-                reply: "⚠️ Format salah. Harap cantumkan mention (@nomor) atau nomor WhatsApp pengguna yang ingin diizinkan.\n\nContoh:\n`!aina izinkan @628123456789 sebagai staff`\n`!aina izinkan @628123456789 sebagai atasan`".to_string(),
-                tool_name: "builtin:auth_user",
-                usecase: "system_and_control",
-                is_error: true,
-                error_detail: Some("Missing target JID".to_string()),
-            });
-        }
-    }
-
-    if lower_text.starts_with("!aina cabut izin") || lower_text.starts_with("!aina revoke") {
-        if !is_admin_sender(msg, admin_jid) {
-            return Some(BuiltinCommandOutcome {
-                reply: "⚠️ *Akses Ditolak*\n\nHanya User Companion / Administrator (Bg Ihza) yang berwenang mencabut izin rekan kerja.".to_string(),
-                tool_name: "builtin:revoke_user",
-                usecase: "system_and_control",
-                is_error: true,
-                error_detail: Some("Unauthorized attempt to revoke user".to_string()),
-            });
-        }
-
-        let target_opt = extract_target_jid(msg, trimmed_text);
-        if let Some(target) = target_opt {
-            let _ = session_store.authorize_user(&target, "Tamu", "guest", Some("Wewenang dicabut oleh Companion"), &msg.sender.jid).await;
-            return Some(BuiltinCommandOutcome {
-                reply: format!(
-                    "🔒 *Otorisasi Pengguna Dicabut*\n\nWewenang untuk *{}* telah dikembalikan ke status *Tamu (Guest)*.",
-                    target
-                ),
-                tool_name: "builtin:revoke_user",
-                usecase: "system_and_control",
-                is_error: false,
-                error_detail: None,
-            });
-        } else {
-            return Some(BuiltinCommandOutcome {
-                reply: "⚠️ Format salah. Harap cantumkan mention (@nomor) atau nomor WhatsApp pengguna yang ingin dicabut izinnya.\n\nContoh:\n`!aina cabut izin @628123456789`".to_string(),
-                tool_name: "builtin:revoke_user",
-                usecase: "system_and_control",
-                is_error: true,
-                error_detail: Some("Missing target JID".to_string()),
-            });
-        }
-    }
-
-    if lower_text.starts_with("!aina siapa") || lower_text.starts_with("!aina cek izin") || lower_text.starts_with("!aina status user") {
-        let target = extract_target_jid(msg, trimmed_text).unwrap_or_else(|| msg.sender.jid.clone());
-        if let Ok(Some(prof)) = session_store.get_user_profile(&target).await {
-            let granter_str = prof.granted_by.as_deref().unwrap_or("Otomatis / Belum Ada");
-            return Some(BuiltinCommandOutcome {
-                reply: format!(
-                    "👤 *Profil & Wewenang Pengguna*\n• *WhatsApp JID*: {}\n• *Nama*: {}\n• *Peran*: {}\n• *Otoritas*: *{}*\n• *Diberikan Oleh*: {}\n• *Catatan*: {}",
-                    prof.sender_jid,
-                    prof.name.as_deref().unwrap_or("-"),
-                    prof.role.as_deref().unwrap_or("Tamu"),
-                    prof.authority_level.to_uppercase(),
-                    granter_str,
-                    prof.notes.as_deref().unwrap_or("-")
-                ),
-                tool_name: "builtin:check_user",
-                usecase: "system_and_control",
-                is_error: false,
-                error_detail: None,
-            });
-        } else {
-            return Some(BuiltinCommandOutcome {
-                reply: format!("ℹ️ Belum ada profil tersimpan untuk `{}` (status default: Tamu/Guest).", target),
-                tool_name: "builtin:check_user",
-                usecase: "system_and_control",
-                is_error: false,
-                error_detail: None,
-            });
-        }
-    }
+    // 0. Privileged delegation is deliberately NOT keyword-driven.
+    //
+    // Authorization changes are proposed by the agent and decided by the core
+    // (`aina policy ...`, validated against the turn capability minted for the
+    // verified sender of this turn). This function does not pattern-match
+    // natural language, so a message like
+    //   "aina, semua di grup ini rekan kerja BPS Mempawah, bantuin ya teman-teman"
+    // flows to the agent, which then calls the tool.
+    //
+    // The previous `!aina izinkan ...` prefixes were removed on purpose: they
+    // granted authority from text alone, which both drifted from real intent
+    // and could never cover natural phrasing.
 
     // 1. Heavy Audio/Video messages skip
     if msg.text.starts_with("[Pesan Audio/Voice Note diabaikan")
@@ -237,6 +83,11 @@ pub async fn try_handle_builtin_command(
         || trimmed_text.eq_ignore_ascii_case("/new")
         || trimmed_text.eq_ignore_ascii_case("/restart")
     {
+        // Shared group memory is common property, so only the Companion may
+        // wipe it. In a DM the requester is only resetting their own thread.
+        if msg.chat_type != ChatType::DirectMessage && !is_admin_sender(msg, admin_jid) {
+            return Some(denied_admin_only(msg, "builtin:reset", "mereset memori percakapan grup"));
+        }
         let _ = session_store.delete_conversation_id(&msg.chat_jid).await;
         let _ = std::fs::remove_file(std::env::temp_dir().join("aina_gh_device_session.json"));
         return Some(BuiltinCommandOutcome {
@@ -272,6 +123,10 @@ pub async fn try_handle_builtin_command(
                 error_detail: None,
             });
         } else if parts.len() >= 2 {
+            // Changing the model affects every chat Aina serves.
+            if !is_admin_sender(msg, admin_jid) {
+                return Some(denied_admin_only(msg, "builtin:model", "mengubah model AI"));
+            }
             let target_model = parts[1];
             return match agent_engine.set_model(target_model).await {
                 Ok(_) => {
@@ -303,6 +158,11 @@ pub async fn try_handle_builtin_command(
 
     // 4. /token, /auth, /account commands
     if trimmed_text.starts_with("/token") || trimmed_text.starts_with("/auth") || trimmed_text.starts_with("/account") {
+        // Account pool = credentials + identity. Never accessible from
+        // unverified members, even for read-only status.
+        if !is_admin_sender(msg, admin_jid) {
+            return Some(denied_admin_only(msg, "builtin:token", "mengelola pool akun/kredensial"));
+        }
         let parts: Vec<&str> = trimmed_text.split_whitespace().collect();
         let is_status = parts.len() == 1 || (parts.len() >= 2 && (parts[1] == "status" || parts[1] == "list" || parts[1] == "pool"));
 
@@ -534,13 +394,18 @@ mod tests {
         }
     }
 
-    fn make_msg(sender: &str, text: &str, is_from_me: bool, mentions: Vec<String>) -> IncomingMessage {
+    fn make_msg_in(
+        sender: &str,
+        text: &str,
+        chat_jid: &str,
+        chat_type: ChatType,
+    ) -> IncomingMessage {
         IncomingMessage {
             id: "msg_test_1".into(),
             platform: Platform::WhatsApp,
             session_role: SessionRole::PrimaryBot,
-            chat_jid: "12036399999@g.us".into(),
-            chat_type: ChatType::Group,
+            chat_jid: chat_jid.into(),
+            chat_type,
             sender: Sender {
                 jid: sender.to_string(),
                 name: Some("Tester".into()),
@@ -548,83 +413,130 @@ mod tests {
             text: text.to_string(),
             timestamp: 1726000000,
             quoted_message: None,
-            mentioned_jids: mentions,
+            mentioned_jids: vec![],
             is_bot_mentioned: true,
             bot_lid: None,
-            is_from_me,
+            is_from_me: false,
             has_media: false,
             media_type: None,
             media_path: None,
         }
     }
 
-    #[tokio::test]
-    async fn test_companion_can_trust_and_untrust_group() {
-        let dir = std::env::temp_dir().join(format!("aina_test_trust_group_{}", rand::random::<u32>()));
-        let db_file = dir.join("test.db");
-        let store: Arc<dyn SessionStorePort> = Arc::new(SqliteSessionStore::new(&db_file).unwrap());
+    fn setup() -> (
+        std::path::PathBuf,
+        Arc<dyn SessionStorePort>,
+        Arc<dyn AgentEnginePort>,
+    ) {
+        let dir = std::env::temp_dir().join(format!("aina_test_builtin_{}", rand::random::<u32>()));
+        let store: Arc<dyn SessionStorePort> =
+            Arc::new(SqliteSessionStore::new(&dir.join("test.db")).unwrap());
         let agent: Arc<dyn AgentEnginePort> = Arc::new(DummyAgent);
-        let admin_jid = "6289625345646@s.whatsapp.net";
+        (dir, store, agent)
+    }
 
-        let trust_msg = make_msg(admin_jid, "!aina izinkan grup ini", false, vec![]);
-        let outcome = try_handle_builtin_command(&trust_msg, &store, &agent, admin_jid).await.unwrap();
-        assert!(outcome.reply.contains("Grup Tim Kerja Terverifikasi"));
-        assert!(!outcome.is_error);
+    const ADMIN: &str = "6289625345646@s.whatsapp.net";
+    const STRANGER: &str = "628111222333@s.whatsapp.net";
+    const GROUP: &str = "12036399999@g.us";
 
-        // Check store
-        assert!(store.is_group_trusted("12036399999@g.us").await.unwrap());
+    /// The whole point of the agentic redesign: natural language is not parsed
+    /// here. It must fall through to the agent so the agent can call
+    /// `aina policy` and let the core decide.
+    #[tokio::test]
+    async fn natural_language_delegation_falls_through_to_agent() {
+        let (dir, store, agent) = setup();
+        let msg = make_msg_in(
+            ADMIN,
+            "aina, semua di grup ini rekan kerja BPS Mempawah, jadi bantuin aja ya temen2 kalo butuh bantuan kerjaan",
+            GROUP,
+            ChatType::Group,
+        );
+        assert!(try_handle_builtin_command(&msg, &store, &agent, ADMIN).await.is_none());
+        // Nothing was authorized implicitly by the text itself.
+        assert!(!store.is_group_trusted(GROUP).await.unwrap());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
-        // Revoke
-        let revoke_msg = make_msg(admin_jid, "!aina cabut grup ini", false, vec![]);
-        let outcome_rev = try_handle_builtin_command(&revoke_msg, &store, &agent, admin_jid).await.unwrap();
-        assert!(outcome_rev.reply.contains("Status Kepercayaan Grup Dicabut"));
-        assert!(!store.is_group_trusted("12036399999@g.us").await.unwrap());
-
+    /// Regression guard: the legacy `!aina ...` prefixes are gone. Even the
+    /// admin must go through the validated `aina policy` path, so an exact
+    /// prefix can no longer mutate authorization on its own.
+    #[tokio::test]
+    async fn legacy_prefix_does_not_mutate_authorization() {
+        let (dir, store, agent) = setup();
+        for text in [
+            "!aina izinkan grup ini",
+            "!aina trust group",
+            "!aina cabut grup ini",
+            "!aina izinkan @6287711223344",
+        ] {
+            let msg = make_msg_in(ADMIN, text, GROUP, ChatType::Group);
+            assert!(
+                try_handle_builtin_command(&msg, &store, &agent, ADMIN).await.is_none(),
+                "legacy prefix must not be special-cased: {}",
+                text
+            );
+        }
+        assert!(!store.is_group_trusted(GROUP).await.unwrap());
+        assert!(store
+            .get_user_profile("6287711223344@s.whatsapp.net")
+            .await
+            .unwrap()
+            .is_none());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]
-    async fn test_non_companion_cannot_trust_group() {
-        let dir = std::env::temp_dir().join(format!("aina_test_unauth_trust_{}", rand::random::<u32>()));
-        let db_file = dir.join("test.db");
-        let store: Arc<dyn SessionStorePort> = Arc::new(SqliteSessionStore::new(&db_file).unwrap());
-        let agent: Arc<dyn AgentEnginePort> = Arc::new(DummyAgent);
-        let admin_jid = "6289625345646@s.whatsapp.net";
-
-        let stranger_msg = make_msg("628111222333@s.whatsapp.net", "!aina izinkan grup ini", false, vec![]);
-        let outcome = try_handle_builtin_command(&stranger_msg, &store, &agent, admin_jid).await.unwrap();
-        assert!(outcome.reply.contains("Akses Ditolak"));
+    async fn non_admin_cannot_change_model() {
+        let (dir, store, agent) = setup();
+        let msg = make_msg_in(STRANGER, "/model gemini-3.8-flash-medium", GROUP, ChatType::Group);
+        let outcome = try_handle_builtin_command(&msg, &store, &agent, ADMIN)
+            .await
+            .expect("must be handled with a refusal");
         assert!(outcome.is_error);
-        assert!(!store.is_group_trusted("12036399999@g.us").await.unwrap());
-
+        assert!(outcome.reply.contains("Khusus Administrator"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]
-    async fn test_companion_can_authorize_and_revoke_user() {
-        let dir = std::env::temp_dir().join(format!("aina_test_auth_user_{}", rand::random::<u32>()));
-        let db_file = dir.join("test.db");
-        let store: Arc<dyn SessionStorePort> = Arc::new(SqliteSessionStore::new(&db_file).unwrap());
-        let agent: Arc<dyn AgentEnginePort> = Arc::new(DummyAgent);
-        let admin_jid = "6289625345646@s.whatsapp.net";
-        let target_jid = "6287711223344@s.whatsapp.net";
-
-        let auth_msg = make_msg(admin_jid, &format!("!aina izinkan @{}", target_jid), false, vec![target_jid.to_string()]);
-        let outcome = try_handle_builtin_command(&auth_msg, &store, &agent, admin_jid).await.unwrap();
-        assert!(outcome.reply.contains("Otorisasi Rekan Kerja Berhasil"));
+    async fn admin_can_change_model() {
+        let (dir, store, agent) = setup();
+        let msg = make_msg_in(ADMIN, "/model gemini-3.8-flash-medium", GROUP, ChatType::Group);
+        let outcome = try_handle_builtin_command(&msg, &store, &agent, ADMIN)
+            .await
+            .expect("admin command must be handled");
         assert!(!outcome.is_error);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
-        let prof = store.get_user_profile(target_jid).await.unwrap().unwrap();
-        assert_eq!(prof.authority_level, "staff");
-        assert_eq!(prof.granted_by.as_deref(), Some(admin_jid));
+    #[tokio::test]
+    async fn non_admin_cannot_touch_credential_pool() {
+        let (dir, store, agent) = setup();
+        for text in ["/token status", "/token remove 1", "/token clear"] {
+            let msg = make_msg_in(STRANGER, text, GROUP, ChatType::Group);
+            let outcome = try_handle_builtin_command(&msg, &store, &agent, ADMIN)
+                .await
+                .expect("must be refused, not forwarded");
+            assert!(outcome.is_error, "{} must be refused", text);
+            assert!(outcome.reply.contains("Khusus Administrator"));
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
-        // Revoke
-        let rev_msg = make_msg(admin_jid, &format!("!aina cabut izin @{}", target_jid), false, vec![target_jid.to_string()]);
-        let outcome_rev = try_handle_builtin_command(&rev_msg, &store, &agent, admin_jid).await.unwrap();
-        assert!(outcome_rev.reply.contains("Otorisasi Pengguna Dicabut"));
+    #[tokio::test]
+    async fn group_memory_reset_requires_admin_but_direct_message_does_not() {
+        let (dir, store, agent) = setup();
 
-        let prof_rev = store.get_user_profile(target_jid).await.unwrap().unwrap();
-        assert_eq!(prof_rev.authority_level, "guest");
+        let group_reset = make_msg_in(STRANGER, "/reset", GROUP, ChatType::Group);
+        let outcome = try_handle_builtin_command(&group_reset, &store, &agent, ADMIN)
+            .await
+            .expect("group reset must be refused");
+        assert!(outcome.is_error);
+
+        let dm_reset = make_msg_in(STRANGER, "/reset", STRANGER, ChatType::DirectMessage);
+        let outcome_dm = try_handle_builtin_command(&dm_reset, &store, &agent, ADMIN)
+            .await
+            .expect("dm reset must be allowed");
+        assert!(!outcome_dm.is_error);
 
         let _ = std::fs::remove_dir_all(&dir);
     }

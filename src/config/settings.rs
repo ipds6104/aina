@@ -334,7 +334,30 @@ impl AppConfig {
             self.agent.organization_file = val;
         }
         if let Ok(val) = env::var("ADMIN_JID").or_else(|_| env::var("AINA_ADMIN_JID")) {
-            self.agent.admin_jid = val;
+            if !val.trim().is_empty() {
+                self.agent.admin_jid = val;
+            }
+        }
+        // WhatsApp may address the same human by a privacy identifier (LID) in
+        // groups and by phone JID in DMs. Both must be listed to be admin.
+        if let Ok(val) = env::var("ADMIN_LID").or_else(|_| env::var("AINA_ADMIN_LID")) {
+            let val = val.trim();
+            if !val.is_empty() {
+                if self.agent.admin_jid.trim().is_empty() {
+                    self.agent.admin_jid = val.to_string();
+                } else {
+                    self.agent.admin_jid =
+                        format!("{},{}", self.agent.admin_jid.trim(), val);
+                }
+            }
+        }
+        // Documented Root of Trust fallback: the Companion account is the owner.
+        if self.agent.admin_jid.trim().is_empty() {
+            if let Some(ref companion) = self.whatsmeow.companion_jid {
+                if !companion.trim().is_empty() {
+                    self.agent.admin_jid = companion.clone();
+                }
+            }
         }
 
         // Scheduler overrides

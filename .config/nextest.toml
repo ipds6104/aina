@@ -1,0 +1,18 @@
+# cargo-nextest configuration: process-per-test, parallel by default, with a
+# per-test timeout so a single hanging test can't stall the whole suite.
+# Docs: https://nexte.st/docs/configuration/
+
+[profile.default]
+# Keep running after a failure so one broken test doesn't hide the rest.
+fail-fast = false
+# Warn after 10s; terminate after 6 periods (60s). A test that needs longer
+# than this is almost certainly doing real I/O and should be made hermetic.
+slow-timeout = { period = "10s", terminate-after = 6 }
+
+[profile.ci]
+# Flaky network/FS tests get two chances in CI, but stay bounded.
+retries = 2
+fail-fast = false
+slow-timeout = { period = "30s", terminate-after = 4 }
+status-level = "fail"
+final-status-level = "slow"

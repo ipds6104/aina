@@ -1,10 +1,26 @@
 //! Host system telemetry: memory inspection, uptime, directory sizes, and workspace git status.
 
 use super::models::WorkspaceProvenance;
-use std::path::Path;
-use std::sync::OnceLock;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
-static PROCESS_START_INSTANT: OnceLock<std::time::Instant> = OnceLock::new();
+static PROCESS_START_INSTANT: OnceLock<Instant> = OnceLock::new();
+
+/// How long a computed directory size stays valid.
+///
+/// The audit dashboard asks for the transcript brain size on every load, while
+/// the tree itself changes slowly. Walking it eagerly meant a full recursive
+/// scan of `/root/.gemini/...` per request (minutes on a large brain).
+const DIR_SIZE_TTL: Duration = Duration::from_secs(30);
+
+type DirSizeCache = Mutex<HashMap<PathBuf, (u64, Instant)>>;
+
+fn dir_size_cache() -> &'static DirSizeCache {
+    static CACHE: OnceLock<DirSizeCache> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 pub fn get_process_uptime_secs() -> u64 {
     let start = PROCESS_START_INSTANT.get_or_init(std::time::Instant::now);
@@ -46,9 +62,35 @@ impl SystemTelemetry {
     }
 
     /// Computes total size of a directory in bytes recursively.
+    ///
+    /// Results are cached for [`DIR_SIZE_TTL`] so polling the dashboard does not
+    /// re-walk a large transcript tree on every request.
     pub fn compute_dir_size<P: AsRef<Path>>(path: P) -> u64 {
+        let path = path.as_ref();
+        let cache_key = path.to_path_buf();
+
+        if let Ok(cache) = dir_size_cache().lock() {
+            if let Some((size, computed_at)) = cache.get(&cache_key) {
+                if computed_at.elapsed() < DIR_SIZE_TTL {
+                    return *size;
+                }
+            }
+        }
+
+        // Walk without holding the lock: a large tree can take a long time and
+        // must not block other callers.
+        let size = Self::walk_dir_size(path);
+
+        if let Ok(mut cache) = dir_size_cache().lock() {
+            cache.insert(cache_key, (size, Instant::now()));
+        }
+
+        size
+    }
+
+    fn walk_dir_size(path: &Path) -> u64 {
         let mut total = 0u64;
-        let mut stack = vec![path.as_ref().to_path_buf()];
+        let mut stack = vec![path.to_path_buf()];
 
         while let Some(current) = stack.pop() {
             if let Ok(entries) = std::fs::read_dir(&current) {
@@ -194,5 +236,56 @@ impl SystemTelemetry {
 
         let is_git = has_git_folder || commit.is_some();
         (is_git, commit, branch, is_dirty)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn unique_dir(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "aina_telemetry_{}_{}_{}",
+            tag,
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn compute_dir_size_sums_nested_files() {
+        let dir = unique_dir("size");
+        fs::write(dir.join("a.bin"), vec![0u8; 100]).unwrap();
+        let nested = dir.join("nested");
+        fs::create_dir_all(&nested).unwrap();
+        fs::write(nested.join("b.bin"), vec![0u8; 50]).unwrap();
+
+        assert_eq!(SystemTelemetry::compute_dir_size(&dir), 150);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn compute_dir_size_is_cached_within_ttl() {
+        let dir = unique_dir("cache");
+        fs::write(dir.join("a.bin"), vec![0u8; 10]).unwrap();
+
+        assert_eq!(SystemTelemetry::compute_dir_size(&dir), 10);
+
+        // A second file inside the TTL window must not trigger a re-walk.
+        fs::write(dir.join("b.bin"), vec![0u8; 90]).unwrap();
+        assert_eq!(SystemTelemetry::compute_dir_size(&dir), 10);
+    }
+
+    #[test]
+    fn compute_dir_size_of_missing_path_is_zero() {
+        let missing = std::env::temp_dir().join("aina_telemetry_missing_does_not_exist");
+        assert_eq!(SystemTelemetry::compute_dir_size(&missing), 0);
     }
 }

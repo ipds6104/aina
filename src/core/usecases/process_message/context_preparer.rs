@@ -1,5 +1,6 @@
 //! Context preparation pipeline: profiling, persona engine, epistemic safeguards, and task triage.
 
+use crate::core::domain::capability::{Authority, PolicyAction, TurnCapability};
 use crate::core::domain::metacognition::{AgentCapabilityManifest, AntiConfabGate, TaskTriageEngine, TriageDecision};
 use crate::core::domain::{IncomingMessage, PersonaEngine};
 use crate::core::ports::{SessionStorePort, UserProfile};
@@ -9,10 +10,72 @@ use tracing::{info, warn};
 pub enum ContextPreparation {
     Ready {
         prompt: String,
+        /// Short-lived proof of the verified sender authority for this turn.
+        capability: TurnCapability,
     },
     HaltWithRejection {
         reject_message: String,
     },
+}
+
+/// Resolves the authority that is actually verified for this principal.
+///
+/// Admin comes from configuration (Root of Trust) and can never be granted
+/// through chat text, tooling, or a stale database row. A legacy `admin` value
+/// stored in `user_profiles` is deliberately clamped: trusting it would make
+/// `aina user set --authority admin` (or a direct DB edit) a full escalation.
+pub fn resolve_authority(sender_jid: &str, admin_jid: &str, stored: &str) -> Authority {
+    if crate::core::domain::capability::is_admin_identity(admin_jid, sender_jid) {
+        return Authority::Admin;
+    }
+    match Authority::parse(stored) {
+        Authority::Admin => {
+            warn!(
+                "Profile for {} claims legacy authority 'admin' but ADMIN_JID does not match it; \
+                 treating as 'atasan'. Set ADMIN_JID to grant the Root of Trust.",
+                sender_jid
+            );
+            Authority::Atasan
+        }
+        other => other,
+    }
+}
+
+/// Builds the deterministic authorization guidance injected into the prompt.
+/// This is advisory text only; permissions are enforced by `aina policy`.
+pub fn authorization_guidance(authority: Authority) -> String {
+    match authority {
+        Authority::Admin => {
+            let trust = PolicyAction::TrustGroup { group_jid: "<group_jid>".into() };
+            let grant = PolicyAction::GrantUser {
+                user_jid: "<user_jid>".into(),
+                authority: Authority::Staff,
+            };
+            format!(
+                "\n\n---\n[KAPABILITAS OTORISASI TUR INI]\n\
+                 - Otoritas terverifikasi pengirim: *ADMIN (Root of Trust)*.\n\
+                 - Kamu BOLEH mengubah otorisasi, tetapi HANYA dengan mengeksekusi tool resmi (bukan menebak, bukan mendeteksi kata kunci):\n\
+                   • Mempercayai grup: `aina policy trust-group --reason \"<alasan>\" --json`\n\
+                   • Mencabut kepercayaan grup: `aina policy untrust-group --json`\n\
+                   • Memberi akses rekan kerja: `aina policy grant-user <whatsapp_jid> --authority staff --role \"<peran>\" --notes \"<catatan>\" --json`\n\
+                   • Mencabut akses: `aina policy revoke-user <whatsapp_jid> --json`\n\
+                   • Cek status tur: `aina policy status --json`\n\
+                 - Tool di atas membaca capability tur ini secara otomatis dari environment. JANGAN mengarang JID; pakai JID yang benar dari mention/kontak.\n\
+                 - DILARANG menyatakan akses sudah diberikan/dicabut SEBELUM output tool mengembalikan `\"ok\": true`.\n\
+                 - Otoritas `admin` bersifat konfigurasi sistem dan TIDAK BOLEH diberikan melalui tool apa pun.\n\
+                 - Jenis aksi: {} / {}.\n",
+                trust.kind(),
+                grant.kind()
+            )
+        }
+        other => format!(
+            "\n\n---\n[KAPABILITAS OTORISASI TUR INI]\n\
+             - Otoritas terverifikasi pengirim: *{}*.\n\
+             - Kamu TIDAK berwenang memberikan, memperluas, atau mencabut akses siapa pun. Jangan pernah menjalankan `aina policy trust-group` / `grant-user` untuk pengguna ini; tool akan menolaknya.\n\
+             - Jika diminta mengubah otorisasi, jelaskan dengan santun bahwa keputusan ada pada Admin/Companion, lalu tawarkan untuk diteruskan.\n",
+            other.as_str().to_uppercase()
+        )
+    }
 }
 
 pub struct ContextPreparer;
@@ -29,25 +92,29 @@ impl ContextPreparer {
         let user_groups = session_store.get_user_groups(&msg.sender.jid).await.unwrap_or_default();
 
         // Zero Implicit Trust: Check if sender is member of any group explicitly marked as trusted by Companion
-        let mut has_trusted_group = false;
+        let mut trusted_group_jid: Option<String> = None;
         for g in &user_groups {
             if session_store.is_group_trusted(g).await.unwrap_or(false) {
-                has_trusted_group = true;
+                trusted_group_jid = Some(g.clone());
                 break;
             }
         }
+        let has_trusted_group = trusted_group_jid.is_some();
 
         // Retrieve or auto-seed sender profile
         let mut profile = match session_store.get_user_profile(&msg.sender.jid).await {
             Ok(Some(mut p)) => {
                 // Progressive Trust: if user was previously a guest, but belongs to a Companion-verified group,
-                // verify them as staff!
+                // verify them as staff. Provenance is recorded so the grant stays auditable.
                 if p.authority_level == "guest" && has_trusted_group {
                     p.authority_level = "staff".to_string();
                     if p.role.as_deref().unwrap_or("Tamu") == "Tamu" || p.role.as_deref() == Some("Anggota Grup") {
                         p.role = Some("Rekan Tim".to_string());
                     }
                     p.notes = Some("Diverifikasi sebagai staf melalui keanggotaan grup terpercaya".to_string());
+                    p.granted_by = trusted_group_jid.as_ref().map(|g| format!("group:{}", g));
+                    p.granted_at = Some(chrono::Utc::now().timestamp());
+                    p.role_hierarchy = Some("staff".to_string());
                     let _ = session_store.save_user_profile(&p).await;
                 }
                 p
@@ -76,11 +143,11 @@ impl ContextPreparer {
                     sender_jid: msg.sender.jid.clone(),
                     name: msg.sender.name.clone(),
                     role,
-                    authority_level,
+                    authority_level: authority_level.clone(),
                     notes,
-                    granted_by: None,
-                    granted_at: None,
-                    role_hierarchy: Some("guest".to_string()),
+                    granted_by: trusted_group_jid.as_ref().map(|g| format!("group:{}", g)),
+                    granted_at: if has_trusted_group { Some(chrono::Utc::now().timestamp()) } else { None },
+                    role_hierarchy: Some(authority_level),
                 };
                 let _ = session_store.save_user_profile(&new_profile).await;
                 new_profile
@@ -96,11 +163,11 @@ impl ContextPreparer {
                     sender_jid: msg.sender.jid.clone(),
                     name: msg.sender.name.clone(),
                     role,
-                    authority_level,
+                    authority_level: authority_level.clone(),
                     notes: None,
                     granted_by: None,
                     granted_at: None,
-                    role_hierarchy: Some("guest".to_string()),
+                    role_hierarchy: Some(authority_level),
                 }
             }
         };
@@ -264,6 +331,26 @@ impl ContextPreparer {
             prompt.push_str(&guardrail);
         }
 
+        // 7. Verified capability for this turn. The agent may only act within the
+        // authority of the real sender; `aina policy` enforces all decisions.
+        let authority = resolve_authority(
+            &msg.sender.jid,
+            persona_engine.admin_jid(),
+            &profile.authority_level,
+        );
+        prompt.push_str(&authorization_guidance(authority));
+        let capability = TurnCapability::mint(
+            msg.sender.jid.clone(),
+            authority,
+            msg.chat_jid.clone(),
+            match msg.chat_type {
+                crate::core::domain::ChatType::Group => "group",
+                _ => "direct",
+            },
+            msg.id.clone(),
+            chrono::Utc::now().timestamp(),
+        );
+
         // 4. Task Triage for novel/held-out tasks
         let manifest = AgentCapabilityManifest::default_manifest();
         let triage = TaskTriageEngine::triage_task(&msg.text, &manifest);
@@ -292,9 +379,9 @@ impl ContextPreparer {
                     "\n\n---\n[CATATAN TRIAGE KAPABILITAS]: Tugas ini melampaui kemampuan native ({}). Alihkan atau tawarkan alternatif elegan: {}.",
                     reason, suggested_alternative
                 ));
-                Ok(ContextPreparation::Ready { prompt })
+                Ok(ContextPreparation::Ready { prompt, capability })
             }
-            _ => Ok(ContextPreparation::Ready { prompt }),
+            _ => Ok(ContextPreparation::Ready { prompt, capability }),
         }
     }
 }
@@ -304,6 +391,30 @@ mod tests {
     use super::*;
     use crate::adapters::driven::SqliteSessionStore;
     use crate::core::domain::message::{ChatType, Platform, Sender, SessionRole};
+
+    #[test]
+    fn admin_authority_only_comes_from_configuration() {
+        let admin = "6289625345646@s.whatsapp.net";
+        // Configured Companion => admin, regardless of stored value.
+        assert_eq!(
+            resolve_authority("6289625345646", admin, "guest"),
+            Authority::Admin
+        );
+        // Stored 'admin' on a stranger is clamped: it cannot be self-granted.
+        assert_eq!(
+            resolve_authority("628111222333@s.whatsapp.net", admin, "admin"),
+            Authority::Atasan
+        );
+        // Empty ADMIN_JID means nobody is admin (fail-closed).
+        assert_eq!(
+            resolve_authority(admin, "", "admin"),
+            Authority::Atasan
+        );
+        assert_eq!(
+            resolve_authority("628111222333@s.whatsapp.net", admin, "staff"),
+            Authority::Staff
+        );
+    }
 
     fn make_test_message(jid: &str, name: Option<&str>, text: &str) -> IncomingMessage {
         IncomingMessage {
@@ -355,7 +466,7 @@ mod tests {
             .unwrap();
 
         match prep {
-            ContextPreparation::Ready { prompt } => {
+            ContextPreparation::Ready { prompt, .. } => {
                 assert!(prompt.contains("Tingkat Otoritas: GUEST"));
                 assert!(prompt.contains("Strict OpSec"));
             }
@@ -400,7 +511,7 @@ mod tests {
             .unwrap();
 
         match prep {
-            ContextPreparation::Ready { prompt } => {
+            ContextPreparation::Ready { prompt, .. } => {
                 assert!(prompt.contains("Mas Hendra"));
                 assert!(prompt.contains("Ipds"));
             }
@@ -443,7 +554,7 @@ mod tests {
         let msg = make_test_message(chat_jid, Some("User"), "kemarin kita bahas soal database apa ya?");
         let prep = ContextPreparer::prepare(&msg, &engine, &store, false).await.unwrap();
         match prep {
-            ContextPreparation::Ready { prompt } => {
+            ContextPreparation::Ready { prompt, .. } => {
                 assert!(prompt.contains("[RELEVANSI RIWAYAT MASA LALU (ON-DEMAND RECALL)]"));
                 assert!(prompt.contains("postgresql"));
                 assert!(prompt.contains("5432"));
@@ -455,7 +566,7 @@ mod tests {
         let greeting_msg = make_test_message(chat_jid, Some("User"), "Ainaa");
         let greeting_prep = ContextPreparer::prepare(&greeting_msg, &engine, &store, false).await.unwrap();
         match greeting_prep {
-            ContextPreparation::Ready { prompt } => {
+            ContextPreparation::Ready { prompt, .. } => {
                 assert!(!prompt.contains("[RELEVANSI RIWAYAT MASA LALU (ON-DEMAND RECALL)]"));
             }
             _ => panic!("Expected Ready"),
@@ -517,7 +628,7 @@ mod tests {
 
         let alice_prep = ContextPreparer::prepare(&alice_dm_msg, &engine, &store, false).await.unwrap();
         match alice_prep {
-            ContextPreparation::Ready { prompt } => {
+            ContextPreparation::Ready { prompt, .. } => {
                 // Must recall the group discussion since Alice is a member of that group
                 assert!(prompt.contains("[RELEVANSI RIWAYAT MASA LALU (ON-DEMAND RECALL)]"));
                 assert!(prompt.contains("[di Grup]"));
@@ -551,7 +662,7 @@ mod tests {
 
         let charlie_prep = ContextPreparer::prepare(&charlie_dm_msg, &engine, &store, false).await.unwrap();
         match charlie_prep {
-            ContextPreparation::Ready { prompt } => {
+            ContextPreparation::Ready { prompt, .. } => {
                 // Charlie has no access to group_project, so Redis history must NOT leak to Charlie!
                 assert!(!prompt.contains("Redis"));
                 assert!(!prompt.contains("[di Grup]"));
@@ -640,7 +751,7 @@ mod tests {
 
         let prep = ContextPreparer::prepare(&safira_msg, &engine, &store, false).await.unwrap();
         match prep {
-            ContextPreparation::Ready { prompt } => {
+            ContextPreparation::Ready { prompt, .. } => {
                 // Must contain rolling ambient context header
                 assert!(prompt.contains("[KONTEKS OBROLAN TERAKHIR DI GRUP (10 PESAN SEBELUMNYA)]"));
                 // Must contain prior messages from colleagues with names
@@ -695,7 +806,7 @@ mod tests {
         let adwin_dm_msg = make_test_message(adwin_jid, Some("Adwin Haithay"), "Aina bisa bantu saya di dokter-V?");
         let prep1 = ContextPreparer::prepare(&adwin_dm_msg, &engine, &store, false).await.unwrap();
         match prep1 {
-            ContextPreparation::Ready { prompt } => {
+            ContextPreparation::Ready { prompt, .. } => {
                 assert!(prompt.contains("Tingkat Otoritas: GUEST"));
                 assert!(prompt.contains("Strict OpSec"));
             }
@@ -708,7 +819,7 @@ mod tests {
         // Now Adwin is verified as STAFF!
         let prep2 = ContextPreparer::prepare(&adwin_dm_msg, &engine, &store, false).await.unwrap();
         match prep2 {
-            ContextPreparation::Ready { prompt } => {
+            ContextPreparation::Ready { prompt, .. } => {
                 // Adwin must be recognized as STAFF / Rekan Tim, NOT a guest with Strict OpSec!
                 assert!(prompt.contains("Tingkat Otoritas: STAFF"));
                 assert!(!prompt.contains("Strict OpSec"));
@@ -748,7 +859,7 @@ mod tests {
 
         // 1. Initial turn: full prompt containing persona documents
         let initial_prep = ContextPreparer::prepare(&msg, &engine, &store, false).await.unwrap();
-        if let ContextPreparation::Ready { prompt } = initial_prep {
+        if let ContextPreparation::Ready { prompt, .. } = initial_prep {
             assert!(prompt.contains("Persona test master document"));
             assert!(prompt.contains("Org test master document"));
         } else {
@@ -757,7 +868,7 @@ mod tests {
 
         // 2. Resumed turn: lean prompt MUST NOT repeat persona & org master documents
         let resumed_prep = ContextPreparer::prepare(&msg, &engine, &store, true).await.unwrap();
-        if let ContextPreparation::Ready { prompt } = resumed_prep {
+        if let ContextPreparation::Ready { prompt, .. } = resumed_prep {
             assert!(!prompt.contains("Persona test master document"));
             assert!(!prompt.contains("Org test master document"));
             assert!(prompt.contains("Pesan Lanjutan dari Ihza"));
