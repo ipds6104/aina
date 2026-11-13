@@ -404,40 +404,190 @@ pub fn get_scripts() -> &'static str {
             checkAdminAuth();
         }
 
+        // ── Model Picker Modal ──────────────────────────────────────────────────
+        function _buildModelModal() {
+            const existing = document.getElementById('model-picker-overlay');
+            if (existing) return existing;
+
+            const overlay = document.createElement('div');
+            overlay.id = 'model-picker-overlay';
+            overlay.style.cssText = `
+                display:none; position:fixed; inset:0; z-index:9999;
+                background:rgba(0,0,0,0.65); backdrop-filter:blur(4px);
+                align-items:center; justify-content:center;
+            `;
+            overlay.innerHTML = `
+                <div id="model-picker-card" style="
+                    background:var(--bg-card,#1a2236); border:1px solid var(--border,#2d3a52);
+                    border-radius:16px; padding:28px 24px; width:min(480px,92vw);
+                    max-height:80vh; display:flex; flex-direction:column; gap:16px;
+                    box-shadow:0 24px 64px rgba(0,0,0,0.5);
+                    font-family:'Google Sans',sans-serif;
+                ">
+                    <div style="display:flex; align-items:center; justify-content:space-between;">
+                        <h3 style="margin:0; font-size:1.1rem; font-weight:700; color:var(--text-primary,#e2e8f0);">
+                            ⚡ Pilih Model AI
+                        </h3>
+                        <button onclick="closeModelModal()" style="
+                            background:none; border:none; color:var(--text-muted,#64748b);
+                            font-size:1.4rem; cursor:pointer; line-height:1; padding:4px 8px;
+                            border-radius:8px; transition:background 0.15s;
+                        " onmouseover="this.style.background='rgba(255,255,255,0.08)'"
+                           onmouseout="this.style.background='none'">✕</button>
+                    </div>
+                    <p id="model-picker-current" style="
+                        margin:0; font-size:0.82rem; color:var(--text-muted,#64748b);
+                    ">Model aktif: —</p>
+                    <div id="model-picker-loading" style="
+                        text-align:center; padding:32px 0; color:var(--text-muted,#64748b); font-size:0.9rem;
+                    ">
+                        <span style="display:inline-block; animation:aina-spin 1s linear infinite;">⟳</span>
+                        &nbsp; Memuat daftar model…
+                    </div>
+                    <div id="model-picker-list" style="
+                        overflow-y:auto; flex-direction:column; gap:8px;
+                        max-height:340px; display:none;
+                    "></div>
+                    <div id="model-picker-error" style="
+                        display:none; color:#f87171; font-size:0.85rem; text-align:center; padding:12px 0;
+                    "></div>
+                    <div id="model-picker-source" style="
+                        font-size:0.73rem; color:var(--text-muted,#64748b); text-align:right; display:none;
+                    "></div>
+                </div>
+                <style>
+                    @keyframes aina-spin { to { transform: rotate(360deg); } }
+                    .model-item:hover { background: rgba(99,179,237,0.12) !important; border-color: var(--primary,#4a9eff) !important; }
+                    .model-item.active-model { border-color: var(--primary,#4a9eff) !important; background: rgba(74,158,255,0.1) !important; }
+                    .cat-badge { display:inline-block; padding:2px 8px; border-radius:99px; font-size:0.7rem; font-weight:600; letter-spacing:0.03em; }
+                    .cat-gemini { background:rgba(66,153,225,0.2); color:#63b3ed; }
+                    .cat-claude { background:rgba(214,158,46,0.2); color:#d6a52e; }
+                    .cat-gpt    { background:rgba(72,187,120,0.2); color:#48bb78; }
+                    .cat-other  { background:rgba(160,174,192,0.15); color:#a0aec0; }
+                </style>
+            `;
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModelModal(); });
+            document.body.appendChild(overlay);
+            return overlay;
+        }
+
+        function closeModelModal() {
+            const overlay = document.getElementById('model-picker-overlay');
+            if (overlay) overlay.style.display = 'none';
+        }
+
         async function openModelModal() {
             const key = localStorage.getItem('aina_admin_key');
             if (!key) {
                 alert('Silakan masukkan Admin Key / Setup Code terlebih dahulu pada kartu simulator di bawah.');
                 return;
             }
-            const currentEl = document.getElementById('active-model-display');
-            const current = currentEl ? currentEl.innerText.trim() : '';
-            const choice = prompt(
-                `Pilih Model AI Default untuk Aina:\n\nModel aktif saat ini: ${current}\n\nPilihan Model Tersedia:\n• gemini-3.8-flash-medium (Default Cepat & Seimbang)\n• gemini-3.8-flash-high (Penalaran Tinggi / Deep Thinking)\n• gemini-3.8-flash-low (Respons Kilat & Kasual)\n• gemini-3.1-pro-high (Deep Coding & Arsitektur)\n• claude-opus-4-6-thinking (Claude Opus Thinking - Khusus Eksplisit)\n• claude-sonnet-4-6 (Claude Sonnet 4.6)\n\nMasukkan nama model baru:`,
-                current
-            );
-            if (!choice || choice.trim() === current || choice.trim() === '') return;
+            const overlay = _buildModelModal();
+            overlay.style.display = 'flex';
 
+            const listEl   = document.getElementById('model-picker-list');
+            const loadEl   = document.getElementById('model-picker-loading');
+            const errorEl  = document.getElementById('model-picker-error');
+            const sourceEl = document.getElementById('model-picker-source');
+            const currentEl     = document.getElementById('active-model-display');
+            const currentLblEl  = document.getElementById('model-picker-current');
+
+            const activeCurrent = currentEl ? currentEl.innerText.trim() : '';
+            if (currentLblEl) currentLblEl.textContent = `Model aktif saat ini: ${activeCurrent}`;
+
+            listEl.style.display  = 'none';
+            loadEl.style.display  = 'block';
+            errorEl.style.display = 'none';
+            sourceEl.style.display = 'none';
+            listEl.innerHTML = '';
+
+            try {
+                const res = await fetch(`/api/models?key=${encodeURIComponent(key)}`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+
+                loadEl.style.display = 'none';
+
+                if (!data.available || data.available.length === 0) {
+                    errorEl.textContent = 'Tidak ada model tersedia.';
+                    errorEl.style.display = 'block';
+                    return;
+                }
+
+                data.available.forEach(model => {
+                    const isActive = model.id === (data.current || activeCurrent);
+                    const catClass = `cat-${model.category || 'other'}`;
+                    const item = document.createElement('div');
+                    item.className = 'model-item' + (isActive ? ' active-model' : '');
+                    item.dataset.modelId = model.id;
+                    item.style.cssText = `
+                        display:flex; align-items:center; justify-content:space-between; gap:12px;
+                        padding:12px 14px; border-radius:10px; cursor:pointer;
+                        border:1px solid var(--border,#2d3a52);
+                        background:rgba(255,255,255,0.03); transition:all 0.15s ease;
+                        margin-bottom:4px;
+                    `;
+                    item.innerHTML = `
+                        <div style="display:flex; flex-direction:column; gap:3px; min-width:0; overflow:hidden;">
+                            <span style="font-size:0.88rem; font-weight:600; color:var(--text-primary,#e2e8f0); font-family:monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${_escHtml(model.id)}</span>
+                            <span style="font-size:0.76rem; color:var(--text-muted,#64748b);">${_escHtml(model.name)}</span>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                            <span class="cat-badge ${catClass}">${_escHtml(model.category || 'other')}</span>
+                            ${isActive ? '<span style="color:var(--primary,#4a9eff); font-size:0.78rem; font-weight:700;">✓ Aktif</span>' : ''}
+                        </div>
+                    `;
+                    item.addEventListener('click', () => _selectModel(model.id, key));
+                    listEl.appendChild(item);
+                });
+
+                listEl.style.display = 'flex';
+                if (data.source) {
+                    sourceEl.textContent = data.source === 'dynamic' ? '🌐 Sumber: AGY CLI (live)' : '📦 Sumber: Static fallback';
+                    sourceEl.style.display = 'block';
+                }
+
+            } catch (e) {
+                loadEl.style.display = 'none';
+                errorEl.textContent = `Gagal memuat daftar model: ${e.message}`;
+                errorEl.style.display = 'block';
+            }
+        }
+
+        async function _selectModel(modelId, key) {
+            if (!key) return;
+            const currentEl = document.getElementById('active-model-display');
+            document.querySelectorAll('.model-item').forEach(el => {
+                el.classList.toggle('active-model', el.dataset.modelId === modelId);
+            });
             try {
                 const res = await fetch('/api/model', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Admin-Key': key
-                    },
-                    body: JSON.stringify({ model: choice.trim() })
+                    headers: { 'Content-Type': 'application/json', 'X-Admin-Key': key },
+                    body: JSON.stringify({ model: modelId })
                 });
                 const data = await res.json();
                 if (res.ok && data.success) {
-                    alert(`✅ Sukses! Model default Aina sekarang: ${data.model}`);
                     if (currentEl) currentEl.innerText = data.model;
+                    const lbl = document.getElementById('model-picker-current');
+                    if (lbl) lbl.textContent = `Model aktif saat ini: ${data.model}`;
+                    setTimeout(() => closeModelModal(), 600);
                 } else {
-                    alert(`⚠️ Gagal mengganti model: ${data.error || data.message || 'Error'}`);
+                    alert(`⚠️ Gagal: ${data.error || data.message || 'Error tidak diketahui'}`);
+                    const prev = currentEl ? currentEl.innerText.trim() : '';
+                    document.querySelectorAll('.model-item').forEach(el => {
+                        el.classList.toggle('active-model', el.dataset.modelId === prev);
+                    });
                 }
-            } catch(e) {
+            } catch (e) {
                 alert(`Koneksi error: ${e.message}`);
             }
         }
+
+        function _escHtml(str) {
+            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+        // ── End Model Picker Modal ──────────────────────────────────────────
 
         function onChatTypeChange(val) {
             const el = document.getElementById('mention-toggle-wrapper');

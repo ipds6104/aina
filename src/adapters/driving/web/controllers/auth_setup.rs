@@ -58,28 +58,41 @@ pub async fn api_version_handler() -> impl IntoResponse {
     Json(report)
 }
 
+/// A model entry in the dynamic /api/models response.
 #[derive(Debug, Serialize)]
 struct ModelOption {
-    pub id: &'static str,
-    pub name: &'static str,
+    pub id: String,
+    pub name: String,
+    pub category: String,
 }
 
 #[derive(Debug, Serialize)]
 struct ApiModelsResponse {
     pub current: String,
     pub available: Vec<ModelOption>,
+    pub source: &'static str,
 }
 
 pub async fn api_get_models_handler(
     State(state): State<Arc<WebhookServerState>>,
 ) -> impl IntoResponse {
     let current = state.agent_engine.get_model().await;
-    let available = crate::adapters::driven::get_available_models()
+
+    // Dynamically fetch from AGY CLI — falls back to the static catalog (with a
+    // reliable source marker) if the CLI is unavailable.
+    let discovery = crate::adapters::driven::fetch_models_from_agy_cli().await;
+    let source = match discovery.source {
+        crate::adapters::driven::ModelSource::Dynamic => "dynamic",
+        crate::adapters::driven::ModelSource::StaticFallback => "static_fallback",
+    };
+
+    let available: Vec<ModelOption> = discovery
+        .models
         .into_iter()
-        .map(|(id, name)| ModelOption { id, name })
+        .map(|e| ModelOption { id: e.id, name: e.name, category: e.category })
         .collect();
 
-    Json(ApiModelsResponse { current, available })
+    Json(ApiModelsResponse { current, available, source })
 }
 
 #[derive(Debug, Deserialize)]
