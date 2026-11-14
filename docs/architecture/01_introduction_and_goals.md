@@ -1,8 +1,8 @@
 # 1. Pendahuluan dan Tujuan (Introduction and Goals)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `1ee7597` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-08T16:40:29+07:00`
+> - **Verified Commit**: `fb69f88` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-14T13:47:00+07:00`
 > - **Tracked Paths**: `src/`, `config/`, `skills/`
 > - **Drift Status**: `verified`
 

@@ -67,6 +67,10 @@ pub fn init_schema(conn: &Connection) -> anyhow::Result<()> {
             granted_by TEXT,
             granted_at INTEGER,
             role_hierarchy TEXT DEFAULT 'guest',
+            communication_prefs TEXT DEFAULT '{}',
+            active_projects TEXT DEFAULT '[]',
+            durable_constraints TEXT DEFAULT '[]',
+            confidence_score REAL DEFAULT 1.0,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )",
         [],
@@ -76,6 +80,10 @@ pub fn init_schema(conn: &Connection) -> anyhow::Result<()> {
     let _ = conn.execute("ALTER TABLE user_profiles ADD COLUMN granted_by TEXT", []);
     let _ = conn.execute("ALTER TABLE user_profiles ADD COLUMN granted_at INTEGER", []);
     let _ = conn.execute("ALTER TABLE user_profiles ADD COLUMN role_hierarchy TEXT DEFAULT 'guest'", []);
+    let _ = conn.execute("ALTER TABLE user_profiles ADD COLUMN communication_prefs TEXT DEFAULT '{}'", []);
+    let _ = conn.execute("ALTER TABLE user_profiles ADD COLUMN active_projects TEXT DEFAULT '[]'", []);
+    let _ = conn.execute("ALTER TABLE user_profiles ADD COLUMN durable_constraints TEXT DEFAULT '[]'", []);
+    let _ = conn.execute("ALTER TABLE user_profiles ADD COLUMN confidence_score REAL DEFAULT 1.0", []);
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS scheduled_tasks (
@@ -327,6 +335,44 @@ pub fn init_schema(conn: &Connection) -> anyhow::Result<()> {
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_experience_created 
          ON experience_records(created_at_epoch DESC)",
+        [],
+    )?;
+
+    // Agent Tool Executions Table (NIST AU-10 & ISO 42001 Tamper-Evident Hash-Chained Audit Trail)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS agent_tool_executions (
+            id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+            action_audit_id    INTEGER NOT NULL,
+            turn_token_prefix  TEXT NOT NULL,
+            sender_jid         TEXT NOT NULL,
+            sender_authority   TEXT NOT NULL,
+            tool_name          TEXT NOT NULL,
+            command_payload    TEXT NOT NULL,
+            execution_status   TEXT NOT NULL,
+            exit_code          INTEGER,
+            duration_ms        INTEGER NOT NULL,
+            prev_hash          TEXT NOT NULL,
+            record_hash        TEXT NOT NULL,
+            created_at_epoch   INTEGER NOT NULL
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_tool_exec_sender 
+         ON agent_tool_executions(sender_jid, created_at_epoch DESC)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_tool_exec_name 
+         ON agent_tool_executions(tool_name, created_at_epoch DESC)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_tool_exec_hash 
+         ON agent_tool_executions(record_hash)",
         [],
     )?;
 

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UserProfile {
     pub sender_jid: String,
     pub name: Option<String>,
@@ -14,6 +14,14 @@ pub struct UserProfile {
     pub granted_at: Option<i64>,
     #[serde(default)]
     pub role_hierarchy: Option<String>,
+    #[serde(default)]
+    pub communication_prefs: Option<String>,
+    #[serde(default)]
+    pub active_projects: Option<String>,
+    #[serde(default)]
+    pub durable_constraints: Option<String>,
+    #[serde(default)]
+    pub confidence_score: Option<f64>,
 }
 
 impl Default for UserProfile {
@@ -27,6 +35,10 @@ impl Default for UserProfile {
             granted_by: None,
             granted_at: None,
             role_hierarchy: None,
+            communication_prefs: None,
+            active_projects: None,
+            durable_constraints: None,
+            confidence_score: None,
         }
     }
 }
@@ -48,6 +60,10 @@ impl UserProfile {
             granted_by: None,
             granted_at: None,
             role_hierarchy: None,
+            communication_prefs: None,
+            active_projects: None,
+            durable_constraints: None,
+            confidence_score: None,
         }
     }
 }
@@ -129,6 +145,9 @@ pub trait SessionStorePort: Send + Sync {
 
     /// Saves or updates profiling memory for a sender JID.
     async fn save_user_profile(&self, profile: &UserProfile) -> anyhow::Result<()>;
+
+    /// Deletes profiling memory for a sender JID (Self-service Right to be Forgotten / UU PDP).
+    async fn delete_user_profile(&self, sender_jid: &str) -> anyhow::Result<bool>;
 
     /// Creates a new scheduled task in the database and returns its assigned ID.
     async fn create_scheduled_task(&self, task: &crate::core::domain::NewScheduledTask) -> anyhow::Result<i64>;
@@ -318,4 +337,27 @@ pub trait SessionStorePort: Send + Sync {
         domain: Option<&str>,
         limit: usize,
     ) -> anyhow::Result<Vec<crate::core::domain::ExperienceRecord>>;
+
+    /// Records a tamper-evident, hash-chained tool execution (NIST AU-10 & ISO 42001).
+    async fn record_tool_execution(
+        &self,
+        exec: &crate::core::domain::NewAgentToolExecution,
+    ) -> anyhow::Result<crate::core::domain::AgentToolExecution>;
+
+    /// Queries tool executions attributed to a specific WhatsApp sender.
+    async fn get_tool_executions_by_sender(
+        &self,
+        sender_jid: &str,
+        limit: usize,
+    ) -> anyhow::Result<Vec<crate::core::domain::AgentToolExecution>>;
+
+    /// Queries tool executions by tool name.
+    async fn get_tool_executions_by_tool(
+        &self,
+        tool_name: &str,
+        limit: usize,
+    ) -> anyhow::Result<Vec<crate::core::domain::AgentToolExecution>>;
+
+    /// Deterministically verifies the cryptographic SHA-256 hash chain of the tool execution audit trail.
+    async fn verify_audit_hash_chain(&self) -> anyhow::Result<bool>;
 }

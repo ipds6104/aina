@@ -291,7 +291,8 @@ pub fn get_recent_messages(
 
 pub fn get_user_profile(conn: &Connection, sender_jid: &str) -> anyhow::Result<Option<UserProfile>> {
     let mut stmt = conn.prepare(
-        "SELECT sender_jid, name, role, authority_level, notes, granted_by, granted_at, role_hierarchy 
+        "SELECT sender_jid, name, role, authority_level, notes, granted_by, granted_at, role_hierarchy,
+                communication_prefs, active_projects, durable_constraints, confidence_score
          FROM user_profiles WHERE sender_jid = ?1 LIMIT 1"
     )?;
     let mut rows = stmt.query(params![sender_jid])?;
@@ -305,6 +306,10 @@ pub fn get_user_profile(conn: &Connection, sender_jid: &str) -> anyhow::Result<O
             granted_by: row.get(5)?,
             granted_at: row.get(6)?,
             role_hierarchy: row.get(7)?,
+            communication_prefs: row.get(8)?,
+            active_projects: row.get(9)?,
+            durable_constraints: row.get(10)?,
+            confidence_score: row.get(11)?,
         }))
     } else {
         Ok(None)
@@ -313,8 +318,11 @@ pub fn get_user_profile(conn: &Connection, sender_jid: &str) -> anyhow::Result<O
 
 pub fn save_user_profile(conn: &Connection, profile: &UserProfile) -> anyhow::Result<()> {
     conn.execute(
-        "INSERT INTO user_profiles (sender_jid, name, role, authority_level, notes, granted_by, granted_at, role_hierarchy, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, CURRENT_TIMESTAMP)
+        "INSERT INTO user_profiles (
+            sender_jid, name, role, authority_level, notes, granted_by, granted_at, role_hierarchy,
+            communication_prefs, active_projects, durable_constraints, confidence_score, updated_at
+         )
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, CURRENT_TIMESTAMP)
          ON CONFLICT(sender_jid) DO UPDATE SET
             name = COALESCE(excluded.name, user_profiles.name),
             role = COALESCE(excluded.role, user_profiles.role),
@@ -323,6 +331,10 @@ pub fn save_user_profile(conn: &Connection, profile: &UserProfile) -> anyhow::Re
             granted_by = COALESCE(excluded.granted_by, user_profiles.granted_by),
             granted_at = COALESCE(excluded.granted_at, user_profiles.granted_at),
             role_hierarchy = COALESCE(excluded.role_hierarchy, user_profiles.role_hierarchy),
+            communication_prefs = COALESCE(excluded.communication_prefs, user_profiles.communication_prefs),
+            active_projects = COALESCE(excluded.active_projects, user_profiles.active_projects),
+            durable_constraints = COALESCE(excluded.durable_constraints, user_profiles.durable_constraints),
+            confidence_score = COALESCE(excluded.confidence_score, user_profiles.confidence_score),
             updated_at = CURRENT_TIMESTAMP",
         params![
             profile.sender_jid,
@@ -332,10 +344,19 @@ pub fn save_user_profile(conn: &Connection, profile: &UserProfile) -> anyhow::Re
             profile.notes,
             profile.granted_by,
             profile.granted_at,
-            profile.role_hierarchy
+            profile.role_hierarchy,
+            profile.communication_prefs,
+            profile.active_projects,
+            profile.durable_constraints,
+            profile.confidence_score,
         ],
     )?;
     Ok(())
+}
+
+pub fn delete_user_profile(conn: &Connection, sender_jid: &str) -> anyhow::Result<bool> {
+    let rows = conn.execute("DELETE FROM user_profiles WHERE sender_jid = ?1", params![sender_jid])?;
+    Ok(rows > 0)
 }
 
 pub fn is_group_trusted(conn: &Connection, group_jid: &str) -> anyhow::Result<bool> {

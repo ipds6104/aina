@@ -154,6 +154,7 @@ impl ProcessIncomingMessageUseCase {
                                     granted_by: None,
                                     granted_at: None,
                                     role_hierarchy: Some("guest".to_string()),
+                                    ..Default::default()
                                 };
                                 let _ = self.session_store.save_user_profile(&new_profile).await;
                             }
@@ -203,7 +204,7 @@ impl ProcessIncomingMessageUseCase {
                     ).await;
                 }
 
-                let audit_tracker = AuditTracker::start_tracking(
+                let mut audit_tracker = AuditTracker::start_tracking(
                     Arc::clone(&self.session_store),
                     msg.id.clone(),
                     msg.chat_jid.clone(),
@@ -324,7 +325,10 @@ impl ProcessIncomingMessageUseCase {
                             .await?;
                         return Ok(());
                     }
-                    ContextPreparation::Ready { prompt, capability } => (prompt, capability),
+                    ContextPreparation::Ready { prompt, capability } => {
+                        audit_tracker.attach_capability(&capability);
+                        (prompt, capability)
+                    }
                 };
 
                 // Persist the scoped capability so `aina policy` can validate it,

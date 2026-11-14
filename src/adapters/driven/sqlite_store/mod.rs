@@ -118,6 +118,11 @@ impl SessionStorePort for SqliteSessionStore {
         session::save_user_profile(&conn, profile)
     }
 
+    async fn delete_user_profile(&self, sender_jid: &str) -> anyhow::Result<bool> {
+        let conn = self.conn.lock().await;
+        session::delete_user_profile(&conn, sender_jid)
+    }
+
     async fn create_scheduled_task(&self, task: &NewScheduledTask) -> anyhow::Result<i64> {
         let conn = self.conn.lock().await;
         scheduler::create_scheduled_task(&conn, task)
@@ -414,6 +419,37 @@ impl SessionStorePort for SqliteSessionStore {
         let conn = self.conn.lock().await;
         experience::list_experiences(&conn, domain, limit)
     }
+
+    async fn record_tool_execution(
+        &self,
+        exec: &crate::core::domain::NewAgentToolExecution,
+    ) -> anyhow::Result<crate::core::domain::AgentToolExecution> {
+        let conn = self.conn.lock().await;
+        audit::record_tool_execution(&conn, exec)
+    }
+
+    async fn get_tool_executions_by_sender(
+        &self,
+        sender_jid: &str,
+        limit: usize,
+    ) -> anyhow::Result<Vec<crate::core::domain::AgentToolExecution>> {
+        let conn = self.conn.lock().await;
+        audit::get_tool_executions_by_sender(&conn, sender_jid, limit)
+    }
+
+    async fn get_tool_executions_by_tool(
+        &self,
+        tool_name: &str,
+        limit: usize,
+    ) -> anyhow::Result<Vec<crate::core::domain::AgentToolExecution>> {
+        let conn = self.conn.lock().await;
+        audit::get_tool_executions_by_tool(&conn, tool_name, limit)
+    }
+
+    async fn verify_audit_hash_chain(&self) -> anyhow::Result<bool> {
+        let conn = self.conn.lock().await;
+        audit::verify_audit_hash_chain(&conn)
+    }
 }
 
 #[cfg(test)]
@@ -705,6 +741,96 @@ mod tests {
 
         let other_domain_list = store.list_experiences(Some("survey_data"), 10).await.unwrap();
         assert_eq!(other_domain_list.len(), 0);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_user_profile_semantic_fields() {
+        let dir = std::env::temp_dir().join(format!("aina_test_profile_{}", rand::random::<u32>()));
+        let db_file = dir.join("test_profile.db");
+        let store = SqliteSessionStore::new(&db_file).unwrap();
+
+        let profile = UserProfile {
+            sender_jid: "6281234567890@s.whatsapp.net".to_string(),
+            name: Some("Budi Santoso".to_string()),
+            role: Some("Data Scientist".to_string()),
+            authority_level: "staff".to_string(),
+            notes: Some("Rekan kerja BPS".to_string()),
+            granted_by: Some("admin".to_string()),
+            granted_at: Some(1726000000),
+            role_hierarchy: Some("staff".to_string()),
+            communication_prefs: Some("to-the-point, ringkas, jangan basa-basi".to_string()),
+            active_projects: Some("Survei Angkatan Kerja Nasional (Sakernas)".to_string()),
+            durable_constraints: Some("Jangan kirim pesan di luar jam kerja (08:00-16:00)".to_string()),
+            confidence_score: Some(0.95),
+        };
+
+        store.save_user_profile(&profile).await.unwrap();
+
+        let fetched = store.get_user_profile("6281234567890@s.whatsapp.net").await.unwrap().expect("Profile not found");
+        assert_eq!(fetched.name.as_deref(), Some("Budi Santoso"));
+        assert_eq!(fetched.communication_prefs.as_deref(), Some("to-the-point, ringkas, jangan basa-basi"));
+        assert_eq!(fetched.active_projects.as_deref(), Some("Survei Angkatan Kerja Nasional (Sakernas)"));
+        assert_eq!(fetched.durable_constraints.as_deref(), Some("Jangan kirim pesan di luar jam kerja (08:00-16:00)"));
+        assert!((fetched.confidence_score.unwrap() - 0.95).abs() < 1e-4);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_tamper_evident_tool_execution_hash_chain() {
+        let dir = std::env::temp_dir().join(format!("aina_test_chain_{}", rand::random::<u32>()));
+        let db_file = dir.join("test_chain.db");
+        let store = SqliteSessionStore::new(&db_file).unwrap();
+
+        // 1. Initial empty chain should verify successfully
+        assert!(store.verify_audit_hash_chain().await.unwrap());
+
+        // 2. Insert 3 chained tool executions
+        let sender = "6289625345646@s.whatsapp.net";
+        for i in 1..=3 {
+            let exec = crate::core::domain::NewAgentToolExecution {
+                action_audit_id: Some(100 + i),
+                turn_token_prefix: format!("tok_turn_{:02}", i),
+                sender_jid: sender.to_string(),
+                sender_authority: "staff".to_string(),
+                tool_name: format!("tool_step_{}", i),
+                command_payload: format!("{{\"step\": {}}}", i),
+                execution_status: "success".to_string(),
+                exit_code: Some(0),
+                duration_ms: i * 50,
+                created_at_epoch: 1726000000 + i,
+            };
+            let recorded = store.record_tool_execution(&exec).await.unwrap();
+            assert_eq!(recorded.id, i);
+            assert_eq!(recorded.record_hash.len(), 64);
+        }
+
+        // 3. Chain verification must pass
+        assert!(store.verify_audit_hash_chain().await.unwrap());
+
+        // 4. Query tool executions by sender
+        let sender_execs = store.get_tool_executions_by_sender(sender, 10).await.unwrap();
+        assert_eq!(sender_execs.len(), 3);
+        assert_eq!(sender_execs[0].tool_name, "tool_step_3"); // ORDER BY id DESC
+
+        // 5. Query by tool name
+        let step2_execs = store.get_tool_executions_by_tool("tool_step_2", 10).await.unwrap();
+        assert_eq!(step2_execs.len(), 1);
+        assert_eq!(step2_execs[0].id, 2);
+
+        // 6. Adversarial Tamper: modify row 2 payload directly via SQLite connection
+        {
+            let conn = rusqlite::Connection::open(&db_file).unwrap();
+            conn.execute("UPDATE agent_tool_executions SET command_payload = '{\"tampered\": true}' WHERE id = 2", []).unwrap();
+        }
+
+        // 7. Chain verification must now FAIL and detect data manipulation
+        let verify_result = store.verify_audit_hash_chain().await;
+        assert!(verify_result.is_err(), "Verification should fail when audit trail is tampered");
+        let err_msg = verify_result.unwrap_err().to_string();
+        assert!(err_msg.contains("Integritas data termanipulasi pada audit ID 2"));
 
         let _ = std::fs::remove_dir_all(&dir);
     }

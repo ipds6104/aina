@@ -1,6 +1,6 @@
 //! Action audit tracker and telemetry management for WhatsApp message processing.
 
-use crate::core::domain::{AuditEngine, NewWhatsAppActionAudit, UseCaseClassifier};
+use crate::core::domain::{AuditEngine, NewAgentToolExecution, NewWhatsAppActionAudit, UseCaseClassifier};
 use crate::core::ports::SessionStorePort;
 use std::sync::Arc;
 use std::time::Instant;
@@ -8,6 +8,9 @@ use std::time::Instant;
 pub struct AuditTracker {
     session_store: Arc<dyn SessionStorePort>,
     audit_id: Option<i64>,
+    sender_jid: String,
+    turn_token_prefix: String,
+    sender_authority: String,
     input_text: String,
     has_media: bool,
     media_path: Option<String>,
@@ -57,7 +60,7 @@ impl AuditTracker {
             message_id,
             chat_jid,
             chat_type: chat_type.to_string(),
-            sender_jid,
+            sender_jid: sender_jid.clone(),
             sender_name,
             decision: decision.to_string(),
             decision_reason: decision_reason.to_string(),
@@ -76,6 +79,23 @@ impl AuditTracker {
         };
 
         session_store.record_action_audit(&audit).await?;
+
+        if let Some(t) = tool_name {
+            let new_exec = NewAgentToolExecution {
+                action_audit_id: None,
+                turn_token_prefix: "tok_terminal".to_string(),
+                sender_jid: sender_jid.clone(),
+                sender_authority: "guest".to_string(),
+                tool_name: t.to_string(),
+                command_payload: "{}".to_string(),
+                execution_status: status.to_string(),
+                exit_code: if status == "success" { Some(0) } else { Some(1) },
+                duration_ms: duration_seconds.map(|d| (d * 1000.0) as i64).unwrap_or(0),
+                created_at_epoch: now_epoch,
+            };
+            let _ = session_store.record_tool_execution(&new_exec).await;
+        }
+
         Ok(())
     }
 
@@ -108,7 +128,7 @@ impl AuditTracker {
             message_id,
             chat_jid,
             chat_type: chat_type.to_string(),
-            sender_jid,
+            sender_jid: sender_jid.clone(),
             sender_name,
             decision: "respond".to_string(),
             decision_reason: decision_reason.to_string(),
@@ -131,11 +151,20 @@ impl AuditTracker {
         Self {
             session_store,
             audit_id,
+            sender_jid,
+            turn_token_prefix: "tok_initial".to_string(),
+            sender_authority: "guest".to_string(),
             input_text,
             has_media,
             media_path,
             start_instant: Instant::now(),
         }
+    }
+
+    /// Attaches the verified turn capability to attribute tool executions to the verified principal.
+    pub fn attach_capability(&mut self, cap: &crate::core::domain::capability::TurnCapability) {
+        self.turn_token_prefix = cap.token.chars().take(12).collect();
+        self.sender_authority = cap.authority.as_str().to_string();
     }
 
     /// Records completion of a handled built-in command or conversational reaction.
@@ -147,8 +176,8 @@ impl AuditTracker {
         status: &str,
         error_detail: Option<&str>,
     ) {
+        let dur = self.start_instant.elapsed().as_secs_f64();
         if let Some(aid) = self.audit_id {
-            let dur = self.start_instant.elapsed().as_secs_f64();
             let _ = self
                 .session_store
                 .update_action_audit_result(
@@ -163,6 +192,20 @@ impl AuditTracker {
                 )
                 .await;
         }
+
+        let new_exec = NewAgentToolExecution {
+            action_audit_id: self.audit_id,
+            turn_token_prefix: self.turn_token_prefix.clone(),
+            sender_jid: self.sender_jid.clone(),
+            sender_authority: self.sender_authority.clone(),
+            tool_name: tool_name.to_string(),
+            command_payload: "{}".to_string(),
+            execution_status: status.to_string(),
+            exit_code: if status == "success" { Some(0) } else { Some(1) },
+            duration_ms: (dur * 1000.0) as i64,
+            created_at_epoch: chrono::Utc::now().timestamp(),
+        };
+        let _ = self.session_store.record_tool_execution(&new_exec).await;
     }
 
     /// Finalizes the audit record upon successful agent execution.
@@ -197,6 +240,22 @@ impl AuditTracker {
                     Some(refined_usecase.as_str()),
                 )
                 .await;
+        }
+
+        for tool in &tools_invoked {
+            let new_exec = NewAgentToolExecution {
+                action_audit_id: self.audit_id,
+                turn_token_prefix: self.turn_token_prefix.clone(),
+                sender_jid: self.sender_jid.clone(),
+                sender_authority: self.sender_authority.clone(),
+                tool_name: tool.clone(),
+                command_payload: "{}".to_string(),
+                execution_status: "success".to_string(),
+                exit_code: Some(0),
+                duration_ms: (dur * 1000.0) as i64,
+                created_at_epoch: chrono::Utc::now().timestamp(),
+            };
+            let _ = self.session_store.record_tool_execution(&new_exec).await;
         }
     }
 
@@ -237,6 +296,22 @@ impl AuditTracker {
                     Some(refined_usecase.as_str()),
                 )
                 .await;
+        }
+
+        for tool in &partial_tools {
+            let new_exec = NewAgentToolExecution {
+                action_audit_id: self.audit_id,
+                turn_token_prefix: self.turn_token_prefix.clone(),
+                sender_jid: self.sender_jid.clone(),
+                sender_authority: self.sender_authority.clone(),
+                tool_name: tool.clone(),
+                command_payload: "{}".to_string(),
+                execution_status: "failed".to_string(),
+                exit_code: Some(1),
+                duration_ms: (dur * 1000.0) as i64,
+                created_at_epoch: chrono::Utc::now().timestamp(),
+            };
+            let _ = self.session_store.record_tool_execution(&new_exec).await;
         }
     }
 }

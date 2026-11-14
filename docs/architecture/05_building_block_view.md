@@ -1,9 +1,9 @@
 # 5. Struktur Blok Pembangun (Building Block View)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `1ee7597` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-08T16:40:29+07:00`
-> - **Tracked Paths**: `src/`, `config/`, `skills/`
+> - **Verified Commit**: `fb69f88` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-14T13:47:00+07:00`
+> - **Tracked Paths**: `src/core/domain/`, `src/adapters/`
 > - **Drift Status**: `verified`
 
 Bab ini memperlihatkan dekomposisi struktur perangkat lunak Aina dari tingkat umum (Level 1) hingga rincian modul di dalamnya (Level 2).
@@ -76,3 +76,6 @@ Di dalam lapisan inti (`src/core/`), terdapat modul-modul penting yang saling te
 2. **`core::domain::SessionLifecycle`**: Logika penghitung giliran obrolan. Jika giliran mencapai batas maksimal, modul ini memicu perangkuman otomatis menjadi *lean resumed prompt*.
 3. **`core::domain::Activity` & `ActivityReconciler`**: Model domain untuk tugas terjadwal berbasis slug identitas parsial unik, kategori, sumber, dan rekonsiliasi idempoten pada saat startup.
 4. **`core::ports`**: Wadah trait abstrak (`AgentEngine`, `SessionStorePort`, `WhatsAppGateway`). Berkat trait ini, kode inti tidak terikat pada library eksternal mana pun.
+5. **`core::domain::capability`**: Engine penerbitan dan validasi hak akses berumur pendek (`TurnCapability`, TTL 10 menit) yang mengikat `principal_jid`, `authority`, dan `message_id` untuk menegakkan prinsip *Least Privilege*.
+6. **`core::domain::audit`**: Engine audit trail tanpa sangkalan (*non-repudiation*) berbasis rantai hash SHA-256 (`agent_tool_executions`), mencatat setiap aksi tool lengkap dengan stempel waktu dan identitas pengirim asli (NIST AU-10 & ISO 42001).
+7. **`core::domain::persona`**: Engine perakitan profil semantik 4-dimensi (`communication_prefs`, `active_projects`, `durable_constraints`, `confidence_score`) dan etika interaksi santun bebas template CS kaku.

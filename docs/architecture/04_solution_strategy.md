@@ -1,9 +1,9 @@
 # 4. Strategi Solusi (Solution Strategy)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `1ee7597` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-08T16:40:29+07:00`
-> - **Tracked Paths**: `src/`, `config/`, `skills/`
+> - **Verified Commit**: `fb69f88` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-14T13:47:00+07:00`
+> - **Tracked Paths**: `src/core/domain/capability.rs`, `src/core/domain/audit/`, `src/core/usecases/process_message/`
 > - **Drift Status**: `verified`
 
 Bab ini menjelaskan strategi rancangan fundamental yang dipilih untuk menyelesaikan masalah-masalah utama dalam Aina. Setiap strategi dipilih dengan pertimbangan praktis agar sistem tangguh, aman, dan mudah dimengerti.
@@ -130,3 +130,20 @@ Terinspirasi dari *Gibbs' Reflective Cycle* dan arsitektur refleksi *Stanford Ge
 3. **Grounding Fisik Khatulistiwa**: Mengambil data cuaca real-time Pontianak (suhu, hujan, kelembapan) via Open-Meteo API tanpa menebak.
 4. **Riset Web Terarah (*Gated Novelty Web Search*)**: Memformulasikan 1–2 kueri pencarian tajam untuk memperkaya latar sensorik kuliner dan destinasi lokal.
 5. **Adaptasi Otonom**: Menyuntikkan hasil refleksi ke aktivitas terjadwal via CLI (`aina activity edit <slug> --append "..." --file`).
+
+---
+
+## 4.10 Strategi Pertahanan Berlapis & Audit Anti-Sangkalan (Zero Implicit Trust & Non-Repudiation)
+
+Untuk menjamin keamanan kelas enterprise di lingkungan instansi pemerintah (BPS):
+1. **Model Otoritas 4-Tingkat Terisolasi Konfigurasi**:
+   - Status `ADMIN` terikat pada konfigurasi nomor WhatsApp Companion, bukan pada basis data atau teks pesan masuk.
+   - Hak istimewa pimpinan satker (`ATASAN`) dan rekan kerja (`STAFF`) dipisahkan secara tegas dari tamu luar (`GUEST`).
+2. **Tiket Kapabilitas Sementara (*Scoped Turn Capability*)**:
+   - Setiap pesan masuk menerbitkan tiket otorisasi unik dengan masa berlaku terbatas (TTL 10 menit) yang mengikat `principal_jid`, `authority`, dan `message_id`. Seluruh eksekusi tool memverifikasi tiket ini.
+3. **Audit Trail Rantai Hash SHA-256 Bergaya Blockchain (NIST AU-10 & ISO 42001)**:
+   - Setiap pemanggilan tool oleh AI dienkapsulasi dengan hash SHA-256 yang merantai blok sebelumnya ($H_n = \text{SHA256}(H_{n-1} \parallel \dots)$), menjamin integritas bukti forensik anti-manipulasi.
+4. **Pertahanan Kebocoran Nomor WhatsApp (*Phone Leakage Cognitive Fence*)**:
+   - Nomor tak dikenal otomatis diperlakukan sebagai tamu (`GUEST`), dibatasi kuotanya (*anti-abuse rate limiting*), dan dilarang mengakses dokumen internal instansi.
+5. **Kepatuhan Privasi Mandiri UU PDP (*Right to be Forgotten*)**:
+   - Pengguna memiliki kendali transparansi penuh atas data profilnya (`/profilku`) serta hak penghapusan mandiri seketika (`/lupakansaya`).

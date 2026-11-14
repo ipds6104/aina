@@ -1,9 +1,9 @@
 # 10. Persyaratan Mutu (Quality Requirements)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `1ee7597` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-08T16:40:29+07:00`
-> - **Tracked Paths**: `src/`, `config/`, `skills/`
+> - **Verified Commit**: `fb69f88` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-14T13:47:00+07:00`
+> - **Tracked Paths**: `src/core/domain/audit/`, `src/core/usecases/process_message/`, `src/adapters/driven/sqlite_store/`
 > - **Drift Status**: `verified`
 
 Bab ini memuat skenario-skenario mutu terukur untuk menguji dan membuktikan bahwa sasaran kualitas yang ditetapkan pada Bab 1 benar-benar terpenuhi secara nyata.
@@ -18,7 +18,10 @@ Hubungan antara sasaran mutu utama dan skenario pengujian dipetakan dalam pohon 
   ├── Ketersediaan & Keandalan
   │   └── **QS-01**: Rotasi kuota otomatis saat batas harian 429 tercapai (#reliability)
   ├── Privasi & Keamanan
-  │   └── **QS-02**: Nol kebocoran pesan pribadi dan penyuntikan kunci JIT (#security)
+  │   ├── **QS-02**: Nol kebocoran pesan pribadi dan penyuntikan kunci JIT (#security)
+  │   ├── **QS-08**: Integritas kriptografis rantai audit tool SHA-256 (#security)
+  │   ├── **QS-09**: Pertahanan Zero Implicit Trust saat nomor WA bocor (#security)
+  │   └── **QS-10**: Hak penghapusan mandiri subjek data sesuai UU PDP (#security, #usability)
   ├── Kemudahan Perawatan & Modul
   │   ├── **QS-03**: Pemasangan skill Git kustom tanpa menyentuh kode inti (#maintainability)
   │   └── **QS-06**: Ketahanan modifikasi jadwal saat redeploy kontainer (#maintainability)
@@ -96,6 +99,33 @@ Hubungan antara sasaran mutu utama dan skenario pengujian dipetakan dalam pohon 
 
 ---
 
+### QS-08: Integritas Kriptografis Rantai Audit Tool SHA-256 (NIST AU-10)
+- **Kategori Mutu**: #security
+- **Kondisi Awal**: Sistem mencatat puluhan pemanggilan tool di basis data `agent_tool_executions`.
+- **Pemicu**: Administrator menjalankan audit verifikasi: `aina audit verify-chain` (atau serangan injeksi langsung memanipulasi baris SQLite).
+- **Respon Sistem**: Fungsi `verify_audit_hash_chain` menghitung ulang seluruh rantai hash kriptografis SHA-256 dari genesis block hingga baris mutakhir. Jika ada 1 karakter payload atau sender yang diubah, sistem langsung mendeteksi kerusakan integritas dan menunjukkan nomor ID baris yang termanipulasi.
+- **Ukuran Keberhasilan**: 100% deteksi manipulasi log, 0% celah modifikasi data audit tanpa terdeteksi (Terverifikasi di unit test `test_tamper_evident_tool_execution_hash_chain`).
+
+---
+
+### QS-09: Pertahanan Zero Implicit Trust saat Nomor WA Bocor ke Pihak Asing
+- **Kategori Mutu**: #security
+- **Kondisi Awal**: Nomor bot WhatsApp dihubungi oleh nomor asing yang belum terdaftar, atau dimasukkan ke grup publik tanpa izin Companion.
+- **Pemicu**: Pihak asing meminta dokumen statistik internal satker atau mencoba melakukan jailbreak prompt.
+- **Respon Sistem**: Logika `ContextPreparer` secara otomatis mengalokasikan wewenang `GUEST`, menerapkan pagar kognitif *Strict OpSec*, menolak memberikan data rahasia tanpa izin Companion, dan mencatat upaya tersebut di audit log.
+- **Ukuran Keberhasilan**: 0% data internal kantor bocor ke pihak asing, penolakan disampaikan secara santun dan profesional.
+
+---
+
+### QS-10: Hak Penghapusan Mandiri Subjek Data Sesuai UU PDP (Right to be Forgotten)
+- **Kategori Mutu**: #security, #usability
+- **Kondisi Awal**: Pengguna WhatsApp telah berinteraksi dengan bot dan memiliki profil preferensi serta catatan proyek di basis data Aina.
+- **Pemicu**: Pengguna mengirimkan perintah `/lupakansaya` (atau `!aina lupakan saya`).
+- **Respon Sistem**: Sistem mengeksekusi `delete_user_profile(sender_jid)`, membersihkan seluruh catatan preferensi komunikasi dan nama panggilan dari tabel `user_profiles`, sembari tetap mempertahankan catatan audit legal di tabel forensik terpisah.
+- **Ukuran Keberhasilan**: Data profil personal langsung terhapus 100% (Terverifikasi di unit test `user_can_view_and_clear_own_profile`), kepatuhan penuh UU PDP No. 27/2022.
+
+---
+
 ## 10.3 Matriks Ringkasan Skenario Mutu
 
 | ID Skenario | Sasaran Mutu | Target Ukuran | Kondisi Terverifikasi Saat Ini |
@@ -107,3 +137,6 @@ Hubungan antara sasaran mutu utama dan skenario pengujian dipetakan dalam pohon 
 | **QS-05** | #usability | 0 tabel rusak di WhatsApp, klarifikasi terarah | Lulus (Terverifikasi di `domain/persona.rs`) |
 | **QS-06** | #maintainability | 100% jadwal kustom bertahan pasca redeploy | Lulus (Terverifikasi di `activity.rs` & volume persistensi) |
 | **QS-07** | #adaptability | Deteksi kebosanan $\ge 0.5$, 0% halusinasi cuaca | Lulus (Terverifikasi di `reflect.py` & Open-Meteo API) |
+| **QS-08** | #security | 100% deteksi manipulasi log rantai hash SHA-256 | Lulus (Terverifikasi di `sqlite_store/mod.rs` & NIST AU-10) |
+| **QS-09** | #security | 0% kebocoran data internal ke nomor asing | Lulus (Terverifikasi di `context_preparer.rs` Zero Trust) |
+| **QS-10** | #security, #usability | 100% penghapusan profil mandiri sesuai UU PDP | Lulus (Terverifikasi di `builtin_commands.rs` test) |

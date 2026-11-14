@@ -202,6 +202,94 @@ pub async fn handle_audit(args: &[String]) -> anyhow::Result<()> {
             }
             Ok(())
         }
+        "trace" => {
+            let is_json = args.iter().any(|a| a == "--json");
+            let mut sender = None;
+            let mut tool = None;
+            let mut limit = 20;
+            let mut idx = 1;
+            while idx < args.len() {
+                let a = &args[idx];
+                if a == "--sender" && idx + 1 < args.len() {
+                    sender = Some(args[idx + 1].clone());
+                    idx += 2;
+                    continue;
+                }
+                if a == "--tool" && idx + 1 < args.len() {
+                    tool = Some(args[idx + 1].clone());
+                    idx += 2;
+                    continue;
+                }
+                if (a == "--limit" || a == "-l") && idx + 1 < args.len() {
+                    limit = args[idx + 1].parse().unwrap_or(20);
+                    idx += 2;
+                    continue;
+                }
+                idx += 1;
+            }
+            let config_path = std::env::var("AINA_CONFIG").unwrap_or_else(|_| "config/config.yaml".to_string());
+            let config = crate::config::AppConfig::load_from_file_or_default(&config_path);
+            let db_path = std::env::var("DATABASE_PATH").unwrap_or(config.database.path);
+            let store = crate::adapters::driven::SqliteSessionStore::new(&db_path)?;
+
+            let records = if let Some(s) = sender {
+                store.get_tool_executions_by_sender(&s, limit).await?
+            } else if let Some(t) = tool {
+                store.get_tool_executions_by_tool(&t, limit).await?
+            } else {
+                println!("⚠️ Harap tentukan `--sender <jid>` atau `--tool <nama_tool>`.");
+                return Ok(());
+            };
+
+            if is_json {
+                println!("{}", serde_json::to_string_pretty(&records)?);
+            } else {
+                println!("🔗 Jejak Eksekusi Tool Aina ({} eksekusi):\n", records.len());
+                for (i, r) in records.iter().enumerate() {
+                    println!("{}. [{}] Tool: *{}* | Wewenang: {} | Status: {}",
+                        i + 1, r.id, r.tool_name, r.sender_authority, r.execution_status);
+                    println!("   Pengirim   : {}", r.sender_jid);
+                    println!("   Hash Rekam : {}", r.record_hash);
+                    println!("   Hash Induk : {}", r.prev_hash);
+                    println!("   Durasi     : {}ms", r.duration_ms);
+                    println!();
+                }
+            }
+            Ok(())
+        }
+        "verify-chain" => {
+            let is_json = args.iter().any(|a| a == "--json");
+            let config_path = std::env::var("AINA_CONFIG").unwrap_or_else(|_| "config/config.yaml".to_string());
+            let config = crate::config::AppConfig::load_from_file_or_default(&config_path);
+            let db_path = std::env::var("DATABASE_PATH").unwrap_or(config.database.path);
+            let store = crate::adapters::driven::SqliteSessionStore::new(&db_path)?;
+
+            match store.verify_audit_hash_chain().await {
+                Ok(true) => {
+                    if is_json {
+                        println!(r#"{{"valid": true, "message": "Hash chain verified successfully"}}"#);
+                    } else {
+                        println!("🔒 *Verifikasi Integritas Rantai Audit (SHA-256 Hash Chain):*");
+                        println!("✅ SEMUA BLOK AUDIT VALID & UTUH. Tidak ditemukan pemalsuan atau modifikasi data.");
+                    }
+                }
+                Ok(false) => {
+                    if is_json {
+                        println!(r#"{{"valid": false, "message": "Hash chain broken"}}"#);
+                    } else {
+                        eprintln!("❌ VERIFIKASI GAGAL: Terdeteksi ketidakcocokan hash chain!");
+                    }
+                }
+                Err(e) => {
+                    if is_json {
+                        println!(r#"{{"valid": false, "error": "{}"}}"#, e);
+                    } else {
+                        eprintln!("❌ VERIFIKASI GAGAL: {}", e);
+                    }
+                }
+            }
+            Ok(())
+        }
         _ => {
             // Default: query transcript steps
             let mut query = None;

@@ -148,6 +148,7 @@ impl ContextPreparer {
                     granted_by: trusted_group_jid.as_ref().map(|g| format!("group:{}", g)),
                     granted_at: if has_trusted_group { Some(chrono::Utc::now().timestamp()) } else { None },
                     role_hierarchy: Some(authority_level),
+                    ..Default::default()
                 };
                 let _ = session_store.save_user_profile(&new_profile).await;
                 new_profile
@@ -168,6 +169,7 @@ impl ContextPreparer {
                     granted_by: None,
                     granted_at: None,
                     role_hierarchy: Some(authority_level),
+                    ..Default::default()
                 }
             }
         };

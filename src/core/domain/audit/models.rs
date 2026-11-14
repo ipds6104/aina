@@ -89,6 +89,38 @@ pub struct ToolCallDetail {
     pub arguments: Option<serde_json::Value>,
 }
 
+/// A tamper-evident cryptographic audit record for a single tool call (NIST SP 800-53 AU-10 & ISO 42001).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentToolExecution {
+    pub id: i64,
+    pub action_audit_id: Option<i64>,
+    pub turn_token_prefix: String,
+    pub sender_jid: String,
+    pub sender_authority: String,
+    pub tool_name: String,
+    pub command_payload: String,
+    pub execution_status: String,
+    pub exit_code: Option<i32>,
+    pub duration_ms: i64,
+    pub prev_hash: String,
+    pub record_hash: String,
+    pub created_at_epoch: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NewAgentToolExecution {
+    pub action_audit_id: Option<i64>,
+    pub turn_token_prefix: String,
+    pub sender_jid: String,
+    pub sender_authority: String,
+    pub tool_name: String,
+    pub command_payload: String,
+    pub execution_status: String,
+    pub exit_code: Option<i32>,
+    pub duration_ms: i64,
+    pub created_at_epoch: i64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TranscriptStepDetail {
     pub step_index: Option<i64>,

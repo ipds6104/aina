@@ -1,9 +1,9 @@
 # 11. Risiko dan Hutang Teknis (Risks and Technical Debt)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `1ee7597` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-08T16:40:29+07:00`
-> - **Tracked Paths**: `src/`, `config/`, `skills/`
+> - **Verified Commit**: `fb69f88` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-14T13:47:00+07:00`
+> - **Tracked Paths**: `src/core/domain/audit/`, `src/core/usecases/process_message/`, `src/adapters/driven/sqlite_store/`
 > - **Drift Status**: `verified`
 
 Bab ini secara terbuka mendata potensi risiko yang mungkin timbul dari keputusan arsitektur (Bab 9), serta catatan hutang teknis (*technical debt*) yang diketahui agar dapat dimitigasi dan dirawat dengan baik.
@@ -24,6 +24,9 @@ Tabel berikut merangkum seluruh risiko yang muncul dari keputusan arsitektur (AD
 | RISK-06 | Terjadi duplikasi tugas terjadwal saat proses rekonsiliasi startup berulang kali. | Rendah | Sedang | Skema SQLite dilindungi *partial unique index* `idx_scheduled_tasks_slug` pada kolom `slug`, sehingga operasi penambahan bersifat idempoten (*UPSERT*). |
 | RISK-07 | Terjadinya *context rot* atau perhatian LLM terdistraksi akibat katalog keahlian yang semakin banyak. | Rendah | Sedang | Penerapan model *Three-Tier Progressive Disclosure* (`agentskills.io`): hanya nama dan deskripsi ringkas yang dimuat di Tier 1; detail lengkap hanya dibaca saat cocok. |
 | RISK-08 | Layanan API cuaca publik (Open-Meteo) tidak dapat dihubungi atau offline saat sesi refleksi berjalan. | Rendah | Rendah | Modul `reflect.py` menyediakan fallback offline estimasi cuaca tropis khatulistiwa otomatis berdasarkan waktu WIB agar proses refleksi tidak pernah macet (*fail-safe*). |
+| RISK-09 | Kebocoran nomor WhatsApp bot ke publik atau dimasukkan ke grup pihak asing tanpa izin. | Sedang | Sedang | Paradigma Zero Implicit Trust otomatis mengisolasi kontak tak dikenal ke status 'GUEST' tanpa hak baca data internal, rate-limiting, dan honeypot logging. |
+| RISK-10 | Percobaan modifikasi langsung (*tampering*) pada tabel log audit oleh pihak internal/penyerang. | Rendah | Tinggi | Rantai hash SHA-256 (NIST AU-10 & ISO 42001): setiap blok mengikat hash sebelumnya. Verifikasi via `aina audit verify-chain` otomatis mendeteksi baris yang termanipulasi. |
+| RISK-11 | Tuntutan hukum privasi UU PDP No. 27/2022 akibat penyimpanan preferensi personal lawan bicara. | Rendah | Sedang | Fitur mandiri `/profilku` (transparansi profil) dan `/lupakansaya` (pembersihan seketika dari SQLite), dengan pemisahan log audit legal forensik. |
 
 ---
 

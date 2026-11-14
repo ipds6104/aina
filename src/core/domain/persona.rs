@@ -381,9 +381,25 @@ impl PersonaEngine {
             )
         };
 
-        let profile_notes_str = match profile.and_then(|p| p.notes.as_deref()) {
-            Some(notes) if !notes.trim().is_empty() => format!("\n- Catatan Profil & Preferensi: {}", notes),
-            _ => String::new(),
+        let mut profile_details = Vec::new();
+        if let Some(p) = profile {
+            if let Some(notes) = p.notes.as_deref().filter(|s| !s.trim().is_empty()) {
+                profile_details.push(format!("- Catatan Profil & Preferensi: {}", notes));
+            }
+            if let Some(prefs) = p.communication_prefs.as_deref().filter(|s| !s.trim().is_empty()) {
+                profile_details.push(format!("- Preferensi Komunikasi: {}", prefs));
+            }
+            if let Some(projects) = p.active_projects.as_deref().filter(|s| !s.trim().is_empty()) {
+                profile_details.push(format!("- Proyek/Kegiatan Terkait: {}", projects));
+            }
+            if let Some(constraints) = p.durable_constraints.as_deref().filter(|s| !s.trim().is_empty()) {
+                profile_details.push(format!("- Batasan/Constraint Pengguna: {}", constraints));
+            }
+        }
+        let profile_notes_str = if !profile_details.is_empty() {
+            format!("\n{}", profile_details.join("\n"))
+        } else {
+            String::new()
         };
 
         let groups_context_str = if !user_groups.is_empty() {

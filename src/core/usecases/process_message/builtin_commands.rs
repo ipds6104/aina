@@ -99,6 +99,72 @@ pub async fn try_handle_builtin_command(
         });
     }
 
+    // 2b. /profilku, !aina profilku (Self-service profile transparency)
+    if trimmed_text.eq_ignore_ascii_case("/profilku")
+        || trimmed_text.eq_ignore_ascii_case("/profil")
+        || trimmed_text.eq_ignore_ascii_case("!aina profilku")
+        || trimmed_text.eq_ignore_ascii_case("!aina profil")
+    {
+        let sender_jid = &msg.sender.jid;
+        let profile = session_store.get_user_profile(sender_jid).await.ok().flatten();
+        let masked_jid = if sender_jid.len() > 8 {
+            format!("{}****{}", &sender_jid[..5], &sender_jid[sender_jid.len() - 4..])
+        } else {
+            sender_jid.clone()
+        };
+
+        let mut lines = Vec::new();
+        lines.push("👤 *Transparansi Data Profil Pengguna (Aina)*".to_string());
+        lines.push(String::new());
+        lines.push(format!("• WhatsApp ID : `{}`", masked_jid));
+        lines.push(format!("• Nama Panggilan : *{}*", profile.as_ref().and_then(|p| p.name.as_deref()).unwrap_or(msg.sender.name.as_deref().unwrap_or("Belum Disetel"))));
+        lines.push(format!("• Peran / Wewenang : *{}* ({})", 
+            profile.as_ref().and_then(|p| p.role.as_deref()).unwrap_or("Tamu"),
+            profile.as_ref().map(|p| p.authority_level.as_str()).unwrap_or("guest").to_uppercase()
+        ));
+
+        if let Some(ref p) = profile {
+            if let Some(ref prefs) = p.communication_prefs {
+                lines.push(format!("• Preferensi Gaya : {}", prefs));
+            }
+            if let Some(ref proj) = p.active_projects {
+                lines.push(format!("• Proyek Terkait  : {}", proj));
+            }
+            if let Some(ref notes) = p.notes {
+                lines.push(format!("• Catatan Sistem  : {}", notes));
+            }
+        }
+
+        lines.push(String::new());
+        lines.push("ℹ️ _Data profil di atas digunakan Aina semata-mata untuk menyesuaikan gaya komunikasi dan konteks kerjaan._".to_string());
+        lines.push("_Ketik `/lupakansaya` jika Anda ingin menghapus preferensi atau nama panggilan yang tersimpan._".to_string());
+
+        return Some(BuiltinCommandOutcome {
+            reply: lines.join("\n"),
+            tool_name: "builtin:profile",
+            usecase: "system_and_control",
+            is_error: false,
+            error_detail: None,
+        });
+    }
+
+    // 2c. /lupakansaya, !aina lupakan saya (Right to be Forgotten)
+    if trimmed_text.eq_ignore_ascii_case("/lupakansaya")
+        || trimmed_text.eq_ignore_ascii_case("!aina lupakan saya")
+        || trimmed_text.eq_ignore_ascii_case("/forgetme")
+    {
+        let sender_jid = &msg.sender.jid;
+        let _ = session_store.delete_user_profile(sender_jid).await;
+
+        return Some(BuiltinCommandOutcome {
+            reply: "🗑️ *Hak Privasi Terpenuhi: Data Profil Dibersihkan*\n\nSeluruh catatan preferensi komunikasi, nama panggilan tersimpan, dan proyek terkait telah dihapus dari memori persisten Aina.\n\nInteraksi Anda berikutnya akan diperlakukan secara anonim dan segar kembali.".to_string(),
+            tool_name: "builtin:forget_me",
+            usecase: "system_and_control",
+            is_error: false,
+            error_detail: None,
+        });
+    }
+
     // 3. /model commands
     if trimmed_text.starts_with("/model") {
         let parts: Vec<&str> = trimmed_text.split_whitespace().collect();
@@ -537,6 +603,48 @@ mod tests {
             .await
             .expect("dm reset must be allowed");
         assert!(!outcome_dm.is_error);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn user_can_view_and_clear_own_profile() {
+        let (dir, store, agent) = setup();
+
+        // 1. Setup profile with semantic fields
+        let profile = crate::core::ports::UserProfile {
+            sender_jid: STRANGER.to_string(),
+            name: Some("Doni Rekan".to_string()),
+            role: Some("Mitra BPS".to_string()),
+            authority_level: "guest".to_string(),
+            notes: Some("Enumerasi Lapangan".to_string()),
+            communication_prefs: Some("Santai".to_string()),
+            active_projects: Some("Sensus Pertanian".to_string()),
+            ..Default::default()
+        };
+        store.save_user_profile(&profile).await.unwrap();
+
+        // 2. Query /profilku
+        let profil_msg = make_msg_in(STRANGER, "/profilku", STRANGER, ChatType::DirectMessage);
+        let outcome_prof = try_handle_builtin_command(&profil_msg, &store, &agent, ADMIN)
+            .await
+            .expect("profilku must be handled");
+        assert!(!outcome_prof.is_error);
+        assert!(outcome_prof.reply.contains("Doni Rekan"));
+        assert!(outcome_prof.reply.contains("Santai"));
+        assert!(outcome_prof.reply.contains("Sensus Pertanian"));
+
+        // 3. Right to be forgotten: /lupakansaya
+        let forget_msg = make_msg_in(STRANGER, "/lupakansaya", STRANGER, ChatType::DirectMessage);
+        let outcome_forget = try_handle_builtin_command(&forget_msg, &store, &agent, ADMIN)
+            .await
+            .expect("lupakansaya must be handled");
+        assert!(!outcome_forget.is_error);
+        assert!(outcome_forget.reply.contains("Data Profil Dibersihkan"));
+
+        // 4. Verify profile was cleared from database
+        let cleared = store.get_user_profile(STRANGER).await.unwrap();
+        assert!(cleared.is_none());
 
         let _ = std::fs::remove_dir_all(&dir);
     }

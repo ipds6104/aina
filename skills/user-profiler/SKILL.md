@@ -60,10 +60,11 @@ Jika lawan bicara memperkenalkan diri atau meminta panggilan tertentu di chat:
 - Jika pengguna mengaku sebagai staf internal atau meminta akses tugas kerja kantor:
   - Berikan bantuan dalam batas informasi umum.
   - Untuk tugas internal penuh, pastikan ada konfirmasi/approval dari User Companion (Admin).
-  - Setelah Admin mengonfirmasi, jalankan:
+  - Peningkatan wewenang HANYA BOLEH dijalankan via gerbang otorisasi deterministik `aina policy grant-user` dengan `AINA_TURN_TOKEN` valid saat pesan berasal dari Companion:
     ```bash
-    aina user set <sender_jid> --name "<Nama>" --role "<Jabatan>" --authority staff --notes "Disetujui Admin pada YYYY-MM-DD"
+    aina policy grant-user <sender_jid> --authority staff --role "<Jabatan>" --notes "Disetujui Admin pada YYYY-MM-DD" --json
     ```
+  - *Catatan Penting*: Jangan pernah memanggil `aina user set --authority ...` langsung dari proses agen; jalur agen wajib melewati gerbang `aina policy` (lihat `skills/policy-broker/SKILL.md`).
 
 ### SOP 4: Mencari Profil & Daftar Rekan Kerja Terdaftar
 1. **Mencari Berdasarkan Kata Kunci (Nama / Divisi)**:
@@ -75,6 +76,14 @@ Jika lawan bicara memperkenalkan diri atau meminta panggilan tertentu di chat:
    aina user list
    # atau output JSON: aina user list --json
    ```
+
+### SOP 5: Audit Forensik Permintaan Tindakan (Non-Repudiation Trace)
+Untuk memeriksa siapa nomor WhatsApp yang pernah meminta eksekusi alat atau script tertentu:
+```bash
+aina audit trace --sender <sender_jid>
+# Melihat riwayat alat tertentu:
+aina audit who-ran <nama_alat>
+```
 
 ---
 

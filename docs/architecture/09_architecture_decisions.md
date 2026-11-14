@@ -1,9 +1,9 @@
 # 9. Keputusan Arsitektur (Architecture Decisions)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `1ee7597` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-08T16:40:29+07:00`
-> - **Tracked Paths**: `src/`, `config/`, `skills/`
+> - **Verified Commit**: `fb69f88` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-14T13:47:00+07:00`
+> - **Tracked Paths**: `src/core/domain/capability.rs`, `src/core/domain/audit/`, `src/adapters/driven/sqlite_store/audit.rs`
 > - **Drift Status**: `verified`
 
 Bab ini mencatat keputusan-keputusan arsitektur penting (*Architecture Decision Records / ADR*) yang telah disepakati dan diimplementasikan di dalam sistem Aina.
@@ -111,3 +111,42 @@ Bab ini mencatat keputusan-keputusan arsitektur penting (*Architecture Decision 
 - **Konsekuensi Positif**:
   Aina menjadi rekan kerja yang hidup, kontekstual, dan dinamis, terbebas dari halusinasi lingkungan khatulistiwa.
 - **Risiko yang Muncul**: RISK-08
+
+---
+
+### ADR-009: Zero Implicit Trust, Hirarki Otoritas 4-Tingkat, & Scoped Turn Capabilities
+
+- **Status**: Diterima (*Accepted*)
+- **Konteks**:
+  Pesan WhatsApp dari sembarang nomor berpotensi memanipulasi kepribadian AI melalui rekayasa prompt (*prompt injection*), meminta data internal kantor, atau berpura-pura menjadi pimpinan satker.
+- **Keputusan**:
+  Menerapkan paradigma *Zero Implicit Trust* dengan hirarki 4-tingkat (`Admin`, `Atasan`, `Staff`, `Guest`). Otoritas `Admin` terisolasi 100% pada konfigurasi statis `admin_jid` (nomor Companion). Setiap giliran pemrosesan menerbitkan tiket kapabilitas bertenggat waktu (`TurnCapability`, TTL 10 menit). Seluruh perintah administratif dan pemanggilan alat istimewa wajib memvalidasi tiket kapabilitas ini.
+- **Konsekuensi Positif**:
+  Kebal terhadap serangan eskalasi wewenang via teks obrolan, aman saat nomor WhatsApp bot bocor ke publik, dan terjaminnya kepatuhan *Least Privilege*.
+- **Risiko yang Muncul**: RISK-09
+
+---
+
+### ADR-010: Rantai Hash Kriptografis SHA-256 untuk Audit Trail Non-Repudiasi Tool
+
+- **Status**: Diterima (*Accepted*)
+- **Konteks**:
+  Di lingkungan instansi pemerintah (BPS), setiap tindakan yang diambil oleh AI atas permintaan pengguna harus dapat dipertanggungjawabkan tanpa sangkalan (*non-repudiation*), serta tahan terhadap manipulasi basis data lokal.
+- **Keputusan**:
+  Mengimplementasikan pencatatan eksekusi tool di tabel `agent_tool_executions` dengan rantai hash kriptografis SHA-256 bergaya blockchain ($H_n = \text{SHA256}(H_{n-1} \parallel \text{fields})$) yang selaras dengan NIST SP 800-53 AU-10 dan ISO/IEC 42001. Menyediakan CLI `aina audit verify-chain` untuk audit deterministik dan `aina audit trace --sender <jid>` untuk audit per nomor pengirim.
+- **Konsekuensi Positif**:
+  Bukti matematis anti-manipulasi yang tak terbantahkan, transparansi akuntabilitas penuh, dan kesiapan audit hukum forensik.
+- **Risiko yang Muncul**: RISK-10
+
+---
+
+### ADR-011: Hak Privasi Mandiri Pengguna (*Self-Service Privacy & Right to be Forgotten*)
+
+- **Status**: Diterima (*Accepted*)
+- **Konteks**:
+  Penyimpanan profil lawan bicara secara permanen tanpa mekanisme kendali pengguna melanggar UU No. 27 Tahun 2022 tentang Pelindungan Data Pribadi (UU PDP Indonesia) dan EU GDPR Article 17 (*Right to Erasure*).
+- **Keputusan**:
+  Menyediakan perintah mandiri langsung di WhatsApp: `/profilku` untuk inspeksi data profil personal transparan (dengan penyamaran nomor telepon), serta `/lupakansaya` untuk pembersihan profil dan preferensi pengguna dari basis data SQLite secara instan, dengan tetap mempertahankan log audit forensik legal secara terpisah.
+- **Konsekuensi Positif**:
+  Kepatuhan regulasi UU PDP 100%, peningkatan kepercayaan pengguna, dan kendali privasi mandiri (*self-sovereign privacy*).
+- **Risiko yang Muncul**: RISK-11

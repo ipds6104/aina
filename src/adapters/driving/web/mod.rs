@@ -538,6 +538,7 @@ mod tests {
         async fn record_message(&self, _chat_jid: &str, _sender_jid: &str, _text: &str, _is_from_me: bool) -> anyhow::Result<()> { Ok(()) }
         async fn get_user_profile(&self, _sender_jid: &str) -> anyhow::Result<Option<crate::core::ports::UserProfile>> { Ok(None) }
         async fn save_user_profile(&self, _profile: &crate::core::ports::UserProfile) -> anyhow::Result<()> { Ok(()) }
+        async fn delete_user_profile(&self, _sender_jid: &str) -> anyhow::Result<bool> { Ok(true) }
         async fn create_scheduled_task(&self, _task: &crate::core::domain::NewScheduledTask) -> anyhow::Result<i64> { Ok(1) }
         async fn list_scheduled_tasks(&self, _active_only: bool) -> anyhow::Result<Vec<crate::core::domain::ScheduledTask>> { Ok(vec![]) }
         async fn get_due_scheduled_tasks(&self, _current_epoch: i64) -> anyhow::Result<Vec<crate::core::domain::ScheduledTask>> { Ok(vec![]) }
@@ -615,6 +616,26 @@ mod tests {
         async fn get_experience(&self, _id: &str) -> anyhow::Result<Option<crate::core::domain::ExperienceRecord>> { Ok(None) }
         async fn search_experiences(&self, _query: &str, _domain: Option<&str>, _limit: usize) -> anyhow::Result<Vec<crate::core::domain::ExperienceRecord>> { Ok(vec![]) }
         async fn list_experiences(&self, _domain: Option<&str>, _limit: usize) -> anyhow::Result<Vec<crate::core::domain::ExperienceRecord>> { Ok(vec![]) }
+        async fn record_tool_execution(&self, _exec: &crate::core::domain::NewAgentToolExecution) -> anyhow::Result<crate::core::domain::AgentToolExecution> {
+            Ok(crate::core::domain::AgentToolExecution {
+                id: 1,
+                action_audit_id: None,
+                turn_token_prefix: "tok_dummy".into(),
+                sender_jid: "dummy@s.whatsapp.net".into(),
+                sender_authority: "guest".into(),
+                tool_name: "dummy_tool".into(),
+                command_payload: "{}".into(),
+                execution_status: "success".into(),
+                exit_code: Some(0),
+                duration_ms: 10,
+                prev_hash: "0".repeat(64),
+                record_hash: "0".repeat(64),
+                created_at_epoch: 0,
+            })
+        }
+        async fn get_tool_executions_by_sender(&self, _sender_jid: &str, _limit: usize) -> anyhow::Result<Vec<crate::core::domain::AgentToolExecution>> { Ok(vec![]) }
+        async fn get_tool_executions_by_tool(&self, _tool_name: &str, _limit: usize) -> anyhow::Result<Vec<crate::core::domain::AgentToolExecution>> { Ok(vec![]) }
+        async fn verify_audit_hash_chain(&self) -> anyhow::Result<bool> { Ok(true) }
     }
 
     struct DummyAgentEngine;

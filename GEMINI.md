@@ -79,10 +79,17 @@ src/
    - Periksa profil dan otoritas pengirim dengan perintah: `aina user get <sender_jid>`.
    - Rekan kerja yang telah disetujui Companion dicatat secara permanen di database lokal SQLite via:
      `aina user set <sender_jid> --name "<nama>" --role "<peran>" --authority <admin|atasan|staff|guest> --notes "<catatan izin>"`.
-   - **Delegasi Eksplisit di WhatsApp**: Companion ("aku" / Bg Ihza) dapat memberikan wewenang rekan kerja langsung dari obrolan via perintah: `!aina izinkan @user [role]` atau `!aina izinkan grup ini`. Wewenang yang diberikan di grup otomatis diwariskan ketika rekan kerja mengirimkan DM pribadi ke Aina.
+   - **Delegasi Eksplisit via Turn Capability**: Companion ("aku" / Bg Ihza) memberikan wewenang rekan kerja langsung dari obrolan alami (misal: *"Aina izinkan @user sebagai staf"* atau *"Aina verifikasi grup ini"*). Agen menerjemahkan niat ini menjadi perintah `aina policy grant-user` atau `aina policy trust-group` yang divalidasi oleh `AINA_TURN_TOKEN`. Otoritas `admin` tidak pernah dapat didelegasikan lewat tool apa pun; hanya berasal dari konfigurasi `ADMIN_JID`.
    - **UX Sadar Hierarki**: Saat pihak luar atau atasan meminta tugas di luar wewenangnya, Aina menyesuaikan tata krama sapaan secara terhormat (takzim kepada Atasan, ramah kepada Rekan) dan secara santun menjelaskan keharusan konfirmasi/izin terlebih dahulu kepada User Companion (Bg Ihza).
    - Untuk tugas kerja rutin dalam cakupan sah (`admin` / `staff`), agen melayani secara langsung dan responsif tanpa mengganggu Companion dengan konfirmasi berulang (*notification fatigue prevention*).
    - Permintaan data sensitif di luar cakupan, instruksi dari `guest` tanpa izin, atau tindakan destruktif (*one-way door*) wajib meminta konfirmasi eksplisit ke User Companion via japri (DM).
+5. **Dynamic Profiling, Non-Repudiation Audit Trail & Tata Kelola Enterprise**:
+   - Arsitektur tata kelola enterprise, profiling semantik terstruktur, dan rantai audit tak terbantahkan didokumentasikan lengkap pada roadmap: [`docs/roadmaps/ENTERPRISE_PROFILING_AND_AUDIT_GOVERNANCE.md`](docs/roadmaps/ENTERPRISE_PROFILING_AND_AUDIT_GOVERNANCE.md).
+   - **Non-Repudiation Audit Invariant**: Setiap tindakan alat (`tools_invoked`), modifikasi file, atau perubahan izin oleh Aina wajib terikat secara kriptografis (*SHA-256 hash chaining*) dan tak terbantahkan ke nomor WhatsApp pemohon sah (`sender_jid`) dan `TurnCapability` yang mendasarinya (kepatuhan NIST SP 800-53 AU-10 & ISO/IEC 42001).
+   - **Audit Forensik Cepat**: Jejak tindakan diaudit secara deterministik via `aina audit trace --sender <jid>` dan diverifikasi integritasnya via `aina audit verify-chain`.
+   - **Pemisahan Identitas vs Preferensi Semantik**: Profiling lawan bicara memisahkan identitas keamanan (`authority_level`) dari preferensi gaya komunikasi (`communication_prefs`), proyek aktif (`active_projects`), dan pantangan kerja (`durable_constraints`).
+   - **Penyusutan Memori & Pembersihan Fakta Usang**: Mengadopsi formula penyusutan temporal Ebbinghaus dan *STALE invalidation pattern* agar konteks proyek usang (>90 hari) otomatis dianulir dan tidak membebani token prompt.
+   - **Kepatuhan Privasi Mandiri (UU PDP & GDPR)**: Lawan bicara memiliki hak transparansi profil (`!aina profilku`) dan hak untuk dilupakan/dibersihkan memorinya (`!aina lupakan saya`) tanpa merusak integritas audit log sistem.
 
 ---
 

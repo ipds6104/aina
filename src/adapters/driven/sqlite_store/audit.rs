@@ -1,7 +1,9 @@
 use crate::core::domain::{
-    ActionAuditFilter, AuditSummaryReport, CountMetric, NewWhatsAppActionAudit, WhatsAppActionAudit,
+    ActionAuditFilter, AgentToolExecution, AuditSummaryReport, CountMetric, NewAgentToolExecution,
+    NewWhatsAppActionAudit, WhatsAppActionAudit,
 };
 use rusqlite::{params, Connection, Row};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
 pub fn map_action_audit_row(row: &Row) -> rusqlite::Result<WhatsAppActionAudit> {
@@ -381,4 +383,218 @@ pub fn get_action_audit_summary(conn: &Connection) -> anyhow::Result<AuditSummar
         usecase_breakdown,
         tool_call_frequency,
     })
+}
+
+fn to_hex(bytes: &[u8]) -> String {
+    let mut s = String::with_capacity(bytes.len() * 2);
+    for &b in bytes {
+        use std::fmt::Write;
+        let _ = write!(s, "{:02x}", b);
+    }
+    s
+}
+
+pub fn record_tool_execution(
+    conn: &Connection,
+    exec: &NewAgentToolExecution,
+) -> anyhow::Result<AgentToolExecution> {
+    // 1. Get the latest record_hash (genesis is 64 zeros)
+    let prev_hash: String = conn
+        .query_row(
+            "SELECT record_hash FROM agent_tool_executions ORDER BY id DESC LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or_else(|_| "0000000000000000000000000000000000000000000000000000000000000000".to_string());
+
+    // 2. Compute current record hash: sha256(prev_hash + sender_jid + tool_name + command_payload + created_at_epoch)
+    let mut hasher = Sha256::new();
+    hasher.update(prev_hash.as_bytes());
+    hasher.update(exec.turn_token_prefix.as_bytes());
+    hasher.update(exec.sender_jid.as_bytes());
+    hasher.update(exec.sender_authority.as_bytes());
+    hasher.update(exec.tool_name.as_bytes());
+    hasher.update(exec.command_payload.as_bytes());
+    hasher.update(exec.execution_status.as_bytes());
+    hasher.update(exec.duration_ms.to_string().as_bytes());
+    hasher.update(exec.created_at_epoch.to_string().as_bytes());
+    let record_hash = to_hex(&hasher.finalize());
+
+    conn.execute(
+        "INSERT INTO agent_tool_executions (
+            action_audit_id, turn_token_prefix, sender_jid, sender_authority,
+            tool_name, command_payload, execution_status, exit_code, duration_ms,
+            prev_hash, record_hash, created_at_epoch
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+        params![
+            exec.action_audit_id,
+            exec.turn_token_prefix,
+            exec.sender_jid,
+            exec.sender_authority,
+            exec.tool_name,
+            exec.command_payload,
+            exec.execution_status,
+            exec.exit_code,
+            exec.duration_ms,
+            prev_hash,
+            record_hash,
+            exec.created_at_epoch,
+        ],
+    )?;
+
+    let id = conn.last_insert_rowid();
+
+    Ok(AgentToolExecution {
+        id,
+        action_audit_id: exec.action_audit_id,
+        turn_token_prefix: exec.turn_token_prefix.clone(),
+        sender_jid: exec.sender_jid.clone(),
+        sender_authority: exec.sender_authority.clone(),
+        tool_name: exec.tool_name.clone(),
+        command_payload: exec.command_payload.clone(),
+        execution_status: exec.execution_status.clone(),
+        exit_code: exec.exit_code,
+        duration_ms: exec.duration_ms,
+        prev_hash,
+        record_hash,
+        created_at_epoch: exec.created_at_epoch,
+    })
+}
+
+pub fn verify_audit_hash_chain(conn: &Connection) -> anyhow::Result<bool> {
+    let mut stmt = conn.prepare(
+        "SELECT id, turn_token_prefix, sender_jid, sender_authority, tool_name,
+                command_payload, execution_status, duration_ms, prev_hash, record_hash, created_at_epoch
+         FROM agent_tool_executions ORDER BY id ASC"
+    )?;
+
+    let rows = stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, String>(3)?,
+            row.get::<_, String>(4)?,
+            row.get::<_, String>(5)?,
+            row.get::<_, String>(6)?,
+            row.get::<_, i64>(7)?,
+            row.get::<_, String>(8)?,
+            row.get::<_, String>(9)?,
+            row.get::<_, i64>(10)?,
+        ))
+    })?;
+
+    let mut expected_prev_hash = "0000000000000000000000000000000000000000000000000000000000000000".to_string();
+
+    for r in rows {
+        let (id, turn_token_prefix, sender_jid, sender_authority, tool_name, command_payload, execution_status, duration_ms, prev_hash, record_hash, created_at_epoch) = r?;
+
+        if prev_hash != expected_prev_hash {
+            anyhow::bail!(
+                "Rantai hash putus pada audit ID {}: prev_hash '{}' tidak cocok dengan hash sebelumnya '{}'",
+                id, prev_hash, expected_prev_hash
+            );
+        }
+
+        let mut hasher = Sha256::new();
+        hasher.update(prev_hash.as_bytes());
+        hasher.update(turn_token_prefix.as_bytes());
+        hasher.update(sender_jid.as_bytes());
+        hasher.update(sender_authority.as_bytes());
+        hasher.update(tool_name.as_bytes());
+        hasher.update(command_payload.as_bytes());
+        hasher.update(execution_status.as_bytes());
+        hasher.update(duration_ms.to_string().as_bytes());
+        hasher.update(created_at_epoch.to_string().as_bytes());
+        let computed_hash = to_hex(&hasher.finalize());
+
+        if record_hash != computed_hash {
+            anyhow::bail!(
+                "Integritas data termanipulasi pada audit ID {}: record_hash '{}' tidak cocok dengan kalkulasi SHA-256 '{}'",
+                id, record_hash, computed_hash
+            );
+        }
+
+        expected_prev_hash = record_hash;
+    }
+
+    Ok(true)
+}
+
+pub fn get_tool_executions_by_sender(
+    conn: &Connection,
+    sender_jid: &str,
+    limit: usize,
+) -> anyhow::Result<Vec<AgentToolExecution>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, action_audit_id, turn_token_prefix, sender_jid, sender_authority,
+                tool_name, command_payload, execution_status, exit_code, duration_ms,
+                prev_hash, record_hash, created_at_epoch
+         FROM agent_tool_executions
+         WHERE sender_jid = ?1
+         ORDER BY id DESC LIMIT ?2"
+    )?;
+
+    let rows = stmt.query_map(params![sender_jid, limit as i64], |row| {
+        Ok(AgentToolExecution {
+            id: row.get(0)?,
+            action_audit_id: row.get(1)?,
+            turn_token_prefix: row.get(2)?,
+            sender_jid: row.get(3)?,
+            sender_authority: row.get(4)?,
+            tool_name: row.get(5)?,
+            command_payload: row.get(6)?,
+            execution_status: row.get(7)?,
+            exit_code: row.get(8)?,
+            duration_ms: row.get(9)?,
+            prev_hash: row.get(10)?,
+            record_hash: row.get(11)?,
+            created_at_epoch: row.get(12)?,
+        })
+    })?;
+
+    let mut list = Vec::new();
+    for r in rows {
+        list.push(r?);
+    }
+    Ok(list)
+}
+
+pub fn get_tool_executions_by_tool(
+    conn: &Connection,
+    tool_name: &str,
+    limit: usize,
+) -> anyhow::Result<Vec<AgentToolExecution>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, action_audit_id, turn_token_prefix, sender_jid, sender_authority,
+                tool_name, command_payload, execution_status, exit_code, duration_ms,
+                prev_hash, record_hash, created_at_epoch
+         FROM agent_tool_executions
+         WHERE tool_name = ?1
+         ORDER BY id DESC LIMIT ?2"
+    )?;
+
+    let rows = stmt.query_map(params![tool_name, limit as i64], |row| {
+        Ok(AgentToolExecution {
+            id: row.get(0)?,
+            action_audit_id: row.get(1)?,
+            turn_token_prefix: row.get(2)?,
+            sender_jid: row.get(3)?,
+            sender_authority: row.get(4)?,
+            tool_name: row.get(5)?,
+            command_payload: row.get(6)?,
+            execution_status: row.get(7)?,
+            exit_code: row.get(8)?,
+            duration_ms: row.get(9)?,
+            prev_hash: row.get(10)?,
+            record_hash: row.get(11)?,
+            created_at_epoch: row.get(12)?,
+        })
+    })?;
+
+    let mut list = Vec::new();
+    for r in rows {
+        list.push(r?);
+    }
+    Ok(list)
 }

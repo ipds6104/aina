@@ -1,9 +1,9 @@
 # 12. Glosarium Istilah (Glossary)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `1ee7597` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-08T16:40:29+07:00`
-> - **Tracked Paths**: `src/`, `config/`, `skills/`
+> - **Verified Commit**: `fb69f88` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-14T13:47:00+07:00`
+> - **Tracked Paths**: `src/core/domain/`, `src/core/ports/`, `src/adapters/`
 > - **Drift Status**: `verified`
 
 Bab ini menyajikan daftar istilah penting yang digunakan di seluruh sistem dan dokumentasi Aina, dijelaskan dalam bahasa sehari-hari yang mudah dipahami.
@@ -37,3 +37,10 @@ Bab ini menyajikan daftar istilah penting yang digunakan di seluruh sistem dan d
 | **Tabayyun** | Sikap aktif Aina untuk bertanya dan meminta klarifikasi terarah kepada pengguna jika instruksi yang diberikan masih ambigu atau tidak lengkap. |
 | **Tawaqquf** | Sikap menahan diri untuk tidak membagikan data kantor atau dokumen rahasia kepada orang asing di grup sebelum mendapat persetujuan pemilik bot. |
 | **SQLite FTS5** | Teknologi database lokal berkecepatan tinggi yang mampu mencari kata di puluhan ribu riwayat obrolan dalam waktu hitungan milidetik. |
+| **TurnCapability** | Tiket otorisasi berumur pendek (TTL 10 menit) yang mengikat nomor pengirim pesan asli dan tingkat wewenangnya ke setiap pemanggilan tool oleh AI. |
+| **Non-Repudiation (Anti-Sangkalan)** | Jaminan hukum dan matematis bahwa suatu aksi tool yang dilakukan AI tidak dapat disangkal oleh pihak yang memerintahkannya (NIST SP 800-53 AU-10). |
+| **Rantai Hash SHA-256 (*Hash Chaining*)** | Metode penguncian log audit bergaya blockchain di mana setiap blok memuat hash dari blok sebelumnya, sehingga manipulasi baris data lama akan mematahkan seluruh rantai hash. |
+| **Zero Implicit Trust** | Doktrin keamanan di mana tidak ada nomor WhatsApp atau keanggotaan grup yang dipercaya secara bawaan tanpa verifikasi eksplisit oleh Companion. |
+| **Hak untuk Dilupakan (*Right to be Forgotten*)** | Hak subjek data untuk menghapus profil personal dan preferensi komunikasinya dari memori sistem AI sesuai UU PDP No. 27/2022 dan GDPR Article 17. |
+| **Penyensoran PII (*PII Masking*)** | Teknik penyembunyian otomatis nomor telepon pihak ketiga (misal `62812****7890`) saat bot berinteraksi dengan lawan bicara berstatus tamu (*guest*). |
+| **Profiling Semantik (*Semantic Profiling*)** | Model penyimpanan memori lawan bicara 4-dimensi (`communication_prefs`, `active_projects`, `durable_constraints`, `confidence_score`) untuk mempersonalisasi interaksi secara terukur. |
