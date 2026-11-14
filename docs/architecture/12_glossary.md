@@ -1,8 +1,8 @@
 # 12. Glosarium Istilah (Glossary)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `f1ae07a` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-14T14:14:27+07:00`
+> - **Verified Commit**: `9be3b07` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-14T15:03:19+07:00`
 > - **Tracked Paths**: `src/core/domain/`, `src/core/ports/`, `src/adapters/`
 > - **Drift Status**: `verified`
 
@@ -44,3 +44,6 @@ Bab ini menyajikan daftar istilah penting yang digunakan di seluruh sistem dan d
 | **Hak untuk Dilupakan (*Right to be Forgotten*)** | Hak subjek data untuk menghapus profil personal dan preferensi komunikasinya dari memori sistem AI sesuai UU PDP No. 27/2022 dan GDPR Article 17. |
 | **Penyensoran PII (*PII Masking*)** | Teknik penyembunyian otomatis nomor telepon pihak ketiga (misal `62812****7890`) saat bot berinteraksi dengan lawan bicara berstatus tamu (*guest*). |
 | **Profiling Semantik (*Semantic Profiling*)** | Model penyimpanan memori lawan bicara 4-dimensi (`communication_prefs`, `active_projects`, `durable_constraints`, `confidence_score`) untuk mempersonalisasi interaksi secara terukur. |
+| **Kustodian Berkas/Data (*File/Data Custodian*)** | Pengguna yang pertama kali menitipkan atau mengunggah berkas/dataset, yang memegang hak prerogatif pemberian izin akses kepada pihak lain. |
+| **Discretionary Access Control (DAC)** | Model kontrol akses di mana pemilik aset (*custodian*) berwenang menentukan secara mandiri siapa saja rekan kerja yang boleh mengakses aset miliknya. |
+| **Gerbang Nol Bocoran (*Zero-Disclosure Gate*)** | Invarian pertahanan yang melarang bot membeberkan isi berkas/dataset terbatas kepada peminta yang belum terdaftar di daftar izin kustodian. |

@@ -1,8 +1,8 @@
 # 4. Strategi Solusi (Solution Strategy)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `f1ae07a` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-14T14:14:27+07:00`
+> - **Verified Commit**: `9be3b07` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-14T15:03:19+07:00`
 > - **Tracked Paths**: `src/core/domain/capability.rs`, `src/core/domain/audit/`, `src/core/usecases/process_message/`
 > - **Drift Status**: `verified`
 
@@ -147,3 +147,6 @@ Untuk menjamin keamanan kelas enterprise di lingkungan instansi pemerintah (BPS)
    - Nomor tak dikenal otomatis diperlakukan sebagai tamu (`GUEST`), dibatasi kuotanya (*anti-abuse rate limiting*), dan dilarang mengakses dokumen internal instansi.
 5. **Kepatuhan Privasi Mandiri UU PDP (*Right to be Forgotten*)**:
    - Pengguna memiliki kendali transparansi penuh atas data profilnya (`/profilku`) serta hak penghapusan mandiri seketika (`/lupakansaya`).
+6. **Pengasuhan Berkas & Discretionary Access Control (Data & File Custodianship)**:
+   - Berkas dokumen (PDF, spreadsheet, draf kebijakan), skrip, maupun dataset yang dititipkan staf/atasan otomatis diikat pada identitas nomor pengunggah (*File Custodian*).
+   - Pengguna lain dilarang membaca atau mengekstrak isi berkas tanpa izin eksplisit dari pemilik berkas, ditegakkan oleh gerbang *Zero-Disclosure* dan pencatatan audit rantai hash SHA-256.

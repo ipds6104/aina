@@ -1,8 +1,8 @@
 # 6. Alur Waktu Eksekusi (Runtime View)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `f1ae07a` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-14T14:14:27+07:00`
+> - **Verified Commit**: `9be3b07` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-14T15:03:19+07:00`
 > - **Tracked Paths**: `src/core/usecases/process_message/`, `src/adapters/driven/sqlite_store/`, `src/core/domain/audit/`
 > - **Drift Status**: `verified`
 
@@ -256,4 +256,53 @@ sequenceDiagram
     Note over Cmd,DB: Log audit forensik di whatsapp_action_audits tetap dipertahankan
     Cmd-->>WA: Kirim konfirmasi: "🗑️ Data Profil Anda Berhasil Dibersihkan"
     WA->>Pengguna: Notifikasi konfirmasi penghapusan data
+```
+
+---
+
+## 6.9 Skenario 9: Penitipan Berkas & Alur Persetujuan Kustodian (File & Asset Custodian Approval Flow)
+
+Skenario ini menunjukkan bagaimana Aina melindungi berkas kerja (PDF, Word, Spreadsheet, Dataset) yang dititipkan staf, menerapkan gerbang *Zero-Disclosure*, dan memverifikasi izin dari Kustodian Berkas sebelum membagikannya ke pihak lain:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Penitip as User A (File Custodian / Staf Penitip)
+    actor Peminta as User B (Rekan Kerja Peminta)
+    participant GW as Whatsmeow Gateway
+    participant UC as ProcessIncomingMessageUseCase
+    participant Manifest as AssetManifestStore
+    participant Audit as HashChainedAuditTrail
+    participant WA as WhatsmeowHttpAdapter
+
+    Note over Penitip,UC: 1. Penitipan Berkas Terbatas
+    Penitip->>GW: Kirim berkas: "laporan_keuangan_q3.xlsx" (atau draf kebijakan)
+    GW->>UC: Webhook dokumen masuk
+    UC->>Manifest: Catat manifest: custodian_jid = User A, classification = RESTRICTED
+    Manifest-->>UC: Manifest tersimpan (authorized_users = [User A])
+    UC-->>WA: "✅ Berkas 'laporan_keuangan_q3.xlsx' berhasil disimpan dan dikunci di bawah hak asuh Anda."
+
+    Note over Peminta,UC: 2. Permintaan Berkas oleh Pengguna Lain (Zero-Disclosure Gate)
+    Peminta->>GW: "Aina, tolong kirim rekap angka laba dari laporan keuangan Q3 tadi"
+    GW->>UC: Webhook kueri masuk
+    UC->>Manifest: Cek wewenang untuk "laporan_keuangan_q3.xlsx"
+    Note over UC: Peminta (User B) TIDAK terdaftar di authorized_users
+    UC-->>WA: ⛔ "Berkas ini berstatus RESTRICTED milik Mas Budi. Silakan minta izin langsung ke beliau ya."
+    WA->>Peminta: Balasan penolakan santun (Isi berkas tidak dibocorkan)
+
+    Note over Penitip,Peminta: 3. Alur Izin Kustodian
+    Peminta->>Penitip: Koordinasi langsung minta izin akses
+    Penitip->>GW: "Aina, izinkan @UserB baca laporan_keuangan_q3.xlsx"
+    GW->>UC: Webhook instruksi izin
+    UC->>UC: Verifikasi pengirim adalah Custodian sah (User A) atau Admin
+    UC->>Manifest: Tambahkan User B ke authorized_users
+    UC->>Audit: Rekam otorisasi ke SHA-256 hash chain
+    UC-->>WA: "✅ Akses laporan keuangan Q3 telah dibuka untuk User B."
+
+    Note over Peminta,UC: 4. Pelepasan Akses Sah
+    Peminta->>GW: "Aina, rekap angka laba dari laporan keuangan Q3"
+    GW->>UC: Webhook kueri berulang
+    UC->>Manifest: Cek wewenang -> User B TERDAFTAR (Authorized)
+    UC-->>WA: "Berikut ringkasan angka laba bersih Q3: ..."
+    WA->>Peminta: Sajikan data resmi
 ```

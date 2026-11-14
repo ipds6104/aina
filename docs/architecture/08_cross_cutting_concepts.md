@@ -1,8 +1,8 @@
 # 8. Konsep Lintas Bidang (Cross-Cutting Concepts)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `f1ae07a` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-14T14:14:27+07:00`
+> - **Verified Commit**: `9be3b07` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-14T15:03:19+07:00`
 > - **Tracked Paths**: `src/core/domain/`, `src/core/ports/`, `src/adapters/driven/sqlite_store/`, `skills/`
 > - **Drift Status**: `verified`
 
@@ -176,22 +176,27 @@ Sebagai agen persona yang hidup dan konsisten:
 
 ---
 
-## 8.12 Penitipan Dataset Rahasia & Alur Izin Kustodian (Data Custody & Discretionary Access Control)
+## 8.12 Penitipan Berkas, Dokumen & Aset Digital (File & Data Custodianship & Discretionary Access Control)
 
-Dalam alur kerja organisasi nyata, rekan kerja (staf maupun atasan) sering menitipkan data sensitif (misal: mikrodata survei, dataset sensus belum rilis, berkas keuangan satker) kepada Aina untuk diolah atau dianalisis. Aina menerapkan tata kelola kepemilikan data mandiri (*Data Custodianship*):
+Dalam alur kerja organisasi nyata, rekan kerja (staf maupun atasan) tidak hanya menitipkan dataset angka, melainkan beragam bentuk berkas dan aset digital:
+- **Dokumen & Laporan Kerja**: PDF laporan resmi, spreadsheet Excel/CSV, notula rapat internal, dan draf rancangan kebijakan satker.
+- **Dataset Analitis & Mikrodata**: File Parquet, database DuckDB/SQLite hasil olahan sensus atau survei lapangan yang belum dirilis publik.
+- **Skrip & Aset Digital**: Kode program analisis, berkas konfigurasi, maupun arsip ZIP proyek.
 
-1. **Pencatatan Hak Milik (*Data Custodian Binding*)**:
-   - Pengguna awal yang menitipkan/mengunggah berkas dicatat sebagai **Data Custodian** sah (`custodian_jid`).
-   - Berkas ditandai status `RESTRICTED` di `knowledge/manifests/<slug>.yaml`.
-   - Secara default, daftar pemegang akses (`authorized_users`) hanya berisi satu nomor: nomor WA sang penitip (`custodian_jid`).
+Aina menerapkan tata kelola kepemilikan aset mandiri (*File & Data Custodianship*) berbasis prinsip *Discretionary Access Control (DAC)*:
+
+1. **Pencatatan Hak Milik (*Asset Custodian Binding*)**:
+   - Pengguna awal yang menitipkan, mengunggah, atau menghasilkan berkas dicatat secara permanen sebagai **Kustodian Berkas/Data** sah (`custodian_jid`).
+   - Berkas/aset ditandai dengan status `RESTRICTED` di `knowledge/manifests/<asset_slug>.yaml` lengkap dengan hash konten, tipe MIME, dan cap waktu.
+   - Secara bawaan (*default-deny*), daftar pemegang akses (`authorized_users`) hanya berisi satu nomor: nomor WhatsApp sang Kustodian (`custodian_jid`).
 
 2. **Invarian Nol Kebocoran (*Zero-Disclosure Gate*)**:
-   - Jika pengguna lain (User B) meminta isi data, berkas unduhan, atau ringkasan wawasan yang bersumber dari dataset tersebut:
-     - Agen dilarang mengekstrak atau membeberkan informasi tersebut kepada User B.
-     - Agen menolak dengan transparan dan santun, memberitahukan siapa pemilik data (`custodian_jid`), serta menegaskan bahwa izin akses wajib diperoleh dari pemilik awal.
+   - Jika pengguna lain (User B) meminta unduhan berkas mentah, kutipan teks, ekstraksi tabel, maupun ringkasan wawasan yang bersumber dari berkas/aset terbatas tersebut:
+     - Agen dilarang keras membocorkan atau mengekstrak isi berkas kepada User B.
+     - Agen wajib menolak secara santun, protektif, dan transparan: memberitahukan siapa Kustodian Berkas (`custodian_jid`), serta menegaskan bahwa izin akses wajib diperoleh dari pemilik awal.
 
 3. **Alur Izin & Persetujuan Kustodian (*Custodian Approval Flow*)**:
-   - **Pemberian Izin Mandiri**: Pemilik data (atau Companion/Admin) memberikan izin melalui chat: *"Aina, izinkan @UserB mengakses dataset sensus_2026"*.
-   - **Verifikasi Wewenang**: Agen memeriksa bahwa pengirim chat benar-benar sang Kustodian Data (`custodian_jid`) atau User Companion (`ADMIN_JID`). Staf lain tidak berhak mengizinkan data milik orang lain.
-   - **Otorisasi & Audit**: JID penerima ditambahkan ke daftar `authorized_users` dataset, dan transaksi izin dicatat ke audit log `agent_tool_executions` dengan rantai hash SHA-256.
-   - **Pelepasan Akses Terkendali**: Setelah otorisasi sah, barulah Aina melayani permintaan analisis data dari User B.
+   - **Pemberian Izin Mandiri**: Pemilik berkas (atau Companion/Admin) memberikan izin secara alami melalui chat: *"Aina, izinkan @UserB membaca laporan_keuangan_q3"* atau *"Aina, izinkan @UserB akses dataset sensus_2026"*.
+   - **Verifikasi Wewenang**: Agen memeriksa bahwa pengirim chat benar-benar sang Kustodian Berkas (`custodian_jid`) atau User Companion (`ADMIN_JID`). Rekan kerja lain tidak berhak mengizinkan aset milik orang lain.
+   - **Otorisasi & Audit**: JID penerima izin ditambahkan ke daftar `authorized_users` pada manifest aset, dan transaksi izin dicatat ke audit log `agent_tool_executions` dengan rantai hash SHA-256 antipemalsuan.
+   - **Pelepasan Akses Terkendali**: Setelah otorisasi sah, barulah Aina melayani permintaan pembacaan, ringkasan, atau analisis berkas bagi User B.
