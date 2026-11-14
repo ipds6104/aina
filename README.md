@@ -15,6 +15,7 @@ Aina dirancang bukan sebagai bot CS yang kaku, melainkan sebagai **rekan kerja t
 - 🧭 **Proactive Clarification & Tabayyun**: Bertanya dan meminta klarifikasi terarah jika instruksi multitafsir, serta menahan diri (*Tawaqquf*) bila ditanya data sensitif oleh pihak luar sebelum meminta izin User Companion.
 - 🛡️ **Gatekeeper Cerdas**: Tidak *spamming* di grup kantor (hanya menjawab jika di-tag/disebut, dan mencatat percakapan pasif sebagai konteks).
 - 👥 **Dynamic Profiling Memory**: Mengenali peran dan wewenang rekan kerja (`admin`, `staff`, `guest`) dengan memori SQLite permanen (`aina user`), mencegah *context loss* meski berbulan-bulan tidak berinteraksi.
+- 🛡️ **File & Data Custodianship (Discretionary Access Control)**: Berkas, dokumen kerja (PDF, Word, Spreadsheet), maupun dataset analitis yang dititipkan oleh pengguna (Companion/Staf) terkunci otomatis di bawah kepemilikan penitip (*Data Custodian*). Pengguna lain tidak dapat mengakses atau meminta ringkasan isi berkas tanpa izin eksplisit dari pemilik berkas awal.
 - 🔍 **Instant Temporal Search (<5ms)**: Pencarian riwayat percakapan SQLite FTS5 BM25 + filter waktu presisi (`--since 7d`, `--from YYYY-MM-DD --to YYYY-MM-DD`) untuk mencegah halusinasi waktu (*anachronism*).
 - 📱 **Dual-WhatsApp Pipeline (Multi-Session)**: Mendukung nomor bot khusus (`PrimaryBot`) sekaligus akun pribadi pengguna (`UserCompanion` / *Shadow Sensor*). Aina dapat mencerna konteks puluhan grup kantor tanpa perlu meminta admin memasukkan nomor bot baru.
 - 🧠 **Dynamic Model Switching**: Bawaan cepat & cerdas dengan **Google Gemini** (5–15 detik), dengan opsi eskalasi ke **Claude Opus** khusus tugas kompleks melalui CLI native `aina model`.
@@ -843,6 +844,10 @@ Aina didesain dengan prinsip **Privacy-First & Zero Leakage** untuk lingkungan k
    - Web Setup Wizard dilindungi oleh kode acak sekali pakai (*one-time setup code*) dan otomatis terkunci permanen setelah token terverifikasi.
 4. **Audit Trail Deterministik**:
    - Seluruh tindakan eksekusi terminal atau modifikasi berkas dicatat transparan di log sistem dan dapat diaudit sewaktu-waktu melalui perintah `aina audit`.
+5. **Pengasuhan Berkas & Discretionary Access Control (Data & File Custodianship)**:
+   - Pengguna (Companion, Staf, atau Atasan) dapat menitipkan berkas kerja (PDF laporan, spreadsheet, dokumen Word, draf kebijakan, skrip kode, maupun dataset analitis) dengan perlindungan kepemilikan data (*Data/File Custodian*).
+   - Berkas dilindungi oleh gerbang **Zero-Disclosure**: jika ada pihak lain meminta isi berkas, ringkasan, atau unduhan tanpa izin, Aina menolak membeberkannya dan secara transparan mengarahkan peminta untuk meminta izin langsung kepada pemilik berkas.
+   - Akses baru dibuka setelah pemilik berkas memberikan persetujuan eksplisit melalui chat (misal: *"Aina, izinkan @Budi akses berkas laporan_keuangan"*), yang kemudian diverifikasi dan dicatat ke dalam audit trail rantai hash SHA-256.
 
 ---
 

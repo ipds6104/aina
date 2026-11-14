@@ -81,14 +81,14 @@ Jika menerima atau mengolah dataset besar:
    aina archive search "<kata_kunci>" --from 2026-09-01 --to 2026-09-10
    ```
 
-### SOP 6: Data Custodianship, Kerahasiaan Dataset & Discretionary Access Control (DAC)
-Ketika seorang staf (`staff`) atau atasan (`atasan`) menitipkan dataset dokumen/analisis penting (seperti data sensus, data survei internal, laporan keuangan satker):
+### SOP 6: File & Data Custodianship, Kerahasiaan Berkas/Dokumen & Discretionary Access Control (DAC)
+Ketika seorang staf (`staff`) atau atasan (`atasan`) menitipkan berkas kerja (PDF laporan, dokumen Word, spreadsheet Excel/CSV, draf kebijakan, skrip kode, maupun dataset analitis/mikrodata):
 
-1. **Prinsip Kepemilikan (Data Custodian Binding)**:
-   - Pengguna yang pertama kali menitipkan/mengunggah berkas dicatat sebagai **Data Custodian** (`custodian_jid`).
-   - Simpan metadata dataset ke `knowledge/manifests/<dataset_slug>.yaml` dengan format:
+1. **Prinsip Kepemilikan (Asset Custodian Binding)**:
+   - Pengguna yang pertama kali menitipkan/mengunggah berkas dicatat sebagai **File/Data Custodian** (`custodian_jid`).
+   - Simpan metadata aset ke `knowledge/manifests/<asset_slug>.yaml` dengan format:
      ```yaml
-     dataset: "sensus_ekonomi_2026.parquet"
+     asset: "laporan_keuangan_q3.xlsx" # atau nama dataset/file PDF
      custodian_jid: "6281234567890@s.whatsapp.net"
      classification: "RESTRICTED"
      authorized_users:
@@ -97,14 +97,14 @@ Ketika seorang staf (`staff`) atau atasan (`atasan`) menitipkan dataset dokumen/
      ```
 
 2. **Invarian Anti-Bocor (Zero-Disclosure Rule)**:
-   - Jika ada pengguna lain (User B) meminta data, berkas, atau wawasan dari dataset terbatas ini:
-     - **DILARANG KERAS** membeberkan isi data atau mengekstrak isi tabel kepada User B tanpa verifikasi.
+   - Jika ada pengguna lain (User B) meminta berkas unduhan, kutipan data, ringkasan isi, atau wawasan dari berkas/aset terbatas ini:
+     - **DILARANG KERAS** membeberkan isi berkas atau mengekstrak isi tabel kepada User B tanpa verifikasi.
      - Agen wajib membalas secara santun, transparan, dan protektif:
-       > *"Dataset '<nama_dataset>' berstatus terbatas dan dititipkan oleh Mas Budi (6281234567890). Demi menjaga kerahasiaan data, saya tidak dapat membagikan informasi ini tanpa izin beliau. Silakan minta Mas Budi untuk memberikan izin kepada saya, atau mau saya bantu teruskan permintaan izin ini ke beliau?"*
+       > *"Berkas '<nama_berkas>' berstatus terbatas dan dititipkan oleh Mas Budi (6281234567890). Demi menjaga kerahasiaan berkas, saya tidak dapat membagikan informasi ini tanpa izin beliau. Silakan minta Mas Budi untuk memberikan izin kepada saya, atau mau saya bantu teruskan permintaan izin ini ke beliau?"*
 
 3. **Alur Izin & Persetujuan Kustodian (Custodian Approval Flow)**:
-   - Akses hanya boleh dibuka jika **Data Custodian** (atau User Companion/Admin) memberikan instruksi izin eksplisit melalui pesan chat:
-     > *"Aina, izinkan @UserB (atau 628987xxxx) untuk mengakses dataset <nama_dataset>"*
+   - Akses hanya boleh dibuka jika **File/Data Custodian** (atau User Companion/Admin) memberikan instruksi izin eksplisit melalui pesan chat:
+     > *"Aina, izinkan @UserB (atau 628987xxxx) untuk mengakses/membaca berkas <nama_berkas>"*
    - Agen memverifikasi bahwa pengirim instruksi izin adalah `custodian_jid` atau `ADMIN_JID`.
-   - Agen menambahkan JID penerima izin ke daftar `authorized_users` pada manifest metadata dataset.
+   - Agen menambahkan JID penerima izin ke daftar `authorized_users` pada manifest metadata aset.
    - Setiap pemberian izin dicatat dalam audit trail `aina audit` untuk menjamin akuntabilitas tanpa sangkalan (*non-repudiation*).
