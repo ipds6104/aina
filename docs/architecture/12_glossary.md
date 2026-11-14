@@ -1,8 +1,8 @@
 # 12. Glosarium Istilah (Glossary)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `fb69f88` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-14T13:47:00+07:00`
+> - **Verified Commit**: `f1ae07a` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-14T14:14:27+07:00`
 > - **Tracked Paths**: `src/core/domain/`, `src/core/ports/`, `src/adapters/`
 > - **Drift Status**: `verified`
 

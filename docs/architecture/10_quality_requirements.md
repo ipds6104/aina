@@ -1,8 +1,8 @@
 # 10. Persyaratan Mutu (Quality Requirements)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `fb69f88` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-14T13:47:00+07:00`
+> - **Verified Commit**: `f1ae07a` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-14T14:14:27+07:00`
 > - **Tracked Paths**: `src/core/domain/audit/`, `src/core/usecases/process_message/`, `src/adapters/driven/sqlite_store/`
 > - **Drift Status**: `verified`
 
