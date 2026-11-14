@@ -414,6 +414,12 @@ Aina membedakan 3 tingkatan otoritas (*Authority Matrix*):
 * **`staff`**: Rekan kerja internal yang berhak meminta pembuatan script, analisis data, dan tugas kantor rutin.
 * **`guest`**: Pihak eksternal / nomor baru yang belum diverifikasi (*Strict OpSec & Tabayyun*).
 
+### 🛡️ Siklus Hidup Identitas 3-Tingkat (*Zero Trust Identity Lifecycle*)
+Untuk mencegah penyamaran identitas atau pencatutan nama atasan satker:
+1. **`UNCONFIRMED`** (Default): Seluruh kontak baru atau nomor tak dikenal yang mengklaim nama secara sepihak. Klaim nama terlindungi (*Protected Names* seperti Admin/Ihza/Karunia) dan klaim hirarki ("Saya Kepala BPS") otomatis ditahan di kolom `claimed_name`/`claimed_role` dengan catatan `SUSPICIOUS_IDENTITY_CLAIM`.
+2. **`TENTATIVE`**: Anggota grup kerja tepercaya (*trusted groups*) yang belum diverifikasi personal.
+3. **`VERIFIED`**: Profil resmi yang telah diverifikasi dan disahkan oleh Companion melalui perintah CLI `aina user verify`. Status hirarki `atasan` hanya aktif jika status identitas `VERIFIED`.
+
 ```bash
 # 1. Daftarkan / Perbarui profil dan wewenang rekan kerja
 aina user set 6281234567890@s.whatsapp.net \
@@ -432,6 +438,21 @@ aina user search "Architect"
 # 4. Tampilkan seluruh daftar rekan kerja terdaftar
 aina user list
 aina user list --json
+
+# 5. Cek daftar klaim identitas yang belum diverifikasi (UNCONFIRMED / TENTATIVE)
+aina user unconfirmed
+aina user unconfirmed --json
+
+# 6. Verifikasi dan sahkan profil rekan kerja (VERIFIED)
+aina user verify 6281234567890@s.whatsapp.net \
+  --name "Mas Hendra" \
+  --role "Statistisi Ahli Pertama" \
+  --authority staff \
+  --notes "Diverifikasi langsung oleh Companion"
+
+# 7. Tolak klaim identitas mencurigakan / palsu (REJECTED)
+aina user reject-claim 6281234567890@s.whatsapp.net \
+  --reason "Nomor tidak terdaftar di kepegawaian BPS"
 ```
 
 > [!TIP]
@@ -618,8 +639,10 @@ Selain berfungsi sebagai HTTP Webhook server daemon, biner utama `aina` juga men
 aina
 # atau: aina server / aina daemon
 
-# 2. Status Pipeline Multi-Session WhatsApp (Bot Resmi & Companion Sensor)
+# 2. Status Pipeline WhatsApp & Telemetri Konkurensi Skalabilitas Tinggi
 aina status
+aina status --concurrency
+aina status --concurrency --json
 aina whatsapp status --json
 
 # 3. Pencarian Arsip Chat Super Cepat & Filter Temporal (FTS5 BM25, <5ms)
@@ -636,6 +659,9 @@ aina user set 6281234567890@s.whatsapp.net --name "Mas Doni" --role "Data Analys
 aina user get 6281234567890@s.whatsapp.net
 aina user list
 aina user search "Analyst"
+aina user unconfirmed
+aina user verify 6281234567890@s.whatsapp.net --name "Mas Doni" --role "Data Analyst" --authority staff
+aina user reject-claim 6281234567890@s.whatsapp.net --reason "Nomor tidak terdaftar"
 
 # 5b. Gerbang Otorisasi Agentic (`aina policy`) — satu-satunya jalur yang sah
 #     untuk mengubah kepercayaan grup / wewenang rekan kerja.

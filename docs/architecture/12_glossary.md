@@ -1,8 +1,8 @@
 # 12. Glosarium Istilah (Glossary)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `9451105` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-14T19:30:00+07:00`
+> - **Verified Commit**: `d087d85` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-14T19:40:00+07:00`
 > - **Tracked Paths**: `src/core/domain/`, `src/core/ports/`, `src/adapters/`
 > - **Drift Status**: `verified`
 
@@ -47,3 +47,8 @@ Bab ini menyajikan daftar istilah penting yang digunakan di seluruh sistem dan d
 | **Kustodian Berkas/Data (*File/Data Custodian*)** | Pengguna yang pertama kali menitipkan atau mengunggah berkas/dataset, yang memegang hak prerogatif pemberian izin akses kepada pihak lain. |
 | **Discretionary Access Control (DAC)** | Model kontrol akses di mana pemilik aset (*custodian*) berwenang menentukan secara mandiri siapa saja rekan kerja yang boleh mengakses aset miliknya. |
 | **Gerbang Nol Bocoran (*Zero-Disclosure Gate*)** | Invarian pertahanan yang melarang bot membeberkan isi berkas/dataset terbatas kepada peminta yang belum terdaftar di daftar izin kustodian. |
+| **Siklus Hidup Identitas 3-Tingkat** | Kerangka tata kelola identitas lawan bicara yang membagi status menjadi `UNCONFIRMED`, `TENTATIVE`, dan `VERIFIED` untuk mencegah penyamaran identitas. |
+| **Pertahanan Nama Terlindungi (*Protected Name Collision*)** | Mekanisme isolasi klaim nama yang mencegah nomor asing mencatut nama admin, staf, atau companion. |
+| **Pertahanan Klaim Hirarki (*Hierarchy Claim Defense*)** | Perlindungan otomatis yang menolak eskalasi status `atasan` secara mandiri oleh pihak luar tanpa verifikasi Companion. |
+| **Bounded Concurrency Semaphore** | Pembatas alokasi proses agen simultan (default 8 slot) menggunakan semaphore asinkron Tokio untuk mencegah kehabisan memori RAM. |
+| **Token-Aware Account Lease** | Mekanisme peminjaman token akun Google berbasis RAII yang membatasi maksimal 2 *in-flight requests* per akun guna mencegah error HTTP 429. |

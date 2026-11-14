@@ -1,8 +1,8 @@
 # 8. Konsep Lintas Bidang (Cross-Cutting Concepts)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `9451105` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-14T19:30:00+07:00`
+> - **Verified Commit**: `d087d85` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-14T19:40:00+07:00`
 > - **Tracked Paths**: `src/core/domain/`, `src/core/ports/`, `src/adapters/driven/sqlite_store/`, `skills/`
 > - **Drift Status**: `verified`
 
@@ -230,3 +230,11 @@ Untuk mencegah lonjakan proses (OOM killer) dan badai kuota upstream Google Clou
    - Alokasi akun memprioritaskan akun dengan `in_flight < 2` dan tidak sedang dalam *cooldown*, mencegah penguncian kuota upstream secara deterministik.
    - Sewa token dikelola dengan pola RAII Guard (`AccountLease`), otomatis melepaskan slot saat eksekusi selesai.
    - Telemetri status dapat dipantau langsung via `aina status --concurrency [--json]`.
+---
+
+## 8.7 Manajemen Konkurensi Kepadatan Tinggi & Invarian Sewa Akun (*Token-Aware Lease Management*)
+
+Untuk mendukung interaksi masif hingga 100 pengguna simultan di satu server:
+1. **Bounded Semaphore Isolation**: Kapasitas eksekusi agen dibatasi oleh konfigurasi `AINA_MAX_CONCURRENT_AGENTS` (default 8). Hal ini mencegah lonjakan memori (RAM) yang tidak terkendali pada container.
+2. **Zero-429 Rate Limit Invariant**: Setiap akun di kolam Google Antigravity dibatasi maksimal 2 *in-flight requests* aktif secara bersamaan. Akun yang sedang berada dalam status jeda (*cooldown*) otomatis dilewati.
+3. **RAII Lease Drop**: Manajemen sewa token menggunakan pola RAII Rust (`AccountLease`), sehingga atomisitas hitungan beban terjamin surut kembali secara aman baik saat eksekusi berhasil maupun saat terjadi kegagalan jaringan.

@@ -1,8 +1,8 @@
 # 9. Keputusan Arsitektur (Architecture Decisions)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `9451105` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-14T19:30:00+07:00`
+> - **Verified Commit**: `d087d85` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-14T19:40:00+07:00`
 > - **Tracked Paths**: `src/core/domain/capability.rs`, `src/core/domain/audit/`, `src/adapters/driven/sqlite_store/audit.rs`
 > - **Drift Status**: `verified`
 
@@ -150,3 +150,28 @@ Bab ini mencatat keputusan-keputusan arsitektur penting (*Architecture Decision 
 - **Konsekuensi Positif**:
   Kepatuhan regulasi UU PDP 100%, peningkatan kepercayaan pengguna, dan kendali privasi mandiri (*self-sovereign privacy*).
 - **Risiko yang Muncul**: RISK-11
+---
+
+### ADR-012: Siklus Hidup Identitas 3-Tingkat & Pertahanan Anti-Impersonasi Profiler
+
+- **Status**: Diterima (*Accepted*)
+- **Konteks**:
+  Pihak asing atau nomor baru dapat mencoba rekayasa sosial dengan mengaku sebagai admin, rekan kerja tepercaya, atau pimpinan satker ("Saya Kepala BPS") melalui teks obrolan WhatsApp.
+- **Keputusan**:
+  Menerapkan siklus hidup identitas 3-tingkat (`UNCONFIRMED`, `TENTATIVE`, `VERIFIED`). Klaim nama terlindungi (*Protected Names*) dan klaim hirarki otomatis diisolasi ke kolom `claimed_name` dan `claimed_role` dengan status `UNCONFIRMED`. Evaluasi kepatuhan pimpinan `is_atasan` wajib bernilai `false` hingga Companion melakukan verifikasi sah melalui perintah CLI `aina user verify`.
+- **Konsekuensi Positif**:
+  Kebal terhadap rekayasa profil sosial, integritas wewenang terjamin, dan adanya pengawasan administratif eksplisit (*auditable verification*).
+- **Risiko yang Muncul**: RISK-12
+
+---
+
+### ADR-013: Skalabilitas Konkurensi Kepadatan Tinggi & Token Lease Aware
+
+- **Status**: Diterima (*Accepted*)
+- **Konteks**:
+  Ketika 50 hingga 100 pengguna mengirim pesan WhatsApp secara bersamaan, proses agen biner `agy` dapat menghabiskan memori RAM server (*OOM*) atau memicu pembatasan laju panggilan upstream Google (*HTTP 429*).
+- **Keputusan**:
+  Menerapkan *Bounded Concurrency Semaphore* (kapasitas default 8) via Tokio dan *Token-Aware Account Lease* yang membatasi maksimal 2 *in-flight requests* per akun Google secara atomik melalui RAII guard `AccountLease`.
+- **Konsekuensi Positif**:
+  Server stabil bebas OOM, antrean pesan tertib, dan bebas dari lonjakan error batas kuota 429.
+- **Risiko yang Muncul**: RISK-13

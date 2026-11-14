@@ -1,8 +1,8 @@
 # 11. Risiko dan Hutang Teknis (Risks and Technical Debt)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `9451105` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-14T19:30:00+07:00`
+> - **Verified Commit**: `d087d85` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-14T19:40:00+07:00`
 > - **Tracked Paths**: `src/core/domain/audit/`, `src/core/usecases/process_message/`, `src/adapters/driven/sqlite_store/`
 > - **Drift Status**: `verified`
 
@@ -27,6 +27,8 @@ Tabel berikut merangkum seluruh risiko yang muncul dari keputusan arsitektur (AD
 | RISK-09 | Kebocoran nomor WhatsApp bot ke publik atau dimasukkan ke grup pihak asing tanpa izin. | Sedang | Sedang | Paradigma Zero Implicit Trust otomatis mengisolasi kontak tak dikenal ke status 'GUEST' tanpa hak baca data internal, rate-limiting, dan honeypot logging. |
 | RISK-10 | Percobaan modifikasi langsung (*tampering*) pada tabel log audit oleh pihak internal/penyerang. | Rendah | Tinggi | Rantai hash SHA-256 (NIST AU-10 & ISO 42001): setiap blok mengikat hash sebelumnya. Verifikasi via `aina audit verify-chain` otomatis mendeteksi baris yang termanipulasi. |
 | RISK-11 | Tuntutan hukum privasi UU PDP No. 27/2022 akibat penyimpanan preferensi personal lawan bicara. | Rendah | Sedang | Fitur mandiri `/profilku` (transparansi profil) dan `/lupakansaya` (pembersihan seketika dari SQLite), dengan pemisahan log audit legal forensik. |
+| RISK-12 | Rekayasa sosial penyamaran identitas atau pencatutan nama admin/atasan oleh nomor asing. | Sedang | Tinggi | Siklus hidup identitas 3-tingkat (`UNCONFIRMED` $\to$ `VERIFIED`), deteksi nama terlindungi, dan penguncian status hirarki. |
+| RISK-13 | Lonjakan beban ratusan pesan serentak menyebabkan kehabisan RAM atau rate limit kuota 429. | Sedang | Tinggi | Bounded concurrency semaphore (kapasitas 8) dan pembatasan maksimal 2 in-flight per akun Google via `AccountLease`. |
 
 ---
 

@@ -1,8 +1,8 @@
 # 10. Persyaratan Mutu (Quality Requirements)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `9451105` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-14T19:30:00+07:00`
+> - **Verified Commit**: `d087d85` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-14T19:40:00+07:00`
 > - **Tracked Paths**: `src/core/domain/audit/`, `src/core/usecases/process_message/`, `src/adapters/driven/sqlite_store/`
 > - **Drift Status**: `verified`
 
@@ -22,6 +22,8 @@ Hubungan antara sasaran mutu utama dan skenario pengujian dipetakan dalam pohon 
   │   ├── **QS-08**: Integritas kriptografis rantai audit tool SHA-256 (#security)
   │   ├── **QS-09**: Pertahanan Zero Implicit Trust saat nomor WA bocor (#security)
   │   └── **QS-10**: Hak penghapusan mandiri subjek data sesuai UU PDP (#security, #usability)
+│   ├── **QS-11**: Pertahanan Anti-Impersonasi & Integritas Identitas 3-Tingkat (#security)
+│   └── **QS-12**: Ketahanan Konkurensi 100 Obrolan Serentak & Zero-429 (#reliability, #efficiency)
   ├── Kemudahan Perawatan & Modul
   │   ├── **QS-03**: Pemasangan skill Git kustom tanpa menyentuh kode inti (#maintainability)
   │   └── **QS-06**: Ketahanan modifikasi jadwal saat redeploy kontainer (#maintainability)
@@ -140,3 +142,20 @@ Hubungan antara sasaran mutu utama dan skenario pengujian dipetakan dalam pohon 
 | **QS-08** | #security | 100% deteksi manipulasi log rantai hash SHA-256 | Lulus (Terverifikasi di `sqlite_store/mod.rs` & NIST AU-10) |
 | **QS-09** | #security | 0% kebocoran data internal ke nomor asing | Lulus (Terverifikasi di `context_preparer.rs` Zero Trust) |
 | **QS-10** | #security, #usability | 100% penghapusan profil mandiri sesuai UU PDP | Lulus (Terverifikasi di `builtin_commands.rs` test) |
+---
+
+### QS-11: Pertahanan Anti-Impersonasi & Integritas Identitas 3-Tingkat
+- **Kategori Mutu**: #security
+- **Skenario Pengujian**:
+  Nomor asing mengirim pesan mengaku sebagai admin atau kepala satker.
+- **Ukuran Keberhasilan**:
+  100% klaim nama terlindungi dicatat di `claimed_name` dan status tetap `UNCONFIRMED`. Evaluasi `is_atasan` wajib bernilai `false` dan akses data internal tetap terkunci.
+
+---
+
+### QS-12: Ketahanan Konkurensi 100 Obrolan Serentak & Zero-429
+- **Kategori Mutu**: #reliability, #efficiency
+- **Skenario Pengujian**:
+  100 pesan webhook diterima secara serentak dalam rentang waktu 5 detik.
+- **Ukuran Keberhasilan**:
+  Maksimal 8 agen aktif simultan, beban per akun Google <= 2 in-flight, 0% insiden server OOM, dan 0% error HTTP 429. Seluruh 100 pesan terlayani secara tertib.

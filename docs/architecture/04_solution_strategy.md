@@ -1,8 +1,8 @@
 # 4. Strategi Solusi (Solution Strategy)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `9451105` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-14T19:30:00+07:00`
+> - **Verified Commit**: `d087d85` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-14T19:40:00+07:00`
 > - **Tracked Paths**: `src/core/domain/capability.rs`, `src/core/domain/audit/`, `src/core/usecases/process_message/`
 > - **Drift Status**: `verified`
 
@@ -150,3 +150,24 @@ Untuk menjamin keamanan kelas enterprise di lingkungan instansi pemerintah (BPS)
 6. **Pengasuhan Berkas & Discretionary Access Control (Data & File Custodianship)**:
    - Berkas dokumen (PDF, spreadsheet, draf kebijakan), skrip, maupun dataset yang dititipkan staf/atasan otomatis diikat pada identitas nomor pengunggah (*File Custodian*).
    - Pengguna lain dilarang membaca atau mengekstrak isi berkas tanpa izin eksplisit dari pemilik berkas, ditegakkan oleh gerbang *Zero-Disclosure* dan pencatatan audit rantai hash SHA-256.
+---
+
+## 4.7 Siklus Hidup Identitas 3-Tingkat (*Zero Trust Identity Lifecycle*)
+
+Untuk mencegah rekayasa sosial di mana pihak luar mengaku sebagai admin atau atasan satker:
+1. **Status Identitas 3-Tingkat**:
+   - `UNCONFIRMED`: Status default untuk seluruh kontak baru atau kontak yang mengklaim nama secara mandiri.
+   - `TENTATIVE`: Anggota grup kerja internal tepercaya yang telah terikat oleh kapabilitas grup.
+   - `VERIFIED`: Status resmi yang hanya dapat disematkan oleh Companion via perintah CLI `aina user verify`.
+2. **Pertahanan Nama Terlindungi (*Protected Name Collision Defense*)**:
+   - Jika pengguna baru mengaku dengan nama admin/companion ("Ihza", "Karunia", "Admin"), profiler menolak mengeskalasi profil. Klaim disimpan di kolom terpisah `claimed_name` dengan catatan audit `SUSPICIOUS_IDENTITY_CLAIM`.
+3. **Pertahanan Klaim Hirarki (*Hierarchy Claim Defense*)**:
+   - Klaim sepihak seperti *"Saya Kepala BPS"* otomatis ditahan di kolom `claimed_role`, sementara status hirarki dikunci pada level `guest`. Selama status belum `VERIFIED`, evaluasi `is_atasan` wajib bernilai `false`.
+
+---
+
+## 4.8 Skalabilitas Konkurensi Kepadatan Tinggi (*High-Density Bounded Semaphore & Token Lease*)
+
+Menghadapi skenario 100 pengguna chat serentak:
+1. **Bounded Semaphore Tokio**: Membatasi agen serentak maksimal 8 proses (`AINA_MAX_CONCURRENT_AGENTS`). Pesan ke-9 dan seterusnya mengantre secara tertib di memori tanpa memakan alokasi RAM proses biner baru.
+2. **Token Lease Aware**: Kolam akun menyaring akun yang sedang cooldown, dan memprioritaskan akun dengan `in_flight < 2`. Pola RAII guard `AccountLease` otomatis menurunkan hitungan in-flight begitu giliran selesai atau error.

@@ -1,12 +1,24 @@
 # 2. Batasan Arsitektur (Architecture Constraints)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `9451105` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-14T19:30:00+07:00`
+> - **Verified Commit**: `d087d85` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-14T19:40:00+07:00`
 > - **Tracked Paths**: `src/`, `config/`, `skills/`
 > - **Drift Status**: `verified`
 
 Bab ini merangkum batas-batas teknis, operasional, dan aturan baku yang menjadi pagar pembatas dalam pengembangan Aina. Batasan ini dirancang agar sistem tetap ringan, aman, dan mudah dipindahkan ke server mana pun.
+
+9. **Bounded Concurrency Semaphore (`AINA_MAX_CONCURRENT_AGENTS`)**:
+   - Eksekusi agen AI biner `agy` dibatasi kapasitas serentak secara ketat (default 8 slot aktif) menggunakan `tokio::sync::Semaphore`.
+   - Menghindari server crash akibat lonjakan memori (RAM exhaustion) ketika puluhan hingga 100 pengguna mengirim pesan WhatsApp sekaligus.
+
+10. **Zero-429 Rate Limit Invariant & Max 2 In-Flight Lease**:
+    - Kolam akun Google Antigravity membatasi eksekusi in-flight maksimal 2 request aktif per akun menggunakan RAII guard `AccountLease`.
+    - Mencegah akun terkena blokir laju panggilan (*rate limit burst HTTP 429*) dari proxy upstream Google Cloud Code.
+
+11. **Siklus Hidup Identitas 3-Tingkat (*Zero Trust Identity Lifecycle*)**:
+    - Profil pengguna memiliki status verifikasi deterministik: `UNCONFIRMED` (default baru), `TENTATIVE` (anggota grup tepercaya), dan `VERIFIED` (diverifikasi admin).
+    - Status otoritas `admin` diisolasi permanen pada konfigurasi `admin_jid` dan tidak dapat diubah oleh tool atau pengguna mana pun.
 
 ---
 

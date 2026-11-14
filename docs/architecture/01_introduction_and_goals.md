@@ -1,12 +1,20 @@
 # 1. Pendahuluan dan Tujuan (Introduction and Goals)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `9451105` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-14T19:30:00+07:00`
+> - **Verified Commit**: `d087d85` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-14T19:40:00+07:00`
 > - **Tracked Paths**: `src/`, `config/`, `skills/`
 > - **Drift Status**: `verified`
 
 Dokumen ini menjelaskan latar belakang, masalah nyata yang dihadapi, serta sasaran utama dari pembuatan **Aina**. Penjelasan disajikan dalam bahasa yang lugas dan mudah dipahami, tanpa istilah rumit yang membingungkan.
+
+7. **Pencegahan Penyamaran Identitas & Rekayasa Profiler Sosial**:
+   Nomor asing berpotensi mencatut nama admin/staf ("aku Ihza", "aku Mas Doni") atau mengaku sebagai pimpinan satker ("saya Kepala BPS") agar asisten AI mempercayainya dan memberikan data sensitif.
+   *Solusi Aina*: Siklus Hidup Identitas 3-Tingkat (*Zero Trust Identity Lifecycle*). Klaim nama terlindungi (*Protected Names*) dan klaim hirarki otomatis diisolasi ke status `UNCONFIRMED`. Hak istimewa dan penghormatan pimpinan dikunci (*failsafe*) hingga Companion melakukan verifikasi sah via CLI `aina user verify`.
+
+8. **Lonjakan Beban Serentak Ratusan Pengguna (*High-Density Concurrency Scaling*)**:
+   Ketika puluhan hingga 100 pengguna mengirim pesan secara bersamaan, proses agen berpotensi membebani RAM server hingga OOM (*Out-Of-Memory*) atau menyebabkan akun Google terkena batas harian (*HTTP 429*).
+   *Solusi Aina*: *Bounded Concurrency Semaphore* & *Token-Aware Account Lease*. Aina membatasi maksimal 8 agen aktif serentak via semaphore Tokio, dan menjamin maksimal 2 *in-flight requests* per akun Google menggunakan pengawal otomatis RAII `AccountLease`.
 
 ---
 
@@ -65,6 +73,8 @@ Sasaran mutu berikut dirumuskan secara terukur untuk menjamin bahwa Aina dapat d
 | 5 | #usability | Kenyamanan Komunikasi & Interaksi Alami | Pesan balasan di WhatsApp diformat rapi sesuai tampilan layar ponsel (tanpa tanda pagar Markdown besar atau tabel lebar yang rusak), serta mampu meminta klarifikasi terarah jika instruksi multitafsir (*Tabayyun*). |
 | 6 | #maintainability | Ketahanan Konfigurasi & Persistensi Jadwal | 100% modifikasi instruksi aktivitas dan keahlian kustom bertahan utuh saat kontainer Docker/Coolify di-redeploy berkat arsitektur rekonsiliasi hibrida. |
 | 7 | #adaptability | Refleksi Pengalaman & Variasi Otonom | Sistem secara berkala merefleksikan tempo harian, mendeteksi kejenuhan tema/busana ($\ge 0.5$), dan memadukan cuaca riil untuk mengadaptasi aktivitas berikutnya secara otonom. |
+| 8 | #security | Pertahanan Anti-Impersonasi & Integritas Identitas | 100% klaim nama terlindungi dan klaim hirarki otomatis diisolasi ke status `UNCONFIRMED`. Evaluasi `is_atasan` wajib bernilai `false` dan hak akses internal tertutup rapat sebelum diverifikasi Companion via CLI `aina user verify`. |
+| 9 | #reliability | Ketahanan Beban 100 Pengguna Serentak & Zero-429 | Sistem mampu menampung lonjakan 100 obrolan serentak secara tertib dengan *bounded semaphore* (kapasitas 8) dan invarian maksimal 2 *in-flight* per akun Google tanpa crash OOM dan tanpa error 429. |
 
 ---
 
