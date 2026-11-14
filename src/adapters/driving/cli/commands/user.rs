@@ -97,7 +97,8 @@ pub fn handle_user(args: &[String]) -> anyhow::Result<()> {
 
             let mut stmt = conn.prepare(
                 "SELECT sender_jid, name, role, authority_level, notes, granted_by, updated_at,
-                        verification_status, claimed_name, claimed_role, verification_notes
+                        verification_status, claimed_name, claimed_role, verification_notes,
+                        communication_prefs, active_projects, durable_constraints
                  FROM user_profiles
                  WHERE sender_jid = ?1 OR sender_jid LIKE ?2 OR name LIKE ?2
                  LIMIT 1",
@@ -116,6 +117,9 @@ pub fn handle_user(args: &[String]) -> anyhow::Result<()> {
                 let claimed_name: Option<String> = row.get(8)?;
                 let claimed_role: Option<String> = row.get(9)?;
                 let v_notes: Option<String> = row.get(10)?;
+                let comm_prefs: Option<String> = row.get(11)?;
+                let act_projects: Option<String> = row.get(12)?;
+                let dur_constraints: Option<String> = row.get(13)?;
 
                 if as_json {
                     let val = serde_json::json!({
@@ -128,6 +132,9 @@ pub fn handle_user(args: &[String]) -> anyhow::Result<()> {
                         "claimed_role": claimed_role,
                         "notes": notes,
                         "verification_notes": v_notes,
+                        "communication_prefs": comm_prefs,
+                        "active_projects": act_projects,
+                        "durable_constraints": dur_constraints,
                         "granted_by": granter,
                         "updated_at": updated,
                     });
@@ -144,6 +151,15 @@ pub fn handle_user(args: &[String]) -> anyhow::Result<()> {
                     }
                     if let Some(cr) = claimed_role {
                         println!("• Klaim Peran     : {}", cr);
+                    }
+                    if let Some(cp) = comm_prefs.filter(|s| !s.trim().is_empty() && s != "{}") {
+                        println!("• Preferensi Chat : {}", cp);
+                    }
+                    if let Some(ap) = act_projects.filter(|s| !s.trim().is_empty() && s != "[]") {
+                        println!("• Proyek Terkait  : {}", ap);
+                    }
+                    if let Some(dc) = dur_constraints.filter(|s| !s.trim().is_empty() && s != "[]") {
+                        println!("• Batasan/Aturan  : {}", dc);
                     }
                     println!("• Izin Dari       : {}", granter.as_deref().unwrap_or("Otomatis/None"));
                     println!("• Catatan/Izin    : {}", notes.as_deref().unwrap_or("-"));
@@ -173,6 +189,9 @@ pub fn handle_user(args: &[String]) -> anyhow::Result<()> {
             let mut authority: Option<String> = None;
             let mut notes: Option<String> = None;
             let mut granted_by: Option<String> = None;
+            let mut communication_prefs: Option<String> = None;
+            let mut active_projects: Option<String> = None;
+            let mut durable_constraints: Option<String> = None;
 
             let mut i = 2;
             while i < args.len() {
@@ -197,6 +216,18 @@ pub fn handle_user(args: &[String]) -> anyhow::Result<()> {
                         granted_by = Some(args[i + 1].clone());
                         i += 2;
                     }
+                    "--prefs" | "--communication-prefs" if i + 1 < args.len() => {
+                        communication_prefs = Some(args[i + 1].clone());
+                        i += 2;
+                    }
+                    "--projects" | "--active-projects" if i + 1 < args.len() => {
+                        active_projects = Some(args[i + 1].clone());
+                        i += 2;
+                    }
+                    "--constraints" | "--durable-constraints" if i + 1 < args.len() => {
+                        durable_constraints = Some(args[i + 1].clone());
+                        i += 2;
+                    }
                     _ => i += 1,
                 }
             }
@@ -215,8 +246,10 @@ pub fn handle_user(args: &[String]) -> anyhow::Result<()> {
             }
 
             conn.execute(
-                "INSERT INTO user_profiles (sender_jid, name, role, authority_level, notes, granted_by, role_hierarchy, updated_at)
-                 VALUES (?1, ?2, ?3, COALESCE(?4, 'guest'), ?5, ?6, ?7, CURRENT_TIMESTAMP)
+                "INSERT INTO user_profiles (
+                    sender_jid, name, role, authority_level, notes, granted_by, role_hierarchy,
+                    communication_prefs, active_projects, durable_constraints, updated_at
+                 ) VALUES (?1, ?2, ?3, COALESCE(?4, 'guest'), ?5, ?6, ?7, COALESCE(?8, '{}'), COALESCE(?9, '[]'), COALESCE(?10, '[]'), CURRENT_TIMESTAMP)
                  ON CONFLICT(sender_jid) DO UPDATE SET
                      name = COALESCE(?2, user_profiles.name),
                      role = COALESCE(?3, user_profiles.role),
@@ -224,8 +257,11 @@ pub fn handle_user(args: &[String]) -> anyhow::Result<()> {
                      notes = COALESCE(?5, user_profiles.notes),
                      granted_by = COALESCE(?6, user_profiles.granted_by),
                      role_hierarchy = COALESCE(?7, user_profiles.role_hierarchy),
+                     communication_prefs = COALESCE(?8, user_profiles.communication_prefs),
+                     active_projects = COALESCE(?9, user_profiles.active_projects),
+                     durable_constraints = COALESCE(?10, user_profiles.durable_constraints),
                      updated_at = CURRENT_TIMESTAMP",
-                rusqlite::params![jid, name, role, authority, notes, granted_by, role_hierarchy],
+                rusqlite::params![jid, name, role, authority, notes, granted_by, role_hierarchy, communication_prefs, active_projects, durable_constraints],
             )?;
 
             println!("✅ Profil pengguna `{}` berhasil diperbarui di Aina Profiling Memory.", jid);
