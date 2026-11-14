@@ -96,10 +96,16 @@ src/
    - **File & Asset Custodianship (Discretionary Access Control)**: Berkas dokumen, laporan resmi, dan dataset analitis yang dititipkan staf terkunci di bawah hak asuh penitip (`custodian_jid`) dan dikelola via `aina asset list|get|grant|revoke`. Pihak lain dilarang membaca atau meminta rekap isi data tanpa izin Kustodian (gerbang *Zero-Disclosure*).
    - **GitOps Living Brain (AI Proposes, Human Merges)**: Repositori Company Brain disinkronkan dua arah (`aina kb sync`). Revisi SOP atau kebijakan baru diusulkan melalui cabang Git terpisah (`branch` & draft PR) alih-alih menimpa cabang utama secara sepihak.
    - **Siklus Hidup & Anti-Entropi Dokumen**: Linter otomatis (`aina kb lint --auto-heal`) memvalidasi format frontmatter, mendeteksi SOP yang melewati batas waktu tinjauan (`review_after`), dan menyegarkan katalog `knowledge/index.md` secara deterministik.
+7. **Skalabilitas Konkurensi Tinggi & Zero Trust Identity Anti-Impersonation**:
+   - Arsitektur kanonik penanganan beban masif dan pencegahan penyamaran identitas didokumentasikan lengkap pada roadmap: [`docs/roadmaps/CONCURRENCY_SCALE_AND_ZERO_TRUST_IDENTITY.md`](docs/roadmaps/CONCURRENCY_SCALE_AND_ZERO_TRUST_IDENTITY.md).
+   - **Bounded Semaphore & Account-Aware Lease Pattern**: Mencegah lonjakan 100 proses biner `agy` serentak dan error 429 massal dengan membatasi slot proses aktif ($C = \min(N_{\text{accounts}} \times 2, 8)$) via `tokio::sync::Semaphore`. Setiap akun Google hanya melayani maksimal 2 proses aktif bersamaan.
+   - **Model Identitas 3-Tingkat (UNCONFIRMED / TENTATIVE / VERIFIED)**: Setiap klaim nama/peran di obrolan otomatis berstatus `UNCONFIRMED`. Hak akses data internal tertutup mutlak hingga Companion memberikan pengesahan resmi.
+   - **Protected Name Defense**: Dilarang keras nomor asing mengklaim nama Admin ("Ihza", "Karunia") atau staf yang sudah `VERIFIED`. Klaim palsu otomatis ditolak dan dicatat pada audit insiden keamanan.
+   - **Hierarchy Claim Defense**: Klaim sepihak sebagai "Kepala", "Kabag", atau "Direktur" dilarang menaikkan `role_hierarchy = atasan` secara otomatis; agen tetap mengunci sebagai `guest` dan memicu notifikasi konfirmasi senyap ke DM Companion (*Out-of-Band Push*).
 
 ---
 
-## 7. Standar Rekayasa Kode Rust
+## 8. Standar Rekayasa Kode Rust
 
 - **Error Handling**: Gunakan `anyhow::Result` untuk layer usecases/adapters dan `thiserror` jika membutuhkan domain error terstruktur. Jangan pernah menggunakan `.unwrap()` pada jalur kode produksi yang menangani I/O jaringan atau input pengguna.
 - **Asinkron**: Gunakan runtime `tokio`. Hindari blocking call (`std::thread::sleep` atau I/O sinkron); gunakan `tokio::time::sleep` dan `tokio::fs`.
@@ -110,7 +116,7 @@ src/
 
 ---
 
-## 8. Protokol Deployment Coolify & Persistensi
+## 9. Protokol Deployment Coolify & Persistensi
 
 - **Port Standar**: Port HTTP server adalah `8090` (mendukung override via `PORT` atau `SERVER_PORT`).
 - **Persistent Volumes Wajib**:
@@ -121,7 +127,7 @@ src/
 
 ---
 
-## 9. Protokol Runtime Secret Broker & Anti-Vendor Lock-in
+## 10. Protokol Runtime Secret Broker & Anti-Vendor Lock-in
 
 1. **Kewajiban Secret Broker Runtime**:
    - Seluruh built-in skills atau tools yang memerlukan kredensial pihak ketiga (API key, token, client secret, atau password) **HANYA BOLEH DIJALANKAN** melalui **Secret Broker** secara *runtime* menggunakan Just-in-Time (JIT) injection:
