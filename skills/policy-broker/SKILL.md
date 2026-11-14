@@ -50,6 +50,7 @@ Activate when the request is about **who may access what**, for example:
 | "Pak Hendra itu atasan saya di BPS" (+ JID/mention) | `grant-user --authority atasan` |
 | "cabut akses Budi" / "Budi bukan rekan kerja lagi" | `revoke-user` |
 | "dia masuk staff nggak?" / "status akses gue apa?" | `status` |
+| "Aina, izinkan Budi akses dataset sensus itu" | `grant-dataset` (Hanya sah dari Custodian/Admin) |
 
 Do **not** activate for ordinary work requests ("buatkan rekap ini",
 "ringkas dokumen itu"). Those are normal tasks, not authorization changes.
@@ -88,6 +89,13 @@ aina policy revoke-user 628123456789@s.whatsapp.net --json
   members of a specific group and the mention is missing.
 - **Never invent a JID.** If the target is genuinely ambiguous, ask which person
   is meant instead of guessing. A wrong JID is a wrong grant.
+
+### Delegated Dataset Access (Data Custodian Approval Flow)
+When a user asks to grant another person access to an entrusted dataset:
+1. **Verify Custodianship**: Only the original **Data Custodian** who deposited the dataset (or the `ADMIN_JID`) may authorize access. Ordinary staff cannot grant access to datasets they do not own.
+2. **Update Authorization**: Append the target JID to `authorized_users` in the dataset's manifest (`knowledge/manifests/<dataset_slug>.yaml`).
+3. **Audit**: All custodian grants must be recorded via `aina audit` with non-repudiation tracking.
+4. **Zero-Disclosure Defense**: Before an explicit grant occurs, never disclose the dataset contents to any unauthorized requester.
 
 ---
 

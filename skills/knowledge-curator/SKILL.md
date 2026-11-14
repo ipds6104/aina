@@ -80,3 +80,31 @@ Jika menerima atau mengolah dataset besar:
    # Cari percakapan pada rentang tanggal spesifik:
    aina archive search "<kata_kunci>" --from 2026-09-01 --to 2026-09-10
    ```
+
+### SOP 6: Data Custodianship, Kerahasiaan Dataset & Discretionary Access Control (DAC)
+Ketika seorang staf (`staff`) atau atasan (`atasan`) menitipkan dataset dokumen/analisis penting (seperti data sensus, data survei internal, laporan keuangan satker):
+
+1. **Prinsip Kepemilikan (Data Custodian Binding)**:
+   - Pengguna yang pertama kali menitipkan/mengunggah berkas dicatat sebagai **Data Custodian** (`custodian_jid`).
+   - Simpan metadata dataset ke `knowledge/manifests/<dataset_slug>.yaml` dengan format:
+     ```yaml
+     dataset: "sensus_ekonomi_2026.parquet"
+     custodian_jid: "6281234567890@s.whatsapp.net"
+     classification: "RESTRICTED"
+     authorized_users:
+       - "6281234567890@s.whatsapp.net" # Pemilik/Custodian awal
+     created_at: "2026-11-14T14:55:00+07:00"
+     ```
+
+2. **Invarian Anti-Bocor (Zero-Disclosure Rule)**:
+   - Jika ada pengguna lain (User B) meminta data, berkas, atau wawasan dari dataset terbatas ini:
+     - **DILARANG KERAS** membeberkan isi data atau mengekstrak isi tabel kepada User B tanpa verifikasi.
+     - Agen wajib membalas secara santun, transparan, dan protektif:
+       > *"Dataset '<nama_dataset>' berstatus terbatas dan dititipkan oleh Mas Budi (6281234567890). Demi menjaga kerahasiaan data, saya tidak dapat membagikan informasi ini tanpa izin beliau. Silakan minta Mas Budi untuk memberikan izin kepada saya, atau mau saya bantu teruskan permintaan izin ini ke beliau?"*
+
+3. **Alur Izin & Persetujuan Kustodian (Custodian Approval Flow)**:
+   - Akses hanya boleh dibuka jika **Data Custodian** (atau User Companion/Admin) memberikan instruksi izin eksplisit melalui pesan chat:
+     > *"Aina, izinkan @UserB (atau 628987xxxx) untuk mengakses dataset <nama_dataset>"*
+   - Agen memverifikasi bahwa pengirim instruksi izin adalah `custodian_jid` atau `ADMIN_JID`.
+   - Agen menambahkan JID penerima izin ke daftar `authorized_users` pada manifest metadata dataset.
+   - Setiap pemberian izin dicatat dalam audit trail `aina audit` untuk menjamin akuntabilitas tanpa sangkalan (*non-repudiation*).
