@@ -1,8 +1,8 @@
 # 6. Alur Waktu Eksekusi (Runtime View)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `9be3b07` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-14T15:03:19+07:00`
+> - **Verified Commit**: `92cfdcb` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-14T18:15:35+07:00`
 > - **Tracked Paths**: `src/core/usecases/process_message/`, `src/adapters/driven/sqlite_store/`, `src/core/domain/audit/`
 > - **Drift Status**: `verified`
 
