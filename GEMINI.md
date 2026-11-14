@@ -90,10 +90,16 @@ src/
    - **Pemisahan Identitas vs Preferensi Semantik**: Profiling lawan bicara memisahkan identitas keamanan (`authority_level`) dari preferensi gaya komunikasi (`communication_prefs`), proyek aktif (`active_projects`), dan pantangan kerja (`durable_constraints`).
    - **Penyusutan Memori & Pembersihan Fakta Usang**: Mengadopsi formula penyusutan temporal Ebbinghaus dan *STALE invalidation pattern* agar konteks proyek usang (>90 hari) otomatis dianulir dan tidak membebani token prompt.
    - **Kepatuhan Privasi Mandiri (UU PDP & GDPR)**: Lawan bicara memiliki hak transparansi profil (`!aina profilku`) dan hak untuk dilupakan/dibersihkan memorinya (`!aina lupakan saya`) tanpa merusak integritas audit log sistem.
+6. **Company Brain, Knowledge-as-Code & Discretionary Asset Custodianship**:
+   - Arsitektur kanonik dan tata kelola living documentation perusahaan didokumentasikan lengkap pada roadmap: [`docs/roadmaps/ENTERPRISE_COMPANY_BRAIN_AND_GITOPS.md`](docs/roadmaps/ENTERPRISE_COMPANY_BRAIN_AND_GITOPS.md).
+   - **Pencarian Kilat Tanpa Pembengkakan Konteks**: Seluruh berkas Markdown di `knowledge/` dapat ditelusuri secara instan (<5ms) via `aina kb search "<kata kunci>"`, mengembalikan cuplikan baris dan heading terdekat tanpa membaca seluruh berkas ke jendela konteks LLM.
+   - **File & Asset Custodianship (Discretionary Access Control)**: Berkas dokumen, laporan resmi, dan dataset analitis yang dititipkan staf terkunci di bawah hak asuh penitip (`custodian_jid`) dan dikelola via `aina asset list|get|grant|revoke`. Pihak lain dilarang membaca atau meminta rekap isi data tanpa izin Kustodian (gerbang *Zero-Disclosure*).
+   - **GitOps Living Brain (AI Proposes, Human Merges)**: Repositori Company Brain disinkronkan dua arah (`aina kb sync`). Revisi SOP atau kebijakan baru diusulkan melalui cabang Git terpisah (`branch` & draft PR) alih-alih menimpa cabang utama secara sepihak.
+   - **Siklus Hidup & Anti-Entropi Dokumen**: Linter otomatis (`aina kb lint --auto-heal`) memvalidasi format frontmatter, mendeteksi SOP yang melewati batas waktu tinjauan (`review_after`), dan menyegarkan katalog `knowledge/index.md` secara deterministik.
 
 ---
 
-## 5. Standar Rekayasa Kode Rust
+## 7. Standar Rekayasa Kode Rust
 
 - **Error Handling**: Gunakan `anyhow::Result` untuk layer usecases/adapters dan `thiserror` jika membutuhkan domain error terstruktur. Jangan pernah menggunakan `.unwrap()` pada jalur kode produksi yang menangani I/O jaringan atau input pengguna.
 - **Asinkron**: Gunakan runtime `tokio`. Hindari blocking call (`std::thread::sleep` atau I/O sinkron); gunakan `tokio::time::sleep` dan `tokio::fs`.
@@ -104,7 +110,7 @@ src/
 
 ---
 
-## 6. Protokol Deployment Coolify & Persistensi
+## 8. Protokol Deployment Coolify & Persistensi
 
 - **Port Standar**: Port HTTP server adalah `8090` (mendukung override via `PORT` atau `SERVER_PORT`).
 - **Persistent Volumes Wajib**:
@@ -115,7 +121,7 @@ src/
 
 ---
 
-## 7. Protokol Runtime Secret Broker & Anti-Vendor Lock-in
+## 9. Protokol Runtime Secret Broker & Anti-Vendor Lock-in
 
 1. **Kewajiban Secret Broker Runtime**:
    - Seluruh built-in skills atau tools yang memerlukan kredensial pihak ketiga (API key, token, client secret, atau password) **HANYA BOLEH DIJALANKAN** melalui **Secret Broker** secara *runtime* menggunakan Just-in-Time (JIT) injection:

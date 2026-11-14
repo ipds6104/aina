@@ -1,5 +1,6 @@
 pub mod activity;
 pub mod archive;
+pub mod asset;
 pub mod audit;
 pub mod experience;
 pub mod github;
@@ -15,6 +16,7 @@ pub mod workspace;
 
 pub use activity::*;
 pub use archive::*;
+pub use asset::*;
 pub use audit::*;
 pub use experience::*;
 pub use github::*;

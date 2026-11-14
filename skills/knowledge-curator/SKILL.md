@@ -25,13 +25,22 @@ Activate this skill whenever:
 
 ## 2. Standard Operating Procedures (SOP)
 
-### SOP 1: Merapikan Indeks Katalog (Knowledge Grooming)
-Jalankan perintah grooming untuk memperbarui `knowledge/index.md` secara deterministik (<50ms):
-```bash
-aina kb groom
-# atau spesifik workspace: aina kb groom --workspace workspaces/kantor
-```
-*Grooming merangkum seluruh berkas dokumen umum, matriks kegiatan aktif, dan menghitung hitung mundur (countdown) deadline terdekat.*
+### SOP 1: Merapikan Indeks Katalog & Pencarian Instan (Knowledge Grooming & Instant Search)
+1. **Merapikan Indeks Katalog (`aina kb groom`)**:
+   Jalankan perintah grooming untuk memperbarui `knowledge/index.md` secara deterministik (<50ms):
+   ```bash
+   aina kb groom
+   # atau spesifik workspace: aina kb groom --workspace workspaces/kantor
+   ```
+   *Grooming merangkum seluruh berkas dokumen umum, matriks kegiatan aktif, dan menghitung hitung mundur (countdown) deadline terdekat.*
+
+2. **Pencarian Cepat Dokumen & Heading Pengetahuan (`aina kb search`)**:
+   Pencarian instan teks utuh (<5ms) berbasis AST Markdown hierarchy (mengekstrak heading konteks, nomor baris, dan snippet tanpa beban RAG vector berlebih):
+   ```bash
+   aina kb search "<kata_kunci>"
+   # Format output JSON untuk AI agent:
+   aina kb search "<kata_kunci>" --json
+   ```
 
 ### SOP 2: Validasi Kerapian & Closed-Loop Auto-Healing
 Untuk memeriksa apakah ada format dokumen atau frontmatter yang rusak:
@@ -108,3 +117,22 @@ Ketika seorang staf (`staff`) atau atasan (`atasan`) menitipkan berkas kerja (PD
    - Agen memverifikasi bahwa pengirim instruksi izin adalah `custodian_jid` atau `ADMIN_JID`.
    - Agen menambahkan JID penerima izin ke daftar `authorized_users` pada manifest metadata aset.
    - Setiap pemberian izin dicatat dalam audit trail `aina audit` untuk menjamin akuntabilitas tanpa sangkalan (*non-repudiation*).
+
+4. **Operasi CLI Native Discretionary Access Control (`aina asset`)**:
+   Untuk mengelola status dan izin akses berkas/dataset secara langsung melalui terminal atau tool call:
+   ```bash
+   # Melihat daftar seluruh berkas terbatas & status kustodiannya:
+   aina asset list
+
+   # Melihat detail izin, tanggal pembuatan, & daftar penerima izin aset:
+   aina asset get <slug>
+
+   # Memberikan izin akses kepada pengguna baru (wajib diautentikasi sebagai kustodian):
+   aina asset grant <slug> <target_jid> --by <custodian_jid>
+
+   # Mencabut hak akses dari pengguna:
+   aina asset revoke <slug> <target_jid> --by <custodian_jid>
+
+   # Format output JSON untuk AI agent:
+   aina asset list --json
+   ```

@@ -443,7 +443,9 @@ fn resolve_capability(
     flags: &Flags,
 ) -> anyhow::Result<Option<TurnCapability>> {
     if flags.operator {
-        if !(std::io::stdin().is_terminal() && std::io::stdout().is_terminal()) {
+        let is_term = (std::io::stdin().is_terminal() && std::io::stdout().is_terminal())
+            && std::env::var("AINA_FORCE_NON_TERMINAL").is_err();
+        if !is_term {
             anyhow::bail!(
                 "mode --operator hanya tersedia pada sesi terminal interaktif (bukan proses non-interaktif/agen)"
             );
@@ -657,11 +659,14 @@ mod tests {
     /// A non-interactive process must never be able to claim operator mode.
     #[test]
     fn operator_mode_requires_a_terminal() {
+        // SAFETY: single-threaded unit test manipulating a process-global var.
+        unsafe { std::env::set_var("AINA_FORCE_NON_TERMINAL", "1") };
         let args: Vec<String> = ["status", "--operator"].iter().map(|s| s.to_string()).collect();
         let f = Flags::parse(&args);
         assert!(f.operator);
-        // Tests never run with a TTY on stdin+stdout.
-        assert!(resolve_capability(&Connection::open_in_memory().unwrap(), &f).is_err());
+        let res = resolve_capability(&Connection::open_in_memory().unwrap(), &f);
+        unsafe { std::env::remove_var("AINA_FORCE_NON_TERMINAL") };
+        assert!(res.is_err());
     }
 
     /// Absence of the env token is a hard "no capability", never operator mode.

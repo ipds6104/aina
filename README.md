@@ -660,6 +660,16 @@ aina model set gemini-3.8-flash-high
 aina kb lint --workspace default
 aina kb lint --workspace default --auto-heal
 
+# 7b. Pencarian Cepat Dokumen Pengetahuan & AST Heading Hierarchy (<5ms)
+aina kb search "agenda"
+aina kb search "SOP pencacahan" --json
+
+# 7c. Manajemen Hak Asuh Berkas & Dokumen Terbatas (Discretionary Access Control - DAC)
+aina asset list
+aina asset get laporan_keuangan_q3
+aina asset grant laporan_keuangan_q3 628987654321@s.whatsapp.net --by 6281234567890@s.whatsapp.net
+aina asset revoke laporan_keuangan_q3 628987654321@s.whatsapp.net --by 6281234567890@s.whatsapp.net
+
 # 8. Kompilasi Ulang Katalog `knowledge/index.md` Deterministik
 aina kb groom --workspace default
 

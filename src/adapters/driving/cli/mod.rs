@@ -281,6 +281,7 @@ PENGGUNAAN:
             "update" => commands::handle_update(&args[2..]).await,
             "archive" => commands::handle_archive(&args[2..]),
             "kb" => commands::handle_kb(&args[2..]),
+            "asset" | "assets" => commands::handle_asset(&args[2..]),
             "workspace" | "ws" => commands::handle_workspace(&args[2..]),
             "clone" => commands::handle_workspace_clone(&args[2..]),
             "sync" => commands::handle_workspace_sync(&args[2..]),

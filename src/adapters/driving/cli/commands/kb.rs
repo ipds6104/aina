@@ -3,7 +3,7 @@ use crate::core::domain::KnowledgeEngine;
 
 pub fn handle_kb(args: &[String]) -> anyhow::Result<()> {
     if args.is_empty() {
-        eprintln!("Operasi kb belum ditentukan. Gunakan: lint, groom, schedule");
+        eprintln!("Operasi kb belum ditentukan. Gunakan: lint, groom, schedule, search");
         std::process::exit(1);
     }
 
@@ -69,6 +69,35 @@ pub fn handle_kb(args: &[String]) -> anyhow::Result<()> {
                             act.pic.as_deref().unwrap_or("-"),
                             act.periode
                         );
+                    }
+                }
+            }
+            Ok(())
+        }
+        "search" => {
+            if args.len() < 2 || args[1].starts_with("--") {
+                eprintln!("Kueri pencarian belum disertakan. Contoh: aina kb search \"reimbursement\"");
+                std::process::exit(1);
+            }
+            let query = &args[1];
+            let report = KnowledgeEngine::search(&ws, query);
+
+            if is_json {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                println!("🔍 Hasil Pencarian Knowledge Base (Workspace: {:?}):\n", ws);
+                println!(
+                    "Kata Kunci: \"{}\" | Ditemukan: {} kecocokan (dalam {}ms, {} berkas dipindai)\n",
+                    report.query, report.total_matches, report.duration_ms, report.files_scanned
+                );
+
+                if report.results.is_empty() {
+                    println!("(Tidak ada dokumen yang cocok dengan kata kunci tersebut)");
+                } else {
+                    for (i, r) in report.results.iter().enumerate() {
+                        let heading = r.section_heading.as_deref().unwrap_or("-");
+                        println!("{}. [{}] L{} (Bagian: {})", i + 1, r.relative_path, r.line_number, heading);
+                        println!("   \"{}\"\n", r.snippet);
                     }
                 }
             }

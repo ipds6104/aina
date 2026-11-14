@@ -2,11 +2,13 @@ pub mod groomer;
 pub mod linter;
 pub mod parser;
 pub mod scanner;
+pub mod searcher;
 
 pub use groomer::CatalogGroomer;
 pub use linter::KnowledgeLinter;
 pub use parser::FrontmatterParser;
 pub use scanner::DocumentScanner;
+pub use searcher::{DocumentSearcher, KnowledgeSearchReport};
 pub use super::workspace::{GhDeviceSession, GhPollStatus, SyncResult, WorkspaceEngine, WorkspaceInfo};
 
 use crate::core::ports::KnowledgePort;
@@ -86,6 +88,11 @@ impl KnowledgeEngine {
     /// Deterministic Linter for Knowledge Base neatness
     pub fn lint<P: AsRef<Path>>(workspace_dir: P, auto_heal: bool) -> LintReport {
         KnowledgeLinter::lint(workspace_dir, auto_heal)
+    }
+
+    /// High-speed keyword & snippet search across knowledge markdown files
+    pub fn search<P: AsRef<Path>>(workspace_dir: P, query: &str) -> KnowledgeSearchReport {
+        DocumentSearcher::search(workspace_dir, query)
     }
 
     // Delegations to WorkspaceEngine for backwards compatibility
