@@ -123,6 +123,29 @@ impl SessionStorePort for SqliteSessionStore {
         session::delete_user_profile(&conn, sender_jid)
     }
 
+    async fn list_unconfirmed_profiles(&self) -> anyhow::Result<Vec<UserProfile>> {
+        let conn = self.conn.lock().await;
+        session::list_unconfirmed_profiles(&conn)
+    }
+
+    async fn verify_user_profile(
+        &self,
+        sender_jid: &str,
+        verified_name: Option<&str>,
+        verified_role: Option<&str>,
+        authority_level: &str,
+        verified_by: &str,
+        notes: Option<&str>,
+    ) -> anyhow::Result<()> {
+        let conn = self.conn.lock().await;
+        session::verify_user_profile(&conn, sender_jid, verified_name, verified_role, authority_level, verified_by, notes)
+    }
+
+    async fn reject_user_claim(&self, sender_jid: &str, reason: &str, rejected_by: &str) -> anyhow::Result<()> {
+        let conn = self.conn.lock().await;
+        session::reject_user_claim(&conn, sender_jid, reason, rejected_by)
+    }
+
     async fn create_scheduled_task(&self, task: &NewScheduledTask) -> anyhow::Result<i64> {
         let conn = self.conn.lock().await;
         scheduler::create_scheduled_task(&conn, task)
@@ -764,6 +787,7 @@ mod tests {
             active_projects: Some("Survei Angkatan Kerja Nasional (Sakernas)".to_string()),
             durable_constraints: Some("Jangan kirim pesan di luar jam kerja (08:00-16:00)".to_string()),
             confidence_score: Some(0.95),
+            ..Default::default()
         };
 
         store.save_user_profile(&profile).await.unwrap();

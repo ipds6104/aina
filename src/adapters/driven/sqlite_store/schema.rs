@@ -71,6 +71,13 @@ pub fn init_schema(conn: &Connection) -> anyhow::Result<()> {
             active_projects TEXT DEFAULT '[]',
             durable_constraints TEXT DEFAULT '[]',
             confidence_score REAL DEFAULT 1.0,
+            verification_status TEXT DEFAULT 'UNCONFIRMED',
+            claimed_name TEXT,
+            claimed_role TEXT,
+            claimed_at_epoch INTEGER,
+            verified_at_epoch INTEGER,
+            verified_by TEXT,
+            verification_notes TEXT,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )",
         [],
@@ -84,6 +91,13 @@ pub fn init_schema(conn: &Connection) -> anyhow::Result<()> {
     let _ = conn.execute("ALTER TABLE user_profiles ADD COLUMN active_projects TEXT DEFAULT '[]'", []);
     let _ = conn.execute("ALTER TABLE user_profiles ADD COLUMN durable_constraints TEXT DEFAULT '[]'", []);
     let _ = conn.execute("ALTER TABLE user_profiles ADD COLUMN confidence_score REAL DEFAULT 1.0", []);
+    let _ = conn.execute("ALTER TABLE user_profiles ADD COLUMN verification_status TEXT DEFAULT 'UNCONFIRMED'", []);
+    let _ = conn.execute("ALTER TABLE user_profiles ADD COLUMN claimed_name TEXT", []);
+    let _ = conn.execute("ALTER TABLE user_profiles ADD COLUMN claimed_role TEXT", []);
+    let _ = conn.execute("ALTER TABLE user_profiles ADD COLUMN claimed_at_epoch INTEGER", []);
+    let _ = conn.execute("ALTER TABLE user_profiles ADD COLUMN verified_at_epoch INTEGER", []);
+    let _ = conn.execute("ALTER TABLE user_profiles ADD COLUMN verified_by TEXT", []);
+    let _ = conn.execute("ALTER TABLE user_profiles ADD COLUMN verification_notes TEXT", []);
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS scheduled_tasks (

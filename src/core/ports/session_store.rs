@@ -22,6 +22,24 @@ pub struct UserProfile {
     pub durable_constraints: Option<String>,
     #[serde(default)]
     pub confidence_score: Option<f64>,
+    #[serde(default = "default_verification_status")]
+    pub verification_status: String, // "UNCONFIRMED", "TENTATIVE", "VERIFIED", "REJECTED"
+    #[serde(default)]
+    pub claimed_name: Option<String>,
+    #[serde(default)]
+    pub claimed_role: Option<String>,
+    #[serde(default)]
+    pub claimed_at_epoch: Option<i64>,
+    #[serde(default)]
+    pub verified_at_epoch: Option<i64>,
+    #[serde(default)]
+    pub verified_by: Option<String>,
+    #[serde(default)]
+    pub verification_notes: Option<String>,
+}
+
+fn default_verification_status() -> String {
+    "UNCONFIRMED".to_string()
 }
 
 impl Default for UserProfile {
@@ -39,6 +57,13 @@ impl Default for UserProfile {
             active_projects: None,
             durable_constraints: None,
             confidence_score: None,
+            verification_status: "UNCONFIRMED".to_string(),
+            claimed_name: None,
+            claimed_role: None,
+            claimed_at_epoch: None,
+            verified_at_epoch: None,
+            verified_by: None,
+            verification_notes: None,
         }
     }
 }
@@ -51,6 +76,11 @@ impl UserProfile {
         authority_level: String,
         notes: Option<String>,
     ) -> Self {
+        let verification_status = if authority_level == "admin" {
+            "VERIFIED".to_string()
+        } else {
+            "UNCONFIRMED".to_string()
+        };
         Self {
             sender_jid,
             name,
@@ -64,6 +94,13 @@ impl UserProfile {
             active_projects: None,
             durable_constraints: None,
             confidence_score: None,
+            verification_status,
+            claimed_name: None,
+            claimed_role: None,
+            claimed_at_epoch: None,
+            verified_at_epoch: None,
+            verified_by: None,
+            verification_notes: None,
         }
     }
 }
@@ -148,6 +185,23 @@ pub trait SessionStorePort: Send + Sync {
 
     /// Deletes profiling memory for a sender JID (Self-service Right to be Forgotten / UU PDP).
     async fn delete_user_profile(&self, sender_jid: &str) -> anyhow::Result<bool>;
+
+    /// Lists user profiles with unconfirmed or tentative identity status.
+    async fn list_unconfirmed_profiles(&self) -> anyhow::Result<Vec<UserProfile>>;
+
+    /// Formally verifies a user profile, locking in verified name, role, authority, and audit notes.
+    async fn verify_user_profile(
+        &self,
+        sender_jid: &str,
+        verified_name: Option<&str>,
+        verified_role: Option<&str>,
+        authority_level: &str,
+        verified_by: &str,
+        notes: Option<&str>,
+    ) -> anyhow::Result<()>;
+
+    /// Rejects an unconfirmed identity claim (e.g. impersonation attempt), locking status to REJECTED.
+    async fn reject_user_claim(&self, sender_jid: &str, reason: &str, rejected_by: &str) -> anyhow::Result<()>;
 
     /// Creates a new scheduled task in the database and returns its assigned ID.
     async fn create_scheduled_task(&self, task: &crate::core::domain::NewScheduledTask) -> anyhow::Result<i64>;

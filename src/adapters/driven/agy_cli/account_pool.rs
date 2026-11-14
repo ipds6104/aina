@@ -22,6 +22,31 @@ pub struct AccountToken {
     pub token_json: String,
     pub cooldown_until: Arc<RwLock<Option<std::time::Instant>>>,
     pub cooldown_reason: Arc<RwLock<Option<String>>>,
+    pub in_flight: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+#[derive(Debug)]
+pub struct AccountLease {
+    pub token: AccountToken,
+    in_flight: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+impl AccountLease {
+    pub fn new(token: AccountToken) -> Self {
+        let in_flight = Arc::clone(&token.in_flight);
+        in_flight.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Self { token, in_flight }
+    }
+
+    pub fn in_flight_count(&self) -> usize {
+        self.in_flight.load(std::sync::atomic::Ordering::Relaxed)
+    }
+}
+
+impl Drop for AccountLease {
+    fn drop(&mut self) {
+        self.in_flight.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
 }
 
 impl AccountToken {
@@ -33,6 +58,7 @@ impl AccountToken {
             token_json,
             cooldown_until: Arc::new(RwLock::new(None)),
             cooldown_reason: Arc::new(RwLock::new(None)),
+            in_flight: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         }
     }
 
@@ -176,6 +202,23 @@ use tracing::{info, warn};
 pub struct TokenPoolManager {
     token_pool: Arc<RwLock<Vec<AccountToken>>>,
     round_robin_counter: Arc<AtomicUsize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccountConcurrencyStatus {
+    pub id: usize,
+    pub label: String,
+    pub masked_email: Option<String>,
+    pub in_flight: usize,
+    pub is_cooldown: bool,
+    pub cooldown_remaining_secs: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConcurrencyTelemetry {
+    pub max_concurrency: usize,
+    pub active_in_flight: usize,
+    pub accounts: Vec<AccountConcurrencyStatus>,
 }
 
 impl TokenPoolManager {
@@ -360,7 +403,7 @@ impl TokenPoolManager {
         auth_json_path.exists()
     }
 
-    pub async fn select_next_token(&self, attempt: usize) -> Option<AccountToken> {
+    pub async fn lease_next_token(&self, attempt: usize) -> Option<AccountLease> {
         let pool = self.token_pool.read().await.clone();
         if pool.is_empty() {
             return None;
@@ -378,36 +421,48 @@ impl TokenPoolManager {
         };
 
         let now = std::time::Instant::now();
-        let mut candidate = None;
         let n = pool.len();
 
-        if is_round_robin {
-            for i in 0..n {
-                let idx = (rr_start_idx + attempt + i) % n;
-                let acc = &pool[idx];
-                let cd = acc.cooldown_until.read().await;
-                if let Some(until) = *cd {
-                    if now < until {
-                        continue;
-                    }
+        // 1. Filter accounts not in cooldown
+        let mut available: Vec<(usize, AccountToken, usize)> = Vec::new();
+        for (idx, acc) in pool.iter().enumerate() {
+            let cd = acc.cooldown_until.read().await;
+            if let Some(until) = *cd {
+                if now < until {
+                    continue;
                 }
-                candidate = Some(acc.clone());
-                break;
             }
-        } else {
-            for acc in &pool {
-                let cd = acc.cooldown_until.read().await;
-                if let Some(until) = *cd {
-                    if now < until {
-                        continue;
-                    }
-                }
-                candidate = Some(acc.clone());
-                break;
-            }
+            let inf = acc.in_flight.load(Ordering::Relaxed);
+            available.push((idx, acc.clone(), inf));
         }
 
-        let chosen = candidate.unwrap_or_else(|| pool[(rr_start_idx + attempt) % pool.len()].clone());
+        // 2. Select account with priority to in_flight < 2 (prevents upstream 429 rate limit spike)
+        let chosen = if !available.is_empty() {
+            let low_in_flight: Vec<&(usize, AccountToken, usize)> =
+                available.iter().filter(|(_, _, inf)| *inf < 2).collect();
+
+            if !low_in_flight.is_empty() {
+                if is_round_robin {
+                    let pick = low_in_flight
+                        .iter()
+                        .min_by_key(|(idx, _, inf)| (*inf, (n + idx - (rr_start_idx + attempt) % n) % n))
+                        .unwrap();
+                    pick.1.clone()
+                } else {
+                    let pick = low_in_flight.iter().min_by_key(|(_, _, inf)| *inf).unwrap();
+                    pick.1.clone()
+                }
+            } else {
+                let pick = available.iter().min_by_key(|(_, _, inf)| *inf).unwrap();
+                pick.1.clone()
+            }
+        } else {
+            // Fallback: pick account with lowest in_flight even if in cooldown to avoid total starvation
+            pool.iter()
+                .min_by_key(|a| a.in_flight.load(Ordering::Relaxed))
+                .cloned()
+                .unwrap_or_else(|| pool[(rr_start_idx + attempt) % pool.len()].clone())
+        };
 
         // Write chosen token to disk for agy CLI binary
         let token_path = Self::get_token_path();
@@ -418,7 +473,48 @@ impl TokenPoolManager {
             warn!("Failed to write active token for {}: {}", chosen.label, e);
         }
 
-        Some(chosen)
+        Some(AccountLease::new(chosen))
+    }
+
+    pub async fn select_next_token(&self, attempt: usize) -> Option<AccountToken> {
+        self.lease_next_token(attempt).await.map(|l| l.token.clone())
+    }
+
+    pub async fn get_concurrency_telemetry(&self, max_concurrency: usize) -> ConcurrencyTelemetry {
+        let pool = self.token_pool.read().await;
+        let now = std::time::Instant::now();
+        let mut total_in_flight = 0;
+        let mut accounts = Vec::new();
+
+        for acc in pool.iter() {
+            let inf = acc.in_flight.load(Ordering::Relaxed);
+            total_in_flight += inf;
+            let cd = acc.cooldown_until.read().await;
+            let (is_cd, rem) = if let Some(until) = *cd {
+                if now < until {
+                    (true, Some((until - now).as_secs()))
+                } else {
+                    (false, None)
+                }
+            } else {
+                (false, None)
+            };
+
+            accounts.push(AccountConcurrencyStatus {
+                id: acc.id,
+                label: acc.label.clone(),
+                masked_email: acc.masked_email(),
+                in_flight: inf,
+                is_cooldown: is_cd,
+                cooldown_remaining_secs: rem,
+            });
+        }
+
+        ConcurrencyTelemetry {
+            max_concurrency,
+            active_in_flight: total_in_flight,
+            accounts,
+        }
     }
 
     pub async fn mark_cooldown(&self, account_id: usize, duration: Duration, reason: Option<&str>) {

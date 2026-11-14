@@ -154,6 +154,7 @@ impl ProcessIncomingMessageUseCase {
                                     granted_by: None,
                                     granted_at: None,
                                     role_hierarchy: Some("guest".to_string()),
+                                    verification_status: if is_trusted_group { "TENTATIVE".to_string() } else { "UNCONFIRMED".to_string() },
                                     ..Default::default()
                                 };
                                 let _ = self.session_store.save_user_profile(&new_profile).await;

@@ -539,6 +539,9 @@ mod tests {
         async fn get_user_profile(&self, _sender_jid: &str) -> anyhow::Result<Option<crate::core::ports::UserProfile>> { Ok(None) }
         async fn save_user_profile(&self, _profile: &crate::core::ports::UserProfile) -> anyhow::Result<()> { Ok(()) }
         async fn delete_user_profile(&self, _sender_jid: &str) -> anyhow::Result<bool> { Ok(true) }
+        async fn list_unconfirmed_profiles(&self) -> anyhow::Result<Vec<crate::core::ports::UserProfile>> { Ok(vec![]) }
+        async fn verify_user_profile(&self, _sender_jid: &str, _verified_name: Option<&str>, _verified_role: Option<&str>, _authority_level: &str, _verified_by: &str, _notes: Option<&str>) -> anyhow::Result<()> { Ok(()) }
+        async fn reject_user_claim(&self, _sender_jid: &str, _reason: &str, _rejected_by: &str) -> anyhow::Result<()> { Ok(()) }
         async fn create_scheduled_task(&self, _task: &crate::core::domain::NewScheduledTask) -> anyhow::Result<i64> { Ok(1) }
         async fn list_scheduled_tasks(&self, _active_only: bool) -> anyhow::Result<Vec<crate::core::domain::ScheduledTask>> { Ok(vec![]) }
         async fn get_due_scheduled_tasks(&self, _current_epoch: i64) -> anyhow::Result<Vec<crate::core::domain::ScheduledTask>> { Ok(vec![]) }

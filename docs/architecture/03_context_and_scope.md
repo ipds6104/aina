@@ -1,8 +1,8 @@
 # 3. Konteks dan Cakupan (Context and Scope)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `92cfdcb` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-14T18:15:35+07:00`
+> - **Verified Commit**: `9451105` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-14T19:30:00+07:00`
 > - **Tracked Paths**: `src/`, `config/`, `skills/`
 > - **Drift Status**: `verified`
 

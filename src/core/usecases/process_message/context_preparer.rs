@@ -88,6 +88,8 @@ impl ContextPreparer {
         session_store: &Arc<dyn SessionStorePort>,
         is_resumed: bool,
     ) -> anyhow::Result<ContextPreparation> {
+        let is_admin = crate::core::domain::capability::is_admin_identity(persona_engine.admin_jid(), &msg.sender.jid);
+
         // 1. Retrieve cross-channel WhatsApp group memberships for sender
         let user_groups = session_store.get_user_groups(&msg.sender.jid).await.unwrap_or_default();
 
@@ -139,6 +141,13 @@ impl ContextPreparer {
                         Some("Terdaftar otomatis saat interaksi pertama (status: guest)".to_string()),
                     )
                 };
+                let verification_status = if is_admin {
+                    "VERIFIED".to_string()
+                } else if has_trusted_group {
+                    "TENTATIVE".to_string()
+                } else {
+                    "UNCONFIRMED".to_string()
+                };
                 let new_profile = UserProfile {
                     sender_jid: msg.sender.jid.clone(),
                     name: msg.sender.name.clone(),
@@ -148,6 +157,7 @@ impl ContextPreparer {
                     granted_by: trusted_group_jid.as_ref().map(|g| format!("group:{}", g)),
                     granted_at: if has_trusted_group { Some(chrono::Utc::now().timestamp()) } else { None },
                     role_hierarchy: Some(authority_level),
+                    verification_status,
                     ..Default::default()
                 };
                 let _ = session_store.save_user_profile(&new_profile).await;
@@ -169,6 +179,7 @@ impl ContextPreparer {
                     granted_by: None,
                     granted_at: None,
                     role_hierarchy: Some(authority_level),
+                    verification_status: if is_admin { "VERIFIED".to_string() } else { "UNCONFIRMED".to_string() },
                     ..Default::default()
                 }
             }

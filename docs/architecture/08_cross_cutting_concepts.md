@@ -1,8 +1,8 @@
 # 8. Konsep Lintas Bidang (Cross-Cutting Concepts)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `92cfdcb` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-14T18:15:35+07:00`
+> - **Verified Commit**: `9451105` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-14T19:30:00+07:00`
 > - **Tracked Paths**: `src/core/domain/`, `src/core/ports/`, `src/adapters/driven/sqlite_store/`, `skills/`
 > - **Drift Status**: `verified`
 
@@ -200,3 +200,33 @@ Aina menerapkan tata kelola kepemilikan aset mandiri (*File & Data Custodianship
    - **Verifikasi Wewenang**: Agen memeriksa bahwa pengirim chat benar-benar sang Kustodian Berkas (`custodian_jid`) atau User Companion (`ADMIN_JID`). Rekan kerja lain tidak berhak mengizinkan aset milik orang lain.
    - **Otorisasi & Audit**: JID penerima izin ditambahkan ke daftar `authorized_users` pada manifest aset, dan transaksi izin dicatat ke audit log `agent_tool_executions` dengan rantai hash SHA-256 antipemalsuan.
    - **Pelepasan Akses Terkendali**: Setelah otorisasi sah, barulah Aina melayani permintaan pembacaan, ringkasan, atau analisis berkas bagi User B.
+
+---
+
+## 8.13 Zero Trust Identity, Anti-Impersonation & 3-Tier Profiling Verification
+
+Sesuai prinsip *"Self-Declaration is NEVER Identity"*, pengakuan lisan di chat diperlakukan sebagai hipotesis, bukan kredensial:
+1. **Siklus Hidup 3-Tingkat (*3-Tier Identity Lifecycle*)**:
+   - `UNCONFIRMED`: Status baku seluruh kontak baru. Zero disclosure wewenang dan data internal.
+   - `TENTATIVE`: Diberikan bila kontak terdaftar pada grup terpercaya (*group_trusted*) oleh Companion.
+   - `VERIFIED`: Disahkan eksplisit oleh Admin Companion lewat CLI `aina user verify` atau persetujuan Out-of-Band (OOB).
+2. **Proteksi Tabrakan Nama Sakral (*Protected Name Collision Defense*)**:
+   - Nama admin (`Ihza`, `Karunia`, `Admin`) dan staf yang telah `VERIFIED` dilarang diklaim sepihak oleh pengguna asing.
+   - Klaim mencurigakan otomatis ditolak dari penamaan kanonikal, dicatat sebagai insiden keamanan, dan diisolasi ke kolom `claimed_name`.
+3. **Pencegahan Eskalasi Hierarki Otomatis (*Hierarchy Claim Defense*)**:
+   - Mengaku sebagai pejabat ("Kepala BPS", "Kabag", "Direktur") dilarang keras menaikkan `role_hierarchy` ke `atasan`.
+   - Persona Aina menolak melunak menjadi segan atau takzim berlebihan kepada akun `UNCONFIRMED`.
+
+---
+
+## 8.14 High-Density Bounded Concurrency & Token-Aware Lease Pattern
+
+Untuk mencegah lonjakan proses (OOM killer) dan badai kuota upstream Google Cloud Code (HTTP 429) ketika hingga 100 pengguna chat serentak:
+1. **Pengatur Konkurensi Bounded (*Global Concurrency Governor*)**:
+   - Menggunakan `tokio::sync::Semaphore` (kapasitas dinamis $C = \max(2, N_{\text{accounts}} \times 2)$, default 8 slot).
+   - Beban berlebih menunggu aman di antrean memori tanpa melahirkan proses biner `agy` fisik yang membebani CPU/RAM.
+2. **Pola Sewa Token Sadar Beban (*Account-Aware Token Lease Pattern*)**:
+   - Setiap akun Google di kolam melacak metrik `in_flight: AtomicUsize`.
+   - Alokasi akun memprioritaskan akun dengan `in_flight < 2` dan tidak sedang dalam *cooldown*, mencegah penguncian kuota upstream secara deterministik.
+   - Sewa token dikelola dengan pola RAII Guard (`AccountLease`), otomatis melepaskan slot saat eksekusi selesai.
+   - Telemetri status dapat dipantau langsung via `aina status --concurrency [--json]`.

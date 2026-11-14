@@ -161,41 +161,78 @@ impl AutonomousProfiler {
     }
 
     /// Merges freshly extracted profile cues into an existing UserProfile without downgrading authority.
+    /// Strictly enforces Zero Trust Identity, Protected Name Collision Defense, and Hierarchy Claim Defense.
     pub fn merge_profile(existing: &UserProfile, extracted: &ExtractedProfileInfo) -> UserProfile {
         let mut updated = existing.clone();
+        let now = chrono::Utc::now().timestamp();
+        let is_verified_admin = existing.authority_level == "admin"
+            || (existing.verification_status == "VERIFIED" && existing.role_hierarchy.as_deref() == Some("admin"));
 
-        // 1. Update name if extracted is present and existing is either empty or default
+        // 1. Update name & Anti-Impersonation / Protected Name Collision Defense
         if let Some(ref new_name) = extracted.name {
-            if existing.name.as_deref().unwrap_or("").trim().is_empty()
-                || existing.name.as_deref() == Some("Rekan Kerja")
-                || existing.name.as_deref() == Some("Tamu")
-                || extracted.callsign.is_some()
-            {
-                updated.name = Some(new_name.clone());
+            updated.claimed_name = Some(new_name.clone());
+            updated.claimed_at_epoch = Some(now);
+
+            let is_protected = is_protected_name(new_name);
+
+            if is_protected && !is_verified_admin {
+                // Impersonation Attempt Detected: reject canonical name assignment
+                let alert = format!(
+                    "SUSPICIOUS_IDENTITY_CLAIM: Percobaan klaim nama terproteksi '{}' tanpa otorisasi.",
+                    new_name
+                );
+                tracing::warn!(
+                    "Anti-Impersonation Triggered: {} tried to claim protected name '{}'",
+                    existing.sender_jid,
+                    new_name
+                );
+                updated.verification_status = "UNCONFIRMED".to_string();
+                updated.verification_notes = Some(alert);
+                // Retain existing name or None to prevent name spoofing in group/context
+            } else if existing.verification_status == "VERIFIED" {
+                // Verified name is locked and cannot be silently altered via chat cues
+                if updated.name.is_none() {
+                    updated.name = Some(new_name.clone());
+                }
+            } else {
+                // Unconfirmed user: allow conversational address while keeping status UNCONFIRMED
+                if existing.name.as_deref().unwrap_or("").trim().is_empty()
+                    || existing.name.as_deref() == Some("Rekan Kerja")
+                    || existing.name.as_deref() == Some("Tamu")
+                    || extracted.callsign.is_some()
+                {
+                    updated.name = Some(new_name.clone());
+                }
+                if updated.verification_status != "TENTATIVE" && updated.verification_status != "VERIFIED" {
+                    updated.verification_status = "UNCONFIRMED".to_string();
+                }
             }
         }
 
-        // 2. Update role if extracted is present and existing is generic
+        // 2. Update role & Hierarchy Claim Defense
         if let Some(ref new_role) = extracted.role {
-            if existing.role.as_deref().unwrap_or("").trim().is_empty()
-                || existing.role.as_deref() == Some("Rekan Kerja")
-                || existing.role.as_deref() == Some("Tamu")
-                || existing.role.as_deref() == Some("Anggota Tim")
-                || existing.role.as_deref() == Some("Anggota Grup")
-            {
-                updated.role = Some(new_role.clone());
-            }
+            updated.claimed_role = Some(new_role.clone());
+            updated.claimed_at_epoch = Some(now);
 
-            // Detect leadership / atasan hierarchy from role without escalating authority
-            let role_lower = new_role.to_lowercase();
-            if role_lower.contains("kepala")
-                || role_lower.contains("kabag")
-                || role_lower.contains("pimpinan")
-                || role_lower.contains("ketua")
-                || role_lower.contains("direktur")
-            {
-                if updated.role_hierarchy.as_deref() != Some("admin") {
-                    updated.role_hierarchy = Some("atasan".to_string());
+            // Hierarchy Claim Defense:
+            // Conversational claims like "saya kepala..." or "saya direktur..."
+            // MUST NEVER escalate role_hierarchy to "atasan" for unverified users!
+            if existing.verification_status != "VERIFIED" {
+                if updated.authority_level != "admin" {
+                    updated.role_hierarchy = Some("guest".to_string());
+                }
+                if existing.role.as_deref().unwrap_or("").trim().is_empty()
+                    || existing.role.as_deref() == Some("Rekan Kerja")
+                    || existing.role.as_deref() == Some("Tamu")
+                    || existing.role.as_deref() == Some("Anggota Tim")
+                    || existing.role.as_deref() == Some("Anggota Grup")
+                {
+                    updated.role = Some(new_role.clone());
+                }
+            } else {
+                // For already verified users, retain canonical role unless unassigned
+                if existing.role.as_deref().unwrap_or("").trim().is_empty() {
+                    updated.role = Some(new_role.clone());
                 }
             }
         }
@@ -215,12 +252,35 @@ impl AutonomousProfiler {
         }
 
         info!(
-            "Autonomous Profiler merged profile for {}: name={:?}, role={:?}, authority={}",
-            updated.sender_jid, updated.name, updated.role, updated.authority_level
+            "Autonomous Profiler merged profile for {}: name={:?}, role={:?}, authority={}, status={}",
+            updated.sender_jid, updated.name, updated.role, updated.authority_level, updated.verification_status
         );
 
         updated
     }
+}
+
+pub fn is_protected_name(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    let protected_tokens = [
+        "ihza",
+        "karunia",
+        "bg ihza",
+        "bang ihza",
+        "mas ihza",
+        "admin",
+        "administrator",
+        "aina",
+        "bot",
+        "owner",
+        "superadmin",
+    ];
+    for token in &protected_tokens {
+        if lower == *token || lower.contains(token) {
+            return true;
+        }
+    }
+    false
 }
 
 fn is_valid_name(s: &str) -> bool {
@@ -376,5 +436,65 @@ mod tests {
         let text = "Kamu tahu siapa nama saya?";
         let res = AutonomousProfiler::extract_from_text(text);
         assert!(res.is_none());
+    }
+
+    #[test]
+    fn test_anti_impersonation_rejects_protected_admin_name() {
+        let stranger = UserProfile {
+            sender_jid: "628999888777@s.whatsapp.net".to_string(),
+            name: None,
+            role: Some("Tamu".to_string()),
+            authority_level: "guest".to_string(),
+            verification_status: "UNCONFIRMED".to_string(),
+            ..Default::default()
+        };
+
+        let extracted = ExtractedProfileInfo {
+            name: Some("Ihza Karunia".to_string()),
+            role: None,
+            organization: None,
+            callsign: None,
+            notes: Some("Terdeteksi otomatis via Autonomous Profiler".to_string()),
+        };
+
+        let merged = AutonomousProfiler::merge_profile(&stranger, &extracted);
+        // Canonical name must NOT be overwritten by the protected name
+        assert_eq!(merged.name, None);
+        // The attempt must be recorded in claimed_name
+        assert_eq!(merged.claimed_name.as_deref(), Some("Ihza Karunia"));
+        // Status remains UNCONFIRMED
+        assert_eq!(merged.verification_status, "UNCONFIRMED");
+        // Security incident note must be recorded
+        assert!(merged.verification_notes.as_deref().unwrap().contains("SUSPICIOUS_IDENTITY_CLAIM"));
+    }
+
+    #[test]
+    fn test_hierarchy_claim_defense_does_not_escalate_to_atasan() {
+        let stranger = UserProfile {
+            sender_jid: "628999888777@s.whatsapp.net".to_string(),
+            name: None,
+            role: Some("Tamu".to_string()),
+            authority_level: "guest".to_string(),
+            verification_status: "UNCONFIRMED".to_string(),
+            ..Default::default()
+        };
+
+        let extracted = ExtractedProfileInfo {
+            name: Some("Pak Direktur Utama".to_string()),
+            role: Some("Kepala BPS Provinsi".to_string()),
+            organization: None,
+            callsign: None,
+            notes: Some("Terdeteksi otomatis via Autonomous Profiler".to_string()),
+        };
+
+        let merged = AutonomousProfiler::merge_profile(&stranger, &extracted);
+        // Role hierarchy must NOT be escalated to "atasan"
+        assert_ne!(merged.role_hierarchy.as_deref(), Some("atasan"));
+        assert_eq!(merged.role_hierarchy.as_deref(), Some("guest"));
+        assert_eq!(merged.authority_level, "guest");
+        // Status remains UNCONFIRMED
+        assert_eq!(merged.verification_status, "UNCONFIRMED");
+        // Claim is stored
+        assert_eq!(merged.claimed_role.as_deref(), Some("Kepala BPS Provinsi"));
     }
 }

@@ -40,6 +40,8 @@ pub struct AntigravityCliAdapter {
     companion_base_url: Option<String>,
     companion_api_key: Option<String>,
     pool_manager: Arc<TokenPoolManager>,
+    concurrency_semaphore: Arc<tokio::sync::Semaphore>,
+    max_concurrency: usize,
 }
 
 impl AntigravityCliAdapter {
@@ -76,6 +78,10 @@ impl AntigravityCliAdapter {
     ) -> Self {
         let raw_model = model.into();
         let initial_model = resolve_model_name(&raw_model).unwrap_or(raw_model);
+        let max_concurrency = std::env::var("AINA_MAX_CONCURRENT_AGENTS")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(8);
         Self {
             binary_path: binary_path.into(),
             model: Arc::new(RwLock::new(initial_model)),
@@ -86,6 +92,8 @@ impl AntigravityCliAdapter {
             companion_base_url,
             companion_api_key,
             pool_manager: Arc::new(TokenPoolManager::new()),
+            concurrency_semaphore: Arc::new(tokio::sync::Semaphore::new(max_concurrency)),
+            max_concurrency,
         }
     }
 
@@ -101,6 +109,10 @@ impl AntigravityCliAdapter {
     ) -> Self {
         let raw_model = model.into();
         let initial_model = resolve_model_name(&raw_model).unwrap_or(raw_model);
+        let max_concurrency = std::env::var("AINA_MAX_CONCURRENT_AGENTS")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(8);
         Self {
             binary_path: binary_path.into(),
             model: Arc::new(RwLock::new(initial_model)),
@@ -111,6 +123,8 @@ impl AntigravityCliAdapter {
             companion_base_url: None,
             companion_api_key: None,
             pool_manager,
+            concurrency_semaphore: Arc::new(tokio::sync::Semaphore::new(max_concurrency)),
+            max_concurrency,
         }
     }
 
@@ -151,6 +165,11 @@ impl AntigravityCliAdapter {
             PathBuf::from("agy")
         }
     }
+
+    /// Obtains real-time concurrency metrics, token leases, and in-flight counters.
+    pub async fn get_concurrency_telemetry(&self) -> crate::adapters::driven::agy_cli::account_pool::ConcurrencyTelemetry {
+        self.pool_manager.get_concurrency_telemetry(self.max_concurrency).await
+    }
 }
 
 impl AntigravityCliAdapter {
@@ -179,8 +198,16 @@ impl AntigravityCliAdapter {
 
         let mut target_conv_id = conversation_id;
 
+        // Acquire semaphore permit to enforce bounded concurrency (Phase 13)
+        let _permit = self
+            .concurrency_semaphore
+            .acquire()
+            .await
+            .map_err(|e| anyhow::anyhow!("Gagal memperoleh izin konkurensi (semaphore error): {}", e))?;
+
         for attempt in 0..max_attempts {
-            let active_acc = self.pool_manager.select_next_token(attempt).await;
+            let active_lease = self.pool_manager.lease_next_token(attempt).await;
+            let active_acc = active_lease.as_ref().map(|l| l.token.clone());
 
             let mut cmd = Command::new(&bin_path);
             cmd.kill_on_drop(true);

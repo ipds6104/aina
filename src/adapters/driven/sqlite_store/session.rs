@@ -292,7 +292,9 @@ pub fn get_recent_messages(
 pub fn get_user_profile(conn: &Connection, sender_jid: &str) -> anyhow::Result<Option<UserProfile>> {
     let mut stmt = conn.prepare(
         "SELECT sender_jid, name, role, authority_level, notes, granted_by, granted_at, role_hierarchy,
-                communication_prefs, active_projects, durable_constraints, confidence_score
+                communication_prefs, active_projects, durable_constraints, confidence_score,
+                verification_status, claimed_name, claimed_role, claimed_at_epoch, verified_at_epoch,
+                verified_by, verification_notes
          FROM user_profiles WHERE sender_jid = ?1 LIMIT 1"
     )?;
     let mut rows = stmt.query(params![sender_jid])?;
@@ -310,6 +312,13 @@ pub fn get_user_profile(conn: &Connection, sender_jid: &str) -> anyhow::Result<O
             active_projects: row.get(9)?,
             durable_constraints: row.get(10)?,
             confidence_score: row.get(11)?,
+            verification_status: row.get::<_, Option<String>>(12)?.unwrap_or_else(|| "UNCONFIRMED".to_string()),
+            claimed_name: row.get(13)?,
+            claimed_role: row.get(14)?,
+            claimed_at_epoch: row.get(15)?,
+            verified_at_epoch: row.get(16)?,
+            verified_by: row.get(17)?,
+            verification_notes: row.get(18)?,
         }))
     } else {
         Ok(None)
@@ -320,9 +329,11 @@ pub fn save_user_profile(conn: &Connection, profile: &UserProfile) -> anyhow::Re
     conn.execute(
         "INSERT INTO user_profiles (
             sender_jid, name, role, authority_level, notes, granted_by, granted_at, role_hierarchy,
-            communication_prefs, active_projects, durable_constraints, confidence_score, updated_at
+            communication_prefs, active_projects, durable_constraints, confidence_score,
+            verification_status, claimed_name, claimed_role, claimed_at_epoch, verified_at_epoch,
+            verified_by, verification_notes, updated_at
          )
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, CURRENT_TIMESTAMP)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, CURRENT_TIMESTAMP)
          ON CONFLICT(sender_jid) DO UPDATE SET
             name = COALESCE(excluded.name, user_profiles.name),
             role = COALESCE(excluded.role, user_profiles.role),
@@ -335,6 +346,13 @@ pub fn save_user_profile(conn: &Connection, profile: &UserProfile) -> anyhow::Re
             active_projects = COALESCE(excluded.active_projects, user_profiles.active_projects),
             durable_constraints = COALESCE(excluded.durable_constraints, user_profiles.durable_constraints),
             confidence_score = COALESCE(excluded.confidence_score, user_profiles.confidence_score),
+            verification_status = excluded.verification_status,
+            claimed_name = COALESCE(excluded.claimed_name, user_profiles.claimed_name),
+            claimed_role = COALESCE(excluded.claimed_role, user_profiles.claimed_role),
+            claimed_at_epoch = COALESCE(excluded.claimed_at_epoch, user_profiles.claimed_at_epoch),
+            verified_at_epoch = COALESCE(excluded.verified_at_epoch, user_profiles.verified_at_epoch),
+            verified_by = COALESCE(excluded.verified_by, user_profiles.verified_by),
+            verification_notes = COALESCE(excluded.verification_notes, user_profiles.verification_notes),
             updated_at = CURRENT_TIMESTAMP",
         params![
             profile.sender_jid,
@@ -349,7 +367,115 @@ pub fn save_user_profile(conn: &Connection, profile: &UserProfile) -> anyhow::Re
             profile.active_projects,
             profile.durable_constraints,
             profile.confidence_score,
+            profile.verification_status,
+            profile.claimed_name,
+            profile.claimed_role,
+            profile.claimed_at_epoch,
+            profile.verified_at_epoch,
+            profile.verified_by,
+            profile.verification_notes,
         ],
+    )?;
+    Ok(())
+}
+
+pub fn list_unconfirmed_profiles(conn: &Connection) -> anyhow::Result<Vec<UserProfile>> {
+    let mut stmt = conn.prepare(
+        "SELECT sender_jid, name, role, authority_level, notes, granted_by, granted_at, role_hierarchy,
+                communication_prefs, active_projects, durable_constraints, confidence_score,
+                verification_status, claimed_name, claimed_role, claimed_at_epoch, verified_at_epoch,
+                verified_by, verification_notes
+         FROM user_profiles
+         WHERE verification_status IN ('UNCONFIRMED', 'TENTATIVE')
+         ORDER BY updated_at DESC"
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok(UserProfile {
+            sender_jid: row.get(0)?,
+            name: row.get(1)?,
+            role: row.get(2)?,
+            authority_level: row.get(3)?,
+            notes: row.get(4)?,
+            granted_by: row.get(5)?,
+            granted_at: row.get(6)?,
+            role_hierarchy: row.get(7)?,
+            communication_prefs: row.get(8)?,
+            active_projects: row.get(9)?,
+            durable_constraints: row.get(10)?,
+            confidence_score: row.get(11)?,
+            verification_status: row.get::<_, Option<String>>(12)?.unwrap_or_else(|| "UNCONFIRMED".to_string()),
+            claimed_name: row.get(13)?,
+            claimed_role: row.get(14)?,
+            claimed_at_epoch: row.get(15)?,
+            verified_at_epoch: row.get(16)?,
+            verified_by: row.get(17)?,
+            verification_notes: row.get(18)?,
+        })
+    })?;
+    let mut list = Vec::new();
+    for r in rows {
+        list.push(r?);
+    }
+    Ok(list)
+}
+
+pub fn verify_user_profile(
+    conn: &Connection,
+    sender_jid: &str,
+    verified_name: Option<&str>,
+    verified_role: Option<&str>,
+    authority_level: &str,
+    verified_by: &str,
+    notes: Option<&str>,
+) -> anyhow::Result<()> {
+    let now = chrono::Utc::now().timestamp();
+    let role_hierarchy = authority_level;
+    conn.execute(
+        "INSERT INTO user_profiles (
+            sender_jid, name, role, authority_level, notes, granted_by, granted_at,
+            role_hierarchy, verification_status, verified_at_epoch, verified_by, verification_notes, updated_at
+         )
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'VERIFIED', ?7, ?6, ?5, CURRENT_TIMESTAMP)
+         ON CONFLICT(sender_jid) DO UPDATE SET
+            name = COALESCE(?2, user_profiles.name, user_profiles.claimed_name),
+            role = COALESCE(?3, user_profiles.role, user_profiles.claimed_role),
+            authority_level = ?4,
+            notes = COALESCE(?5, user_profiles.notes),
+            granted_by = ?6,
+            granted_at = ?7,
+            role_hierarchy = ?8,
+            verification_status = 'VERIFIED',
+            verified_at_epoch = ?7,
+            verified_by = ?6,
+            verification_notes = COALESCE(?5, user_profiles.verification_notes),
+            updated_at = CURRENT_TIMESTAMP",
+        params![sender_jid, verified_name, verified_role, authority_level, notes, verified_by, now, role_hierarchy],
+    )?;
+    Ok(())
+}
+
+pub fn reject_user_claim(
+    conn: &Connection,
+    sender_jid: &str,
+    reason: &str,
+    rejected_by: &str,
+) -> anyhow::Result<()> {
+    let _now = chrono::Utc::now().timestamp();
+    let notes = format!("REJECTED_CLAIM: {} (oleh {})", reason, rejected_by);
+    conn.execute(
+        "INSERT INTO user_profiles (
+            sender_jid, authority_level, role_hierarchy, verification_status, verification_notes, updated_at
+         )
+         VALUES (?1, 'guest', 'guest', 'REJECTED', ?2, CURRENT_TIMESTAMP)
+         ON CONFLICT(sender_jid) DO UPDATE SET
+            authority_level = 'guest',
+            role_hierarchy = 'guest',
+            verification_status = 'REJECTED',
+            claimed_name = NULL,
+            claimed_role = NULL,
+            verification_notes = ?2,
+            updated_at = CURRENT_TIMESTAMP",
+        params![sender_jid, notes],
     )?;
     Ok(())
 }

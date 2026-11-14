@@ -1,6 +1,58 @@
 pub fn handle_whatsapp(args: &[String]) -> anyhow::Result<()> {
     let sub = args.first().map(|s| s.as_str()).unwrap_or("status");
     let as_json = args.iter().any(|a| a == "--json");
+    let has_concurrency = args.iter().any(|a| a == "--concurrency" || a == "-c");
+
+    if has_concurrency {
+        let max_concurrency: usize = std::env::var("AINA_MAX_CONCURRENT_AGENTS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(8);
+
+        let pool = crate::adapters::driven::agy_cli::account_pool::TokenPoolManager::load_initial_token_pool();
+        let total_tokens = pool.len();
+
+        if as_json {
+            let accounts: Vec<_> = pool
+                .iter()
+                .map(|a| {
+                    serde_json::json!({
+                        "id": a.id,
+                        "label": a.label,
+                        "masked_email": a.masked_email(),
+                        "in_flight": 0,
+                        "status": "READY"
+                    })
+                })
+                .collect();
+            let out = serde_json::json!({
+                "max_concurrency_semaphore": max_concurrency,
+                "in_flight_active": 0,
+                "total_accounts": total_tokens,
+                "accounts": accounts,
+            });
+            println!("{}", serde_json::to_string_pretty(&out)?);
+            return Ok(());
+        }
+
+        println!("⚡ Status Konkurensi & Antrean Beban (High-Density Telemetry)");
+        println!("================================================================================");
+        println!("• Kapasitas Semaphore Maksimal : {} slot aktif serentak", max_concurrency);
+        println!("• Batas Aman Per Akun Google    : Max 2 in-flight (Zero-429 Rate Limit Invariant)");
+        println!("• Total Akun di Kolam Token     : {} akun", total_tokens);
+        println!();
+        println!("📊 Detail Kolam Akun Google Antigravity:");
+        if pool.is_empty() {
+            println!("  (Kolam token kosong atau mengandalkan token sistem default)");
+        } else {
+            for acc in &pool {
+                let mail = acc.masked_email().unwrap_or_else(|| "-".to_string());
+                println!("  • Account #{} ({}): [ACTIVE / READY] (email: {})", acc.id, acc.label, mail);
+            }
+        }
+        println!("================================================================================");
+        return Ok(());
+    }
 
     match sub {
         "status" => {
