@@ -11,6 +11,28 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap">
   <!-- Prism.js Tomorrow Theme -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+  <!-- Mermaid.js for arc42 Architecture Diagram -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'base',
+      themeVariables: {
+        primaryColor: '#EEF2FF',
+        primaryTextColor: '#1E1B4B',
+        primaryBorderColor: '#1E3A5F',
+        lineColor: '#2C5282',
+        secondaryColor: '#F0FDF4',
+        secondaryTextColor: '#064E3B',
+        secondaryBorderColor: '#16A34A',
+        tertiaryColor: '#F8FAFC',
+        tertiaryTextColor: '#0F172A',
+        tertiaryBorderColor: '#94A3B8',
+        fontSize: '12px',
+        fontFamily: 'Pretendard Variable, -apple-system, sans-serif'
+      }
+    });
+  </script>
 
   <style>
 
@@ -919,12 +941,54 @@
     }
   
 
-    /* Enterprise Custom Enhancements */
+    /* Cover Background with subtle watermark overlay */
+    .slide-cover-bg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.90) 0%, rgba(244, 245, 247, 0.88) 100%),
+                  url('cover_bg.jpg') center/cover no-repeat;
+      z-index: 1;
+      pointer-events: none;
+    }
+    .slide-title-content {
+      position: relative;
+      z-index: 2;
+    }
+
+    /* Clean Enterprise SVG Icon Styling (Zero Emoji) */
+    .icon {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      vertical-align: -3px;
+      stroke-width: 2;
+      stroke: currentColor;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .icon-lg {
+      width: 28px;
+      height: 28px;
+      vertical-align: -5px;
+      margin-bottom: 12px;
+      color: var(--accent);
+    }
+    .icon-gold {
+      color: var(--accent-gold);
+    }
+    .icon-navy {
+      color: var(--accent);
+    }
+
     .badge-hero {
       background: #e2e8f0;
       color: var(--accent);
       border: 1px solid #cbd5e1;
-      padding: 6px 14px;
+      padding: 5px 14px;
       border-radius: 20px;
       font-size: 11px;
       font-weight: 700;
@@ -935,6 +999,7 @@
       gap: 6px;
       margin-bottom: 14px;
     }
+
     .cards-4 {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -948,64 +1013,20 @@
       border: 1px solid var(--border);
       border-top: 3px solid var(--accent);
       border-radius: 8px;
-      padding: 20px 16px;
+      padding: 22px 18px;
       text-align: left;
     }
     .card-small h3 {
-      font-size: 1.15rem;
+      font-size: 1.12rem;
       margin-bottom: 8px;
       color: var(--accent);
     }
     .card-small p {
-      font-size: 0.88rem;
+      font-size: 0.86rem;
       line-height: 1.45;
       color: var(--text-secondary);
     }
-    .chat-bubble-mockup {
-      background: #f0fdf4;
-      border: 1px solid #bbf7d0;
-      border-left: 4px solid #16a34a;
-      border-radius: 8px;
-      padding: 16px 20px;
-      font-size: 0.92rem;
-      line-height: 1.5;
-      color: #1e3a5f;
-      text-align: left;
-      font-family: var(--font-body);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.04);
-      margin: 16px auto 0;
-      max-width: 900px;
-    }
-    .metric-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 16px;
-      max-width: 1040px;
-      width: 100%;
-      margin: 20px auto 0;
-    }
-    .metric-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-top: 3px solid var(--accent-gold);
-      border-radius: 8px;
-      padding: 18px 14px;
-      text-align: center;
-    }
-    .metric-number {
-      font-family: var(--font-mono);
-      font-size: 2.1rem;
-      font-weight: 700;
-      color: var(--accent);
-      line-height: 1.1;
-      margin-bottom: 4px;
-    }
-    .metric-label {
-      font-size: 0.82rem;
-      color: var(--text-secondary);
-      font-weight: 500;
-      line-height: 1.3;
-    }
+
     .quadrant-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -1023,7 +1044,7 @@
       text-align: left;
     }
     .quadrant-card h3 {
-      font-size: 1.25rem;
+      font-size: 1.2rem;
       color: var(--accent);
       margin-bottom: 8px;
       display: flex;
@@ -1032,10 +1053,135 @@
     }
     .quadrant-card ul {
       margin-left: 18px;
-      font-size: 0.9rem;
+      font-size: 0.88rem;
       color: var(--text);
       line-height: 1.45;
     }
+
+    /* Live Sheet & Chat Mockup Grid */
+    .showcase-grid {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 20px;
+      max-width: 1080px;
+      width: 100%;
+      margin: 16px auto 0;
+      align-items: start;
+    }
+    .sheet-mockup {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+      overflow: hidden;
+      text-align: left;
+    }
+    .sheet-header {
+      background: #107c41;
+      color: #ffffff;
+      padding: 8px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .sheet-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      font-family: var(--font-body);
+    }
+    .sheet-table th {
+      background: #f1f5f9;
+      padding: 6px 10px;
+      border: 1px solid #e2e8f0;
+      color: #475569;
+      font-weight: 600;
+    }
+    .sheet-table td {
+      padding: 6px 10px;
+      border: 1px solid #e2e8f0;
+      color: #1e293b;
+    }
+    .sheet-table tr:nth-child(even) {
+      background: #f8fafc;
+    }
+    .progress-bar-inline {
+      background: #e2e8f0;
+      border-radius: 4px;
+      height: 8px;
+      overflow: hidden;
+      width: 100%;
+    }
+    .progress-bar-fill {
+      background: #107c41;
+      height: 100%;
+    }
+
+    .chat-mockup-card {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+      padding: 14px;
+      text-align: left;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .chat-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 8px;
+      margin-bottom: 10px;
+      font-weight: 700;
+      color: #1e3a5f;
+    }
+    .chat-bubble {
+      background: #e7f8e8;
+      border: 1px solid #c3e6cb;
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: #0f172a;
+    }
+
+    /* Mermaid Architecture Container */
+    .mermaid-container {
+      width: 100%;
+      max-width: 1020px;
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      margin: 10px auto 0;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.04);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .mermaid-container svg {
+      max-height: 520px;
+      width: 100% !important;
+      height: auto !important;
+    }
+
+    /* Git Knowledge Base Tree Mockup */
+    .git-tree {
+      background: #1e2736;
+      color: #e2e8f0;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      padding: 16px 20px;
+      border-radius: 8px;
+      line-height: 1.6;
+      text-align: left;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .git-tree .folder { color: #60a5fa; font-weight: 600; }
+    .git-tree .file { color: #f8fafc; }
+    .git-tree .tag { color: var(--accent-gold); font-size: 10px; }
     
   </style>
 </head>
@@ -1062,10 +1208,11 @@
   <div class="deck">
 
     <!-- ==========================================
-         SLIDE 1: Cover
+         SLIDE 1: Cover (with Aina Status Image Watermark)
          ========================================== -->
     <div class="slide active" data-notes="Selamat pagi/siang Bapak, Ibu Kepala Satker, Ketua Tim, dan rekan-rekan BPS se-Kalimantan Barat. Hari ini kami membagikan pengalaman nyata BPS Kabupaten Mempawah dalam menjawab tantangan keterbatasan pegawai melalui Aina—sebuah AI Co-Worker mandiri yang bekerja mendampingi staf dalam tugas administrasi, monitoring lapangan, dan pengelolaan pengetahuan institusi.">
-      <div class="slide-title">
+      <div class="slide-cover-bg"></div>
+      <div class="slide-title slide-title-content">
         <div class="a tag">INOVASI TEKNOLOGI STATISTIK BPS</div>
         <h1 class="a">Aina (あいな): AI Co-Worker<br><span style="color: var(--accent-gold);">&amp; Company Brain BPS Mempawah</span></h1>
         <p class="a subtitle">
@@ -1081,7 +1228,7 @@
          ========================================== -->
     <div class="slide" data-notes="Kita semua di daerah merasakan hal yang sama: tuntutan kegiatan statistik semakin masif, namun jumlah pegawai organik kita terbatas. Akibatnya, tenaga ahli dan statistisi kita yang seharusnya fokus pada kendali mutu data justru habis waktunya untuk urusan administratif rutin.">
       <div class="content-body">
-        <div class="a badge-hero">&#9888;&#65039; TANTANGAN OPERASIONAL DAERAH</div>
+        <div class="a badge-hero"><svg class="icon icon-gold" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> TANTANGAN OPERASIONAL DAERAH</div>
         <h2 class="a">Realitas Lapangan: <span class="hi">Beban Bertambah, SDM Terbatas</span></h2>
         <p class="a">
           Satuan kerja BPS di tingkat Kabupaten/Kota menghadapi tantangan ganda: tuntutan output statistik berkualitas tinggi yang terus bertambah, berhadapan langsung dengan keterbatasan jumlah aparatur organik.
@@ -1105,22 +1252,22 @@
       </p>
       <div class="cards-4">
         <div class="card-small a">
-          <span style="font-size: 24px;">&#128221;</span>
+          <svg class="icon-lg" viewBox="0 0 24 24"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
           <h3>1. Beban Klerikal Mitra</h3>
           <p>Pembuatan ratusan SPK, surat tugas, dan BAST honor mitra berulang tiap bulan menyita hari kerja staf.</p>
         </div>
         <div class="card-small a">
-          <span style="font-size: 24px;">&#128241;</span>
+          <svg class="icon-lg" viewBox="0 0 24 24"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
           <h3>2. Friksi Monitoring</h3>
           <p>Google Sheet puluhan ribu baris lambat dibuka di ponsel; pimpinan terlambat tahu kecamatan yang tertinggal.</p>
         </div>
         <div class="card-small a">
-          <span style="font-size: 24px;">&#128451;&#65039;</span>
+          <svg class="icon-lg" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
           <h3>3. Fragmentasi POK</h3>
           <p>Revisi POK SAKTI tercecer; SOP dan jadwal tenggelam di chat; rotasi pegawai memicu hilangnya memori kerja.</p>
         </div>
         <div class="card-small a">
-          <span style="font-size: 24px;">&#128187;</span>
+          <svg class="icon-lg" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>
           <h3>4. Bottleneck Data Mikro</h3>
           <p>Query jutaan baris data sensus (Regsosek, SE) membuat laptop hang dan membutuhkan server komputasi mahal.</p>
         </div>
@@ -1139,7 +1286,7 @@
             <li>Pasif, hanya menunggu pertanyaan pengguna</li>
             <li>Hanya mengandalkan data umum internet yang umum</li>
             <li>Tidak memahami dokumen internal, POK, dan SOP dinas</li>
-            <li>Rawan "halusinasi" saat ditanya angka anggaran atau jadwal</li>
+            <li>Rawan halusinasi saat ditanya angka anggaran atau jadwal</li>
             <li>Tidak memiliki kemampuan mengeksekusi aksi nyata di terminal</li>
           </ul>
         </div>
@@ -1147,7 +1294,7 @@
           <h3>Company Brain Paradigm (Aina)</h3>
           <ul>
             <li>Proaktif, terhubung langsung ke alur kerja harian WhatsApp</li>
-            <li><em>Single Source of Truth</em> institusi (POK SAKTI, jadwal, SOP)</li>
+            <li>Single Source of Truth institusi (POK SAKTI, jadwal, SOP)</li>
             <li>Memahami struktur organisasi, wewenang, dan relasi kerja staf</li>
             <li>Beroperasi deterministik &amp; zero-hallucination berbasis dokumen</li>
             <li>Mampu mengeksekusi skrip, query data lake, dan browser headless</li>
@@ -1157,34 +1304,37 @@
     </div>
 
     <!-- ==========================================
-         SLIDE 5: Implementasi Company Brain di BPS Mempawah
+         SLIDE 5: Implementasi Company Brain di BPS Mempawah (with Git Tree Visual)
          ========================================== -->
     <div class="slide" data-notes="Di BPS Mempawah, Company Brain diwujudkan melalui repositori knowledge-base berbasis Git. Di sinilah tersimpan dokumen POK SAKTI, SOP kegiatan, dan matriks jadwal dinas. Aina bertindak sebagai kurator yang merawat dan membaca dokumen ini sebagai satu-satunya rujukan kebenaran.">
       <h2 class="a" style="margin-bottom: 12px;">Implementasi Nyata: <code>ipds6104/knowledge-base</code></h2>
-      <p class="a" style="margin-bottom: 28px; text-align: center; color: var(--text-secondary);">
+      <p class="a" style="margin-bottom: 20px; text-align: center; color: var(--text-secondary);">
         Repositori pengetahuan institusi terstruktur berbasis Git yang dirawat secara otonom
       </p>
-      <div class="cards">
-        <div class="card a">
-          <span class="card-icon">&#128181;</span>
-          <h3>POK SAKTI 2026 &amp; 2027</h3>
-          <p>
-            Rincian alokasi honor mitra, pagu translok, dan belanja operasional tersimpan dalam format terstruktur. Siap dicek instan oleh staf tanpa membuka aplikasi SAKTI.
-          </p>
+      <div class="showcase-grid">
+        <div class="cards" style="margin: 0; display: flex; flex-direction: column; gap: 12px;">
+          <div class="card a" style="padding: 16px 18px;">
+            <h3 style="font-size: 1.15rem; margin-bottom: 4px;">POK SAKTI TA 2026 &amp; 2027</h3>
+            <p style="font-size: 0.88rem;">Rincian alokasi honor mitra, pagu translok, dan belanja dinas tersimpan dalam format Markdown Git yang diffable dan terverifikasi.</p>
+          </div>
+          <div class="card a" style="padding: 16px 18px;">
+            <h3 style="font-size: 1.15rem; margin-bottom: 4px;">Kalender &amp; SOP Dinas</h3>
+            <p style="font-size: 0.88rem;">Matriks linimasa kegiatan seluruh fungsi (pelatihan, pengawasan, deadline entri) yang mendasari pengingat otonom H-3.</p>
+          </div>
         </div>
-        <div class="card a">
-          <span class="card-icon">&#128197;</span>
-          <h3>Kalender &amp; SOP Dinas</h3>
-          <p>
-            Matriks linimasa kegiatan seluruh fungsi (pelatihan, pengawasan, deadline entri) yang selalu diperbarui, mendasari pengingat otonom H-3 sebelum cut-off.
-          </p>
-        </div>
-        <div class="card a">
-          <span class="card-icon">&#128218;</span>
-          <h3>Pola "LLM Wiki" (Living Memory)</h3>
-          <p>
-            Aina secara berkala melakukan linting, indexing, dan grooming dokumen dinas. Pengetahuan institusi tetap abadi meskipun terjadi mutasi atau rotasi pegawai.
-          </p>
+        <div class="git-tree a">
+          <div style="border-bottom: 1px solid #334155; padding-bottom: 6px; margin-bottom: 8px; font-weight: 700; color: #94a3b8;">
+            REPOSITORY: ipds6104/knowledge-base <span class="tag">[commit: 8d15de6]</span>
+          </div>
+          <div><span class="folder">knowledge/</span></div>
+          <div>&nbsp;&nbsp;&boxur;&minus;&minus; <span class="file">facts.md</span> <span class="tag">(parameter umum &amp; kontak)</span></div>
+          <div>&nbsp;&nbsp;&boxur;&minus;&minus; <span class="file">pok_bps_mempawah_2026.md</span> <span class="tag">(SAKTI 2026)</span></div>
+          <div>&nbsp;&nbsp;&boxur;&minus;&minus; <span class="file">pok_bps_mempawah_2027.md</span> <span class="tag">(SAKTI 2027)</span></div>
+          <div>&nbsp;&nbsp;&boxur;&minus;&minus; <span class="folder">universal/</span></div>
+          <div>&nbsp;&nbsp;&boxvr;&nbsp;&nbsp;&boxur;&minus;&minus; <span class="file">langkah_strategis_tw4.md</span></div>
+          <div>&nbsp;&nbsp;&boxvr;&nbsp;&nbsp;&boxur;&minus;&minus; <span class="file">notula_kinerja_tw3.md</span></div>
+          <div>&nbsp;&nbsp;&boxur;&minus;&minus; <span class="folder">kegiatan/</span></div>
+          <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&boxur;&minus;&minus; <span class="file">se2026_prelist_matching.md</span></div>
         </div>
       </div>
     </div>
@@ -1194,7 +1344,7 @@
          ========================================== -->
     <div class="slide" data-notes="Kekhawatiran terbesar dalam adopsi AI di pemerintahan adalah risiko salah informasi atau halusinasi. Aina menerapkan prinsip verifikasi ketat: seluruh jawaban harus berbasis dokumen faktual di Company Brain. Jika informasi tidak ada di POK resmi, Aina akan jujur menyatakan belum tersedia dan tidak mengarang jawaban.">
       <div class="content-body">
-        <div class="a badge-hero">&#128737;&#65039; INTEGRITAS DATA RESMI</div>
+        <div class="a badge-hero"><svg class="icon-lg" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> INTEGRITAS DATA RESMI</div>
         <h2 class="a">Menjamin Ketepatan: <span class="hi">Zero Hallucination</span></h2>
         <p class="a">
           Di lingkungan pemerintahan, akurasi angka anggaran dan tanggal kegiatan adalah harga mati. Aina menerapkan arsitektur <em>Strict Grounding</em> untuk menjamin kebenaran informasi:
@@ -1217,21 +1367,21 @@
       </p>
       <div class="cards">
         <div class="card a">
-          <span class="card-icon">&#9874;&#65039;</span>
+          <svg class="icon-lg" viewBox="0 0 24 24"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><line x1="12" y1="12" x2="12" y2="8"/></svg>
           <h3>Aina Core Daemon (Rust)</h3>
           <p>
             Beroperasi 24/7 di server lokal. Mengatur gerbang webhook WhatsApp, memvalidasi profil dan wewenang lawan bicara, menyaring etika percakapan kerja, dan mengelola task scheduler persisten.
           </p>
         </div>
         <div class="card a">
-          <span class="card-icon">&#128302;</span>
+          <svg class="icon-lg" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
           <h3>Google Antigravity CLI (agy)</h3>
           <p>
-            Mesin agen AI tingkat lanjut yang menjadi 'otak' penalaran. Mampu memanggil ratusan tools dinamis, mengeksekusi terminal bash, menjalankan skrip Python, dan mengontrol Chromium headless.
+            Mesin agen AI tingkat lanjut yang menjadi otak penalaran. Mampu memanggil ratusan tools dinamis, mengeksekusi terminal bash, menjalankan skrip Python, dan mengontrol Chromium headless.
           </p>
         </div>
         <div class="card a">
-          <span class="card-icon">&#129513;</span>
+          <svg class="icon-lg" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>
           <h3>Extensible Skill Framework</h3>
           <p>
             Keahlian baru ditambahkan secara modular via folder <code>skills/</code> tanpa merestart server. Siap dikembangkan sesuai kebutuhan spesifik masing-masing satker BPS.
@@ -1241,33 +1391,42 @@
     </div>
 
     <!-- ==========================================
-         SLIDE 8: Peta Antarmuka Teknis Resmi (arc42)
+         SLIDE 8: THE OFFICIAL MERMAID ARCHITECTURE DIAGRAM
          ========================================== -->
-    <div class="slide" data-notes="Sesuai standar arsitektur perangkat lunak enterprise arc42, seluruh antarmuka Aina terisolasi dengan rapi. Data obrolan disimpan di database SQLite WAL lokal yang kebal mati lampu, dan token keamanan dikelola terpusat tanpa ada password yang tertulis di berkas terbuka.">
-      <h2 class="a" style="margin-bottom: 24px;">Peta Antarmuka Sistem Terstandarisasi (arc42)</h2>
-      <div class="steps">
-        <div class="step a">
-          <div class="step-num">IF-01</div>
-          <div class="step-title">Whatsmeow</div>
-          <div class="step-desc">Webhook real-time untuk transmisi pesan dua arah via WhatsApp gateway.</div>
-        </div>
-        <div class="step-arrow a">&rarr;</div>
-        <div class="step a">
-          <div class="step-num">IF-03</div>
-          <div class="step-title">Engine Runner</div>
-          <div class="step-desc">Pipa stdin/stdout menghubungkan Core Rust ke Antigravity CLI secara terisolasi.</div>
-        </div>
-        <div class="step-arrow a">&rarr;</div>
-        <div class="step a">
-          <div class="step-num">IF-04</div>
-          <div class="step-title">SQLite WAL</div>
-          <div class="step-desc">Penyimpanan lokal transaksi obrolan, profil wewenang, dan tugas kebal mati lampu.</div>
-        </div>
-        <div class="step-arrow a">&rarr;</div>
-        <div class="step a">
-          <div class="step-num">IF-06</div>
-          <div class="step-title">Secret Broker</div>
-          <div class="step-desc">Pengambilan kredensial Infisical secara Just-In-Time tanpa simpan password di file.</div>
+    <div class="slide" data-notes="Diagram arsitektur Mermaid resmi dari dokumen arc42 bab 3.1 ini memetakan batas sistem Aina: Pengguna Pendamping (Companion) memiliki wewenang penuh, rekan kerja berinteraksi via mention di grup WhatsApp, dan Aina Core menghubungkan Antigravity CLI dengan brankas rahasia Infisical serta layanan cloud eksternal.">
+      <h2 class="a" style="margin-bottom: 6px;">Konteks Bisnis &amp; Arsitektur Sistem (arc42)</h2>
+      <p class="a" style="margin-bottom: 12px; text-align: center; color: var(--text-secondary); font-size: 0.9rem;">
+        Pemetaan interaksi pengguna, batas sistem Aina Core Daemon, dan layanan eksternal
+      </p>
+      <div class="mermaid-container a">
+        <div class="mermaid">
+flowchart TD
+    subgraph Pengguna ["Pengguna & Lingkungan Kerja"]
+        Companion["Pengguna Pendamping (User Companion)"]
+        RekanGrup["Rekan Kerja di Grup WhatsApp"]
+        AdminWeb["Administrator Sistem (Web Browser)"]
+    end
+
+    subgraph BatasSistem ["Sistem Aina (AI Co-Worker)"]
+        AinaCore["Aina Core Daemon (Rust)<br>- Pengatur Alur Pesan & Etika<br>- Memori Profiling & Penjadwal Tugas<br>- Pengelola Kolam Akun AI<br>- Rekonsiliasi Aktivitas Persisten"]
+    end
+
+    subgraph SistemLuar ["Layanan Eksternal"]
+        Whatsmeow["Whatsmeow WhatsApp Gateway"]
+        AGY["Google Antigravity CLI (agy)"]
+        SecretVault["Secret Vault (Infisical / Vault)"]
+        CloudExt["Layanan Cloud (Google Drive, Vision VLM, Git)"]
+        EnvAPI["Layanan Cuaca & Riset Web (Open-Meteo, Search)"]
+    end
+
+    Companion <-->|"Pesan Pribadi / !aina di grup"| Whatsmeow
+    RekanGrup <-->|"Tag @Aina di grup kantor"| Whatsmeow
+    Whatsmeow <-->|"Kirim pesan masuk & terima balasan"| AinaCore
+    AdminWeb <-->|"Atur akun & uji pesan (/setup)"| AinaCore
+    AinaCore <-->|"Proses penalaran & eksekusi kode"| AGY
+    AinaCore <-->|"Ambil password & kunci API aman"| SecretVault
+    AGY <-->|"Ambil dokumen & pasang keahlian"| CloudExt
+    AinaCore <-->|"Grounding cuaca faktual & riset"| EnvAPI
         </div>
       </div>
     </div>
@@ -1282,7 +1441,7 @@
       </p>
       <div class="quadrant-grid">
         <div class="quadrant-card a">
-          <h3>&#128084; Kepala Satker (Pimpinan)</h3>
+          <h3><svg class="icon icon-navy" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg> Kepala Satker (Pimpinan)</h3>
           <ul>
             <li>Executive summary visual di WhatsApp 3x sehari tanpa perlu menagih</li>
             <li>Peringatan dini wilayah/kecamatan dengan deviasi target kritis</li>
@@ -1290,7 +1449,7 @@
           </ul>
         </div>
         <div class="quadrant-card a">
-          <h3>&#128188; Bagian Umum &amp; Keuangan</h3>
+          <h3><svg class="icon-lg" viewBox="0 0 24 24"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg> Bagian Umum &amp; Keuangan</h3>
           <ul>
             <li>Otomasi berkas kontrak SPK &amp; BAST honor mitra via Dokter V</li>
             <li>Cek instan pagu POK, translok lokal, dan alokasi paket meeting</li>
@@ -1298,7 +1457,7 @@
           </ul>
         </div>
         <div class="quadrant-card a">
-          <h3>&#128202; Bidang Teknis (Sosial/Prod/Dist/Neraca)</h3>
+          <h3><svg class="icon icon-navy" viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg> Bidang Teknis (Sosial/Prod/Dist/Neraca)</h3>
           <ul>
             <li>Live monitoring prelist Google Sheet per kecamatan secara otomatis</li>
             <li>Deteksi anomali data (NIK ganda, usaha tanpa identitas standar)</li>
@@ -1306,11 +1465,11 @@
           </ul>
         </div>
         <div class="quadrant-card a">
-          <h3>&#128187; Tim IPDS (Provinsi &amp; Kab/Kota)</h3>
+          <h3><svg class="icon-lg" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg> Tim IPDS (Provinsi &amp; Kab/Kota)</h3>
           <ul>
             <li>Stack 100% self-hosted di ThinkStation lokal, kedaulatan data terjaga</li>
-            <li>Engine data lake DuckDB (<50MB RAM) untuk jutaan data mikro</li>
-            <li>Arsitektur terbuka siap direplikasi ke seluruh satker < 1 jam</li>
+            <li>Engine data lake DuckDB (&lt;50MB RAM) untuk jutaan data mikro</li>
+            <li>Arsitektur terbuka siap direplikasi ke seluruh satker &lt; 1 jam</li>
           </ul>
         </div>
       </div>
@@ -1326,21 +1485,21 @@
       </p>
       <div class="cards">
         <div class="card a">
-          <span class="card-icon">&#128100;</span>
+          <svg class="icon-lg" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           <h3>Kroscek Mitra Instan</h3>
           <p>
             Memvalidasi identitas ID Sobat mitra 2026 langsung ke database Dokter V BPS Mempawah, memastikan status seleksi dan kepesertaan terdaftar valid.
           </p>
         </div>
         <div class="card a">
-          <span class="card-icon">&#128196;</span>
+          <svg class="icon-lg" viewBox="0 0 24 24"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
           <h3>Surat Tugas &amp; SPK Otomatis</h3>
           <p>
             Mencocokkan nomor surat tugas dinas dan pagu honor kegiatan, lalu menghasilkan berkas Perjanjian Kerja (SPK) tanpa risiko salah ketik NIK atau nama.
           </p>
         </div>
         <div class="card a">
-          <span class="card-icon">&#128179;</span>
+          <svg class="icon icon-gold" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
           <h3>Penerbitan Dokumen BAST</h3>
           <p>
             Menyusun lembar Berita Acara Serah Terima (BAST) pekerjaan mitra secara batch siap cetak untuk kelengkapan berkas pencairan keuangan di Bagian Umum.
@@ -1359,21 +1518,21 @@
       </p>
       <div class="cards">
         <div class="card a">
-          <span class="card-icon">&#128269;</span>
+          <svg class="icon-lg" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
           <h3>Deteksi Slot Rapat Kosong</h3>
           <p>
             Menganalisis matriks jadwal seluruh fungsi di Company Brain untuk mendeteksi tanggal kosong tanpa bentrok saat pimpinan ingin mengadakan rapat atau pelatihan.
           </p>
         </div>
         <div class="card a">
-          <span class="card-icon">&#9200;</span>
+          <svg class="icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           <h3>Pengingat Deterministik H-3</h3>
           <p>
             Mengirim notifikasi otomatis ke WhatsApp penanggung jawab sebelum batas waktu upload berkas SPK, batas entri data, atau penutupan revisi anggaran POK.
           </p>
         </div>
         <div class="card a">
-          <span class="card-icon">&#129302;</span>
+          <svg class="icon-lg" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>
           <h3>Otonom di Server Lokal</h3>
           <p>
             Penjadwalan dikelola oleh internal scheduler yang kebal dari gangguan ponsel staf, memastikan pesan peringatan selalu terkirim tepat waktu.
@@ -1383,45 +1542,86 @@
     </div>
 
     <!-- ==========================================
-         SLIDE 12: Hero Showcase: Live Monitoring Google Sheet
+         SLIDE 12: Hero Showcase: Live Monitoring Google Sheet & WA Mockup Visual
          ========================================== -->
     <div class="slide" data-notes="Inilah use case unggulan yang memberikan dampak paling instan di lapangan. Petugas di desa mengisi progres di Google Sheet, formulanya menghitung capaian secara live, dan Aina memotret tabel tersebut menggunakan headless browser beresolusi tinggi, lalu mengirimkannya ke grup WhatsApp pengawas. Pimpinan dan tim tidak perlu membuka lembar kerja berat di ponsel.">
-      <h2 class="a" style="margin-bottom: 8px;">Hero Showcase: Live Sheet &amp; WA Screenshot</h2>
-      <p class="a" style="margin-bottom: 20px; text-align: center; color: var(--text-secondary);">
+      <h2 class="a" style="margin-bottom: 6px;">Hero Showcase: Live Sheet &amp; WA Screenshot</h2>
+      <p class="a" style="margin-bottom: 16px; text-align: center; color: var(--text-secondary); font-size: 0.9rem;">
         Ujung tombak pemantauan kegiatan: dari lembar kerja pasif ke dashboard visual instan
       </p>
-      <div class="steps" style="margin-bottom: 20px;">
-        <div class="step a">
-          <div class="step-num">1</div>
-          <div class="step-title">Input Lapangan</div>
-          <div class="step-desc">Mitra / PML menginput progres di Google Sheet lapangan.</div>
+      <div class="showcase-grid a">
+        <div class="sheet-mockup">
+          <div class="sheet-header">
+            <span>Lembar Kerja Matching SBR SE2026 - Rekap Monitoring</span>
+            <span style="font-size: 10px; background: rgba(255,255,255,0.25); padding: 2px 6px; border-radius: 4px;">LIVE FORMULA</span>
+          </div>
+          <table class="sheet-table">
+            <thead>
+              <tr>
+                <th>Kecamatan</th>
+                <th>Target</th>
+                <th>Realisasi</th>
+                <th>Progres</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>01. Sungai Pinyuh</strong></td>
+                <td>8.420</td>
+                <td>7.931</td>
+                <td><div class="progress-bar-inline"><div class="progress-bar-fill" style="width: 94.2%;"></div></div> 94,2%</td>
+                <td style="color: #16a34a; font-weight: 700;">Optimal</td>
+              </tr>
+              <tr>
+                <td><strong>02. Mempawah Hilir</strong></td>
+                <td>7.810</td>
+                <td>7.107</td>
+                <td><div class="progress-bar-inline"><div class="progress-bar-fill" style="width: 91.0%;"></div></div> 91,0%</td>
+                <td style="color: #16a34a; font-weight: 700;">Optimal</td>
+              </tr>
+              <tr>
+                <td><strong>03. Anjongan</strong></td>
+                <td>4.250</td>
+                <td>3.612</td>
+                <td><div class="progress-bar-inline"><div class="progress-bar-fill" style="width: 85.0%;"></div></div> 85,0%</td>
+                <td style="color: #2563eb; font-weight: 700;">Sesuai</td>
+              </tr>
+              <tr>
+                <td><strong>04. Sungai Kunyit</strong></td>
+                <td>5.120</td>
+                <td>4.249</td>
+                <td><div class="progress-bar-inline"><div class="progress-bar-fill" style="width: 83.0%;"></div></div> 83,0%</td>
+                <td style="color: #2563eb; font-weight: 700;">Sesuai</td>
+              </tr>
+              <tr>
+                <td><strong>05. Sadaniang</strong></td>
+                <td>2.100</td>
+                <td>1.436</td>
+                <td><div class="progress-bar-inline"><div class="progress-bar-fill" style="width: 68.4%; background: #dc2626;"></div></div> 68,4%</td>
+                <td style="color: #dc2626; font-weight: 700;">Atensi</td>
+              </tr>
+            </tbody>
+          </table>
+          <div style="padding: 6px 10px; font-size: 10px; color: #64748b; background: #f8fafc; border-top: 1px solid #e2e8f0;">
+            Rendering Headless Chromium &bull; Patchright HiDPI (Retina 2x) &bull; Crop Viewport: Auto
+          </div>
         </div>
-        <div class="step-arrow a">&rarr;</div>
-        <div class="step a">
-          <div class="step-num">2</div>
-          <div class="step-title">Formula Live</div>
-          <div class="step-desc">Tab rekap menghitung persentase capaian &amp; ranking kecamatan.</div>
-        </div>
-        <div class="step-arrow a">&rarr;</div>
-        <div class="step a">
-          <div class="step-num">3</div>
-          <div class="step-title">Patchright HiDPI</div>
-          <div class="step-desc">Headless browser memotret canvas tabel dalam skala Retina 2x.</div>
-        </div>
-        <div class="step-arrow a">&rarr;</div>
-        <div class="step a">
-          <div class="step-num">4</div>
-          <div class="step-title">Broadcast WA</div>
-          <div class="step-desc">Gambar jernih + narasi analitis terkirim ke grup koordinasi.</div>
-        </div>
-      </div>
 
-      <div class="chat-bubble-mockup a">
-        <strong>[Update Progres Kegiatan - BPS Mempawah Pukul 17:00 WIB]</strong><br>
-        &bull; <em>Capaian Total:</em> 85,12% (34.820 dari 40.907 target tercapai)<br>
-        &bull; <em>Kecamatan Tercepat:</em> Sungai Pinyuh (94,2%), Mempawah Hilir (91,0%)<br>
-        &bull; <em>Perhatian Khusus:</em> Sadaniang (68,4% - sisa 412 target belum padan NIK)<br>
-        <em>Tangkapan layar resolusi tinggi terlampir otomatis di atas &uarr;</em>
+        <div class="chat-mockup-card">
+          <div class="chat-header">
+            <svg class="icon-lg" viewBox="0 0 24 24"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg> Grup Koordinasi SBR SE2026
+          </div>
+          <div style="background: #cbd5e1; height: 110px; border-radius: 6px; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #475569; font-weight: 600;">
+            [Tangkapan Layar Resolusi Tinggi Dashboard]
+          </div>
+          <div class="chat-bubble">
+            <strong>Laporan Progres SBR SE2026 - Pukul 17:00 WIB</strong><br>
+            &bull; <em>Total Progres:</em> 85,12% (34.820 dari 40.907)<br>
+            &bull; <em>Kecamatan Tercepat:</em> Sungai Pinyuh (94,2%)<br>
+            &bull; <em>Perhatian Khusus:</em> Sadaniang (68,4% - sisa 412 belum padan NIK)
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1435,21 +1635,21 @@
       </p>
       <div class="cards">
         <div class="card a">
-          <span class="card-icon">&#127970;</span>
+          <svg class="icon-lg" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
           <h3>Prelist SBR SE2026</h3>
           <p>
             Mengawal pemadanan <strong>40.907 direktori usaha</strong> di 9 kecamatan. Memantau 6 tab anomali data (NIK ganda, nama umum, alamat tidak standar) via tab <code>Rekap Monitoring</code>.
           </p>
         </div>
         <div class="card a">
-          <span class="card-icon">&#128101;</span>
+          <svg class="icon-lg" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           <h3>Pemadanan BKSDM</h3>
           <p>
             Monitoring progress pemadanan data pendapatan pejabat daerah Pemkab Mempawah dengan formula live dan conditional formatting visual per instansi dinas.
           </p>
         </div>
         <div class="card a">
-          <span class="card-icon">&#128640;</span>
+          <svg class="icon-lg" viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
           <h3>Transparansi &amp; Kecepatan</h3>
           <p>
             Jadwal pengiriman otomatis pukul 08:00, 12:00, dan 17:00 WIB memicu iklim kompetisi sehat antar-wilayah, mempercepat penyelesaian target sebelum deadline.
@@ -1525,21 +1725,21 @@
       </p>
       <div class="cards">
         <div class="card a">
-          <span class="card-icon">&#128274;</span>
+          <svg class="icon-lg" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           <h3>100% On-Premise &amp; Self-Hosted</h3>
           <p>
             Beroperasi di server fisik lokal ThinkStation P320. Seluruh database, token otentikasi, dan memori obrolan berada di dalam perimeter jaringan kantor yang aman.
           </p>
         </div>
         <div class="card a">
-          <span class="card-icon">&#128737;&#65039;</span>
+          <svg class="icon-lg" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           <h3>Zero Trust Guard (`data_guard`)</h3>
           <p>
             Otoritas berjenjang (Admin, Staff, Guest). Script <code>data_guard.py</code> secara deterministik mencegah pembocoran data mikro atau dokumen internal ke pihak luar.
           </p>
         </div>
         <div class="card a">
-          <span class="card-icon">&#9889;</span>
+          <svg class="icon-lg" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
           <h3>Crash-Resilient WAL Storage</h3>
           <p>
             Basis data SQLite mode WAL dan DuckDB berbasis disk kebal terhadap korupsi data saat terjadi gangguan pasokan listrik server secara tiba-tiba.
@@ -1553,7 +1753,7 @@
          ========================================== -->
     <div class="slide" data-notes="Sistem ini 100% siap direplikasi oleh BPS Provinsi maupun BPS Kabupaten/Kota lain di Kalimantan Barat dalam waktu kurang dari satu jam. Mari kita wujudkan birokrasi statistik yang cerdas, efisien, dan berdaulat. Terima kasih, kami membuka sesi tanya jawab dan kolaborasi.">
       <div class="slide-closing">
-        <div class="a badge-hero" style="margin-bottom: 10px;">KOLABORASI DIGITAL SE-KALBAR</div>
+        <div class="a badge-hero" style="margin-bottom: 10px;"><svg class="icon icon-gold" viewBox="0 0 24 24"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg> KOLABORASI DIGITAL SE-KALBAR</div>
         <h1 class="a" style="font-size: 2.8rem; margin-bottom: 12px;">Siap Direplikasi Satker BPS Lain<br><span style="color: var(--accent-gold);">&lt; 1 Jam Waktu Setup</span></h1>
         <p class="a" style="max-width: 720px; margin: 0 auto 24px; font-size: 1.05rem; line-height: 1.5;">
           1. Clone repo <code>github.com/ipds6104/aina</code> &bull; 2. Pasang POK &amp; SOP di Company Brain &bull; 3. Jalankan Docker di server lokal &bull; 4. Scan QR WhatsApp dinas.
