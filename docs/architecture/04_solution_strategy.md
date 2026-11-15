@@ -1,8 +1,8 @@
 # 4. Strategi Solusi (Solution Strategy)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `19f6bc9` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-15T10:45:00+07:00`
+> - **Verified Commit**: `0bb6d1a` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-15T11:05:00+07:00`
 > - **Tracked Paths**: `src/core/domain/capability.rs`, `src/core/domain/audit/`, `src/core/usecases/process_message/`
 > - **Drift Status**: `verified`
 
