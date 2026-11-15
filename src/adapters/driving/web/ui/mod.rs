@@ -25,9 +25,9 @@ pub fn render_html(
     let is_user_admin = current_user.map(|u| u.is_admin).unwrap_or(false);
 
     let (badge_class, badge_text, badge_bg) = if is_authenticated {
-        ("badge-success", "🟢 ENGINE ONLINE", "#10b981")
+        ("badge-success", "ENGINE ONLINE", "#10b981")
     } else {
-        ("badge-warning", "🟡 ENGINE PERLU SETUP", "#f59e0b")
+        ("badge-warning", "ENGINE PERLU SETUP", "#f59e0b")
     };
 
     let sso_bar = if state.oidc_config.enabled {
@@ -49,13 +49,13 @@ pub fn render_html(
                 r#"
                 <div class="sso-bar">
                     <div class="sso-user-info">
-                        <span class="sso-avatar">👤</span>
+                        <span class="sso-avatar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
                         <div class="sso-user-text">
                             <span class="sso-user-name">{} {}</span>
                             <span class="sso-user-sub">{}</span>
                         </div>
                     </div>
-                    <a href="/auth/logout" class="btn-sso-logout">🚪 Keluar (Logout)</a>
+                    <a href="/auth/logout" class="btn-sso-logout">Keluar (Logout)</a>
                 </div>
                 "#,
                 html_escape(&user.name),
@@ -67,10 +67,10 @@ pub fn render_html(
                 r#"
                 <div class="sso-bar">
                     <div style="font-size: 0.88rem; color: #cbd5e1;">
-                        🔒 Masuk via SSO untuk mengelola dasbor administratif dan simulator:
+                        Masuk via SSO untuk mengelola dasbor administratif dan simulator:
                     </div>
                     <a href="/auth/login" class="btn-sso-login">
-                        <span>🔐</span> Masuk dengan {}
+                        Masuk dengan {}
                     </a>
                 </div>
                 "#,
@@ -82,7 +82,7 @@ pub fn render_html(
     };
 
     let model_change_action = if is_user_admin {
-        r#"<a href="javascript:void(0)" onclick="openModelModal()" style="font-size: 0.75rem; color: var(--primary); text-decoration: none; font-weight: 600;">⚡ Ganti</a>"#
+        r#"<a href="javascript:void(0)" onclick="openModelModal()" style="font-size: 0.75rem; color: var(--primary); text-decoration: none; font-weight: 600;">Ganti Model</a>"#
     } else {
         ""
     };
@@ -147,7 +147,6 @@ pub fn render_html(
             <div class="card admin-only-card" style="{account_card_style}">
                 <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                     <div style="display: flex; align-items: center; gap: 8px;">
-                        <span style="font-size: 1.2rem;">👥</span>
                         <h2>Pool Akun Antigravity (Multi-Account)</h2>
                     </div>
                     <button type="button" class="btn-outline" style="font-size: 0.8rem; padding: 4px 10px; cursor: pointer;" onclick="toggleAddAccountForm()">
@@ -164,7 +163,7 @@ pub fn render_html(
                 <!-- FORM TAMBAH AKUN CADANGAN (EXPANDABLE) -->
                 <div id="add-account-form" style="display: none; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 16px; margin-top: 12px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                        <h4 style="margin: 0; font-size: 0.95rem; color: #60a5fa;">⚡ Tambah Akun Google via OAuth Cepat</h4>
+                        <h4 style="margin: 0; font-size: 0.95rem; color: #60a5fa;">Tambah Akun Google via OAuth Cepat</h4>
                         <button type="button" class="btn-outline" style="font-size: 0.78rem; padding: 2px 8px; cursor: pointer;" onclick="toggleAddAccountForm()">Tutup</button>
                     </div>
 
@@ -179,7 +178,7 @@ pub fn render_html(
                             Hubungkan akun Google langsung tanpa perlu menyalin file JSON. Klik tombol di bawah untuk meminta tautan login resmi dari Google:
                         </p>
                         <button type="button" id="start-oauth-btn" class="btn" style="background: #2563eb; font-size: 0.82rem; padding: 6px 14px; cursor: pointer;" onclick="startOAuthFlow()">
-                            🚀 Mulai Login Akun Google
+                            Mulai Login Akun Google
                         </button>
                     </div>
 
@@ -187,7 +186,7 @@ pub fn render_html(
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <span style="font-size: 0.84rem; font-weight: 600; color: #93c5fd;">Langkah Selanjutnya:</span>
                             <span id="oauth-timer-badge" style="font-size: 0.78rem; color: #10b981; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 4px; padding: 2px 8px;">
-                                ⏱️ Sisa Waktu: <strong id="oauth-countdown">300</strong>s
+                                Sisa Waktu: <strong id="oauth-countdown">300</strong>s
                             </span>
                         </div>
                         <p style="font-size: 0.83rem; color: #cbd5e1; margin-bottom: 10px; line-height: 1.5;">
@@ -197,19 +196,19 @@ pub fn render_html(
                         </p>
                         <div style="margin-bottom: 10px;">
                             <a id="oauth-link-anchor" href="javascript:void(0)" target="_blank" class="btn" style="background: #3b82f6; color: #fff; text-decoration: none; display: inline-block; padding: 6px 14px; font-size: 0.82rem; border-radius: 4px;">
-                                🔗 Buka Halaman Login Google ↗
+                                Buka Halaman Login Google
                             </a>
                         </div>
                         <div style="margin-bottom: 8px;">
                             <button type="button" id="paste-submit-oauth-btn" class="btn" style="width: 100%; background: #059669; color: #fff; font-size: 0.82rem; padding: 8px 14px; font-weight: 600; cursor: pointer; border-radius: 4px; border: none; display: flex; align-items: center; justify-content: center; gap: 6px;" onclick="pasteAndSubmitOAuth()">
-                                📋 Tempel dari Clipboard &amp; Simpan (1-Klik Cepat)
+                                Tempel dari Clipboard &amp; Simpan (1-Klik Cepat)
                             </button>
                         </div>
                         <label class="form-label" style="font-size: 0.78rem; color: #94a3b8;">Atau tempel manual di bawah:</label>
                         <div style="display: flex; gap: 8px;">
                             <input id="oauth-code-input" class="form-input" type="text" placeholder="Tempel kode 4/0A... di sini" style="flex: 1; font-size: 0.82rem; margin-bottom: 0;" />
                             <button type="button" id="submit-oauth-code-btn" class="btn" style="background: #10b981; font-size: 0.82rem; padding: 6px 14px; cursor: pointer; white-space: nowrap;" onclick="submitOAuthCode()">
-                                ✅ Simpan
+                                Simpan
                             </button>
                         </div>
                     </div>
@@ -236,11 +235,10 @@ pub fn render_html(
             <div class="card" style="border-color: #8b5cf6;">
                 <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                     <div style="display: flex; align-items: center; gap: 8px;">
-                        <span style="font-size: 1.2rem;">📊</span>
                         <h2>Observabilitas: Alat & Usecase Pengguna</h2>
                     </div>
                     <button type="button" class="btn-outline" style="font-size: 0.8rem; padding: 4px 10px; cursor: pointer;" onclick="loadObservabilityMetrics()">
-                        🔄 Segarkan Metrik
+                        Segarkan Metrik
                     </button>
                 </div>
                 <p style="color: var(--text-muted); font-size: 0.88rem; margin-bottom: 12px;">
@@ -249,7 +247,7 @@ pub fn render_html(
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px;">
                     <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(139, 92, 246, 0.25); border-radius: 8px; padding: 14px;">
                         <h4 style="margin: 0 0 10px 0; font-size: 0.92rem; color: #a78bfa; display: flex; align-items: center; gap: 6px;">
-                            <span>🎯</span> Usecase Paling Sering Digunakan
+                            Usecase Paling Sering Digunakan
                         </h4>
                         <div id="obs-usecases-list" style="font-size: 0.85rem; color: #cbd5e1;">
                             <span style="color: #94a3b8;">Memuat data usecase...</span>
@@ -257,7 +255,7 @@ pub fn render_html(
                     </div>
                     <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(139, 92, 246, 0.25); border-radius: 8px; padding: 14px;">
                         <h4 style="margin: 0 0 10px 0; font-size: 0.92rem; color: #a78bfa; display: flex; align-items: center; gap: 6px;">
-                            <span>🛠️</span> Alat AI Teratas (Frekuensi)
+                            Alat AI Teratas (Frekuensi)
                         </h4>
                         <div id="obs-tools-list" style="font-size: 0.85rem; color: #cbd5e1;">
                             <span style="color: #94a3b8;">Memuat data alat...</span>
@@ -269,7 +267,6 @@ pub fn render_html(
             <!-- ADMIN LOCK CARD -->
             <div id="sim-lock-card" class="card" style="border-color: #f59e0b; {sim_lock_display}">
                 <div class="card-header">
-                    <span style="font-size: 1.2rem;">🔒</span>
                     <h2>Akses Simulator & Dasbor Terproteksi</h2>
                 </div>
                 <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 14px;">
@@ -285,11 +282,10 @@ pub fn render_html(
             <!-- SIMULATOR CHAT REAL END-TO-END -->
             <div id="simulator-card" class="card simulator-card" style="{simulator_display}">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding: 6px 12px; background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.2); border-radius: 6px; font-size: 0.8rem; color: #10b981;">
-                    <span id="admin-session-status-text">🛡️ {session_status_label}</span>
+                    <span id="admin-session-status-text">{session_status_label}</span>
                     <a href="javascript:void(0)" onclick="lockAdminSession()" style="color: #f87171; text-decoration: none; font-weight: 600;">Kunci Dashboard</a>
                 </div>
                 <div class="card-header">
-                    <span style="font-size: 1.2rem;">🧪</span>
                     <h2>Simulator Percakapan WhatsApp (Real Test)</h2>
                 </div>
                 <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 16px;">
@@ -300,8 +296,8 @@ pub fn render_html(
                     <div>
                         <label class="form-label">Sesi WhatsApp (Pipeline Routing)</label>
                         <select id="sim-session-role" class="form-input" onchange="onSessionRoleChange(this.value)">
-                            <option value="primary_bot">🤖 Sesi Bot Utama (Primary Dedicated)</option>
-                            <option value="user_companion">👥 Sesi Companion (Akun Pribadi / Shadow Sensor)</option>
+                            <option value="primary_bot">Sesi Bot Utama (Primary Dedicated)</option>
+                            <option value="user_companion">Sesi Companion (Akun Pribadi / Shadow Sensor)</option>
                         </select>
                     </div>
                     <div>
@@ -342,9 +338,9 @@ pub fn render_html(
                 </div>
 
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; margin-bottom: 8px;">
-                    <label class="form-label" style="margin-bottom: 0; font-weight: 600;">💬 Alur Percakapan Interaktif (Multi-Turn)</label>
+                    <label class="form-label" style="margin-bottom: 0; font-weight: 600;">Alur Percakapan Interaktif (Multi-Turn)</label>
                     <button type="button" class="btn-outline" style="font-size: 0.78rem; padding: 4px 10px; border-radius: 6px; cursor: pointer;" onclick="resetSimulationChat()">
-                        🔄 Reset Percakapan Baru
+                        Reset Percakapan Baru
                     </button>
                 </div>
 
@@ -359,7 +355,7 @@ pub fn render_html(
                 <div style="display: flex; gap: 8px; align-items: flex-start;">
                     <textarea id="sim-text" class="form-input" style="height: 60px; margin-bottom: 0; resize: none;" placeholder="Ketik pesan atau balasan Anda ke Aina (contoh: '!aina rangkum diskusi tadi' atau 'Sudah ku-authorize ya')..."></textarea>
                     <button id="sim-btn" class="btn" style="min-width: 130px; height: 60px; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600;" onclick="runSimulation()">
-                        <span>Kirim</span> 🚀
+                        <span>Kirim</span>
                     </button>
                 </div>
             </div>
@@ -420,7 +416,7 @@ pub fn render_html(
 <body>
     <div class="container">
         <div class="header">
-            <h1>🌸 Aina (あいな)</h1>
+            <h1>Aina <span style="font-size: 1.1rem; opacity: 0.8; font-weight: 400;">(あいな)</span></h1>
             <span class="badge {badge_class}">{badge_text}</span>
         </div>
 
@@ -429,7 +425,7 @@ pub fn render_html(
         {status_card}
 
         <div id="auth-form-container" class="card" style="{auth_form_display}">
-            <h3 style="margin-bottom: 10px;">🔐 Setup Autentikasi Pertama Kali</h3>
+            <h3 style="margin-bottom: 10px;">Setup Autentikasi Pertama Kali</h3>
             <p style="color: var(--text-muted); font-size: 0.88rem; margin-bottom: 12px;">
                 Untuk mencegah akses tidak sah pada server publik, Anda memerlukan <strong>Kode Setup</strong> yang tercetak pada log deployment server.
             </p>

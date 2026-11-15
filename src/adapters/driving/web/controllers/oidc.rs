@@ -791,7 +791,9 @@ fn render_auth_error_card(provider_name: &str, error_message: &str) -> String {
 </head>
 <body>
     <div class="card">
-        <div class="icon">⚠️</div>
+        <div class="icon" style="color: #ef4444; display: flex; justify-content: center; margin-bottom: 16px;">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
         <h2>Gagal Masuk via {provider_name}</h2>
         <p>{error_message}</p>
         <a href="/" class="btn">Kembali ke Beranda Aina</a>

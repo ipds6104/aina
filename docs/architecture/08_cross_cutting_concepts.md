@@ -256,3 +256,13 @@ Untuk mengamankan akses ke antarmuka web dashboard dan simulator (`/`, `/setup`,
    - Zero-dependency: verifikasi sesi dilakukan secara instan tanpa perlu tabel sesi basis data terpisah.
 4. **Otorisasi Administratif Otomatis**:
    - Jika pengguna SSO terdaftar dalam konfigurasi `OIDC_ADMIN_USERS` atau memiliki peran admin, sesi otomatis memperoleh wewenang administratif (`is_admin=true`), sehingga dapat membuka fitur simulator dan konfigurasi tanpa memasukkan setup code manual.
+
+---
+
+## 8.16 Standar Higienitas Desain UI & Kebijakan Zero-Emoticon (UI Design Hygiene)
+
+Antarmuka web administratif dan simulator Aina (`/`, `/auth/login`, `/auth/error`) menerapkan standar enterprise UI hygiene ketat:
+1. **Zero Unicode Emojis**: Dilarang keras menggunakan glif unicode emoticon/emoji di seluruh elemen HTML, CSS, JavaScript, tag badge, dan pesan status.
+2. **Indikator Status Semantik & CSS Deterministic Badges**: Status sistem (misal status engine online, akun pool aktif/cooldown) dinyatakan menggunakan teks semantik tegas dan kelas CSS berwarna standar (`badge-success`, `badge-warning`).
+3. **Ikon Vektor Standar (SVG)**: Untuk ikon grafis esensial (seperti avatar pengguna SSO atau penanda peringatan error autentikasi), antarmuka menggunakan vektor SVG inline standar tanpa ketergantungan pustaka ikon runtime eksternal.
+4. **Tipografi Bersih Google Sans**: Hierarki visual mempertahankan keterbacaan tinggi dan kontras aksesibilitas WCAG AA tanpa distraksi visual non-standar.

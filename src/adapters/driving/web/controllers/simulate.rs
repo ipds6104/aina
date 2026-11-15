@@ -101,7 +101,7 @@ pub async fn simulate_handler(
         };
         let _ = state.session_store.delete_conversation_id(chat_jid).await;
         let _ = std::fs::remove_file(std::env::temp_dir().join("aina_gh_device_session.json"));
-        let reply = "🔄 *Sesi Percakapan Simulator Berhasil Direset*\n\nMemori percakapan untuk sesi ini telah dibersihkan. Pesan berikutnya akan dimulai sebagai percakapan baru yang segar.".to_string();
+        let reply = "*Sesi Percakapan Simulator Berhasil Direset*\n\nMemori percakapan untuk sesi ini telah dibersihkan. Pesan berikutnya akan dimulai sebagai percakapan baru yang segar.".to_string();
         return (
             StatusCode::OK,
             Json(json!(SimulateResponse {
@@ -125,7 +125,7 @@ pub async fn simulate_handler(
                 _ => String::new(),
             };
             let reply = format!(
-                "🤖 *Status Model AI Aina*\n\nModel aktif saat ini: *{}*\n\n*Pilihan Model Tersedia:*\n{}\n\n{} _Untuk mengganti model, ketik:_ `/model <nama_model>`",
+                "*Status Model AI Aina*\n\nModel aktif saat ini: *{}*\n\n*Pilihan Model Tersedia:*\n{}\n\n{} _Untuk mengganti model, ketik:_ `/model <nama_model>`",
                 current, available, source_note
             );
             return (
@@ -144,7 +144,7 @@ pub async fn simulate_handler(
                 Ok(_) => {
                     let new_model = state.agent_engine.get_model().await;
                     let reply = format!(
-                        "✅ *Model AI Berhasil Diubah*\n\nAina sekarang menggunakan model: *{}*.\nPengujian berikutnya akan diproses menggunakan mesin ini.",
+                        "*Model AI Berhasil Diubah*\n\nAina sekarang menggunakan model: *{}*.\nPengujian berikutnya akan diproses menggunakan mesin ini.",
                         new_model
                     );
                     return (
@@ -160,7 +160,7 @@ pub async fn simulate_handler(
                 }
                 Err(e) => {
                     let reply = format!(
-                        "⚠️ *Gagal Mengganti Model*\n\n{}\n\nContoh: `/model gemini-3.8-flash-medium`",
+                        "*Gagal Mengganti Model*\n\n{}\n\nContoh: `/model gemini-3.8-flash-medium`",
                         e
                     );
                     return (

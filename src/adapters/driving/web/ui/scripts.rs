@@ -20,7 +20,7 @@ pub fn get_scripts() -> &'static str {
                         if (lockCard) lockCard.style.display = 'none';
                         if (adminStatusText) {
                             const roleTag = meData.user.is_admin ? '<span class="sso-admin-tag">ADMIN</span>' : '<span class="sso-staff-tag">PEGAWAI</span>';
-                            adminStatusText.innerHTML = `🛡️ Sesi SSO: <strong>${escapeHtml(meData.user.name)}</strong> ${roleTag}`;
+                            adminStatusText.innerHTML = `Sesi SSO: <strong>${escapeHtml(meData.user.name)}</strong> ${roleTag}`;
                         }
 
                         if (meData.user.is_admin) {
@@ -52,7 +52,7 @@ pub fn get_scripts() -> &'static str {
                             if (simCard) simCard.style.display = 'block';
                             if (lockCard) lockCard.style.display = 'none';
                             if (adminStatusText) {
-                                adminStatusText.innerHTML = '🛡️ Sesi Terverifikasi (Admin Key)';
+                                adminStatusText.innerHTML = 'Sesi Terverifikasi (Admin Key)';
                             }
                             adminOnlyEls.forEach(el => el.style.display = 'block');
                             loadAccountPool();
@@ -72,7 +72,7 @@ pub fn get_scripts() -> &'static str {
             if (lockCard) lockCard.style.display = 'block';
             adminOnlyEls.forEach(el => el.style.display = 'none');
             if (adminStatusText) {
-                adminStatusText.innerHTML = '🔒 Akses Terkunci';
+                adminStatusText.innerHTML = 'Akses Terkunci';
             }
         }
 
@@ -90,10 +90,10 @@ pub fn get_scripts() -> &'static str {
                         listEl.innerHTML = data.accounts.map(a => {
                             const badgeColor = a.is_cooldown ? '#f59e0b' : '#10b981';
                             const reasonText = (a.is_cooldown && a.cooldown_reason) ? (' <span style="color: #f87171; font-size: 0.75rem;">[' + a.cooldown_reason + ']</span>') : '';
-                            const statusText = a.is_cooldown ? ('Cooldown (' + a.cooldown_remaining_secs + 's)') : '🟢 Aktif';
+                            const statusText = a.is_cooldown ? ('Cooldown (' + a.cooldown_remaining_secs + 's)') : 'Aktif';
                             const emailText = a.email ? (' <span style="color: #94a3b8; font-size: 0.78rem;">(' + a.email + ')</span>') : '';
                             const deleteBtn = (a.id > 1 || data.accounts.length > 1) ? 
-                                ('<button type="button" onclick="deleteAccount(' + a.id + ')" title="Hapus Akun" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 0 4px; font-size: 0.85rem; line-height: 1;">✕</button>') : '';
+                                ('<button type="button" onclick="deleteAccount(' + a.id + ')" title="Hapus Akun" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 0 4px; font-size: 0.85rem; line-height: 1;">&times;</button>') : '';
                             return '<div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 6px 12px; font-size: 0.85rem; display: flex; align-items: center; gap: 8px;">' +
                                 '<span style="font-weight: 600; color: #f8fafc;">#' + a.id + ' ' + a.label + '</span>' +
                                 emailText +
@@ -197,9 +197,9 @@ pub fn get_scripts() -> &'static str {
                     // Buka URL OAuth di tab yang telah disiapkan, atau pandu pengguna mengklik tautan langsung
                     if (newTab && !newTab.closed) {
                         newTab.location.href = data.auth_url;
-                        alertEl.innerHTML = 'ℹ️ Tab login Google telah dibuka. Pilih salah satu akun Google Anda, klik <strong>Izinkan</strong>, lalu salin kode yang muncul ke kotak di bawah.<br><small style="color: #94a3b8;">(Jika tab tidak muncul, klik tombol biru <strong>"🔗 Buka Halaman Login Google ↗"</strong> di bawah)</small>';
+                        alertEl.innerHTML = 'Tab login Google telah dibuka. Pilih salah satu akun Google Anda, klik <strong>Izinkan</strong>, lalu salin kode yang muncul ke kotak di bawah.<br><small style="color: #94a3b8;">(Jika tab tidak muncul, klik tombol biru <strong>"Buka Halaman Login Google"</strong> di bawah)</small>';
                     } else {
-                        alertEl.innerHTML = '⚠️ Tab otomatis diblokir oleh browser Anda. Silakan <strong>klik tombol biru di bawah ("🔗 Buka Halaman Login Google ↗")</strong> untuk login ke akun Google.';
+                        alertEl.innerHTML = 'Tab otomatis diblokir oleh browser Anda. Silakan <strong>klik tombol biru di bawah ("Buka Halaman Login Google")</strong> untuk login ke akun Google.';
                     }
                     alertEl.style.color = '#38bdf8';
                     alertEl.style.display = 'block';
@@ -215,7 +215,7 @@ pub fn get_scripts() -> &'static str {
                     if (badgeEl) {
                         badgeEl.style.color = '#10b981';
                         badgeEl.style.background = 'rgba(16, 185, 129, 0.15)';
-                        badgeEl.innerHTML = '⏱️ Sisa Waktu: <strong id="oauth-countdown">' + remaining + '</strong>s';
+                        badgeEl.innerHTML = 'Sisa Waktu: <strong id="oauth-countdown">' + remaining + '</strong>s';
                     }
                     if (submitBtn) submitBtn.disabled = false;
                     if (pasteBtn) pasteBtn.disabled = false;
@@ -230,24 +230,24 @@ pub fn get_scripts() -> &'static str {
                             if (badgeEl) {
                                 badgeEl.style.color = '#fbbf24';
                                 badgeEl.style.background = 'rgba(245, 158, 11, 0.15)';
-                                badgeEl.innerHTML = '⏱️ Sesi > 5 Menit (Klik Mulai Ulang jika butuh tautan baru)';
+                                badgeEl.innerHTML = 'Sesi > 5 Menit (Klik Mulai Ulang jika butuh tautan baru)';
                             }
                         }
                     }, 1000);
                 } else {
                     if (newTab && !newTab.closed) newTab.close();
-                    alertEl.innerText = '❌ ' + (data.error || 'Gagal memulai sesi login.');
+                    alertEl.innerText = data.error || 'Gagal memulai sesi login.';
                     alertEl.style.color = '#ef4444';
                     alertEl.style.display = 'block';
                 }
             } catch(e) {
                 if (newTab && !newTab.closed) newTab.close();
-                alertEl.innerText = '❌ Error: ' + e;
+                alertEl.innerText = 'Error: ' + e;
                 alertEl.style.color = '#ef4444';
                 alertEl.style.display = 'block';
             } finally {
                 startBtn.disabled = false;
-                startBtn.innerText = '🚀 Mulai Ulang / Akun Lain';
+                startBtn.innerText = 'Mulai Ulang / Akun Lain';
             }
         }
 
@@ -302,7 +302,7 @@ pub fn get_scripts() -> &'static str {
                         oauthCountdownInterval = null;
                     }
                     localStorage.setItem('aina_admin_key', key);
-                    alertEl.innerHTML = '🎉 <strong>' + data.message + '</strong><br><small>Akun siap digunakan! Anda bisa langsung klik tombol di atas lagi untuk menambahkan akun berikutnya.</small>';
+                    alertEl.innerHTML = '<strong>' + data.message + '</strong><br><small>Akun siap digunakan! Anda bisa langsung klik tombol di atas lagi untuk menambahkan akun berikutnya.</small>';
                     alertEl.style.color = '#10b981';
                     alertEl.style.display = 'block';
                     codeInput.value = '';
@@ -310,7 +310,7 @@ pub fn get_scripts() -> &'static str {
                     document.getElementById('oauth-step-2').style.display = 'none';
                     loadAccountPool();
                 } else {
-                    alertEl.innerText = '❌ ' + (data.error || 'Kode otorisasi tidak valid.');
+                    alertEl.innerText = data.error || 'Kode otorisasi tidak valid.';
                     alertEl.style.color = '#ef4444';
                     alertEl.style.display = 'block';
                 }
@@ -318,13 +318,13 @@ pub fn get_scripts() -> &'static str {
                 clearTimeout(timeoutId);
                 const isAbort = e.name === 'AbortError';
                 alertEl.innerText = isAbort
-                    ? '⚠️ Waktu verifikasi habis (20 detik). Server sedang memproses atau koneksi lambat. Silakan periksa daftar akun di bawah atau klik tombol Verifikasi lagi.'
-                    : '❌ Error: ' + e;
+                    ? 'Waktu verifikasi habis (20 detik). Server sedang memproses atau koneksi lambat. Silakan periksa daftar akun di bawah atau klik tombol Verifikasi lagi.'
+                    : 'Error: ' + e;
                 alertEl.style.color = '#ef4444';
                 alertEl.style.display = 'block';
             } finally {
                 submitBtn.disabled = false;
-                submitBtn.innerText = '✅ Simpan & Verifikasi';
+                submitBtn.innerText = 'Simpan & Verifikasi';
             }
         }
 
@@ -396,19 +396,19 @@ pub fn get_scripts() -> &'static str {
                 const data = await res.json();
                 if (res.ok && data.success) {
                     localStorage.setItem('aina_admin_key', key);
-                    alertEl.innerText = '✅ ' + data.message;
+                    alertEl.innerText = data.message;
                     alertEl.style.color = '#10b981';
                     alertEl.style.display = 'block';
                     tokenInput.value = '';
                     loadAccountPool();
                     setTimeout(() => { toggleAddAccountForm(); }, 2000);
                 } else {
-                    alertEl.innerText = '❌ ' + (data.error || 'Gagal menambahkan akun.');
+                    alertEl.innerText = data.error || 'Gagal menambahkan akun.';
                     alertEl.style.color = '#ef4444';
                     alertEl.style.display = 'block';
                 }
             } catch(e) {
-                alertEl.innerText = '❌ Error koneksi: ' + e.message;
+                alertEl.innerText = 'Error koneksi: ' + e.message;
                 alertEl.style.color = '#ef4444';
                 alertEl.style.display = 'block';
             } finally {
@@ -482,14 +482,14 @@ pub fn get_scripts() -> &'static str {
                 ">
                     <div style="display:flex; align-items:center; justify-content:space-between;">
                         <h3 style="margin:0; font-size:1.1rem; font-weight:700; color:var(--text-primary,#e2e8f0);">
-                            ⚡ Pilih Model AI
+                            Pilih Model AI
                         </h3>
                         <button onclick="closeModelModal()" style="
                             background:none; border:none; color:var(--text-muted,#64748b);
                             font-size:1.4rem; cursor:pointer; line-height:1; padding:4px 8px;
                             border-radius:8px; transition:background 0.15s;
                         " onmouseover="this.style.background='rgba(255,255,255,0.08)'"
-                           onmouseout="this.style.background='none'">✕</button>
+                           onmouseout="this.style.background='none'">&times;</button>
                     </div>
                     <p id="model-picker-current" style="
                         margin:0; font-size:0.82rem; color:var(--text-muted,#64748b);
@@ -590,7 +590,7 @@ pub fn get_scripts() -> &'static str {
                         </div>
                         <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
                             <span class="cat-badge ${catClass}">${_escHtml(model.category || 'other')}</span>
-                            ${isActive ? '<span style="color:var(--primary,#4a9eff); font-size:0.78rem; font-weight:700;">✓ Aktif</span>' : ''}
+                            ${isActive ? '<span style="color:var(--primary,#4a9eff); font-size:0.78rem; font-weight:700;">Aktif</span>' : ''}
                         </div>
                     `;
                     item.addEventListener('click', () => _selectModel(model.id, key));
@@ -599,7 +599,7 @@ pub fn get_scripts() -> &'static str {
 
                 listEl.style.display = 'flex';
                 if (data.source) {
-                    sourceEl.textContent = data.source === 'dynamic' ? '🌐 Sumber: AGY CLI (live)' : '📦 Sumber: Static fallback';
+                    sourceEl.textContent = data.source === 'dynamic' ? 'Sumber: AGY CLI (live)' : 'Sumber: Static fallback';
                     sourceEl.style.display = 'block';
                 }
 
@@ -629,7 +629,7 @@ pub fn get_scripts() -> &'static str {
                     if (lbl) lbl.textContent = `Model aktif saat ini: ${data.model}`;
                     setTimeout(() => closeModelModal(), 600);
                 } else {
-                    alert(`⚠️ Gagal: ${data.error || data.message || 'Error tidak diketahui'}`);
+                    alert(`Gagal: ${data.error || data.message || 'Error tidak diketahui'}`);
                     const prev = currentEl ? currentEl.innerText.trim() : '';
                     document.querySelectorAll('.model-item').forEach(el => {
                         el.classList.toggle('active-model', el.dataset.modelId === prev);
@@ -671,7 +671,7 @@ pub fn get_scripts() -> &'static str {
                 available.forEach(model => {
                     const opt = document.createElement('option');
                     opt.value = model.id;
-                    opt.textContent = (model.id === current ? '✓ ' : '') + model.name;
+                    opt.textContent = (model.id === current ? '[Aktif] ' : '') + model.name;
                     frag.appendChild(opt);
                 });
                 sel.appendChild(frag);
@@ -728,7 +728,7 @@ pub fn get_scripts() -> &'static str {
                 if (threadEl) {
                     threadEl.innerHTML = `
                         <div class="chat-bubble-system">
-                            🔄 Sesi percakapan direset. Anda dapat memulai obrolan atau pengujian topik baru dari awal.
+                            Sesi percakapan direset. Anda dapat memulai obrolan atau pengujian topik baru dari awal.
                         </div>
                     `;
                 }
@@ -858,7 +858,7 @@ pub fn get_scripts() -> &'static str {
                 if (initialData.decision && initialData.decision !== 'Respond') {
                     botRow.innerHTML = `
                         <div class="chat-bubble-system">
-                            🛡️ Gatekeeper: ${escapeHtml(initialData.decision)} (${escapeHtml(initialData.reason)}) - <em>(Aina menyimak tanpa membalas chat sesuai etika grup)</em>
+                            Gatekeeper: ${escapeHtml(initialData.decision)} (${escapeHtml(initialData.reason)}) - <em>(Aina menyimak tanpa membalas chat sesuai etika grup)</em>
                         </div>
                     `;
                     threadEl.scrollTop = threadEl.scrollHeight;
@@ -873,7 +873,7 @@ pub fn get_scripts() -> &'static str {
                         <div class="chat-bubble-bot">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 6px;">
                                 <div style="font-size: 0.75rem; color: var(--primary); font-weight: 700; display: flex; align-items: center; gap: 6px;">
-                                    <span>🌸 Aina</span>
+                                    <span>Aina</span>
                                     <span style="color: #94a3b8; font-weight: 400;">• ${initialData.duration_seconds ? initialData.duration_seconds.toFixed(1) : secondsElapsed}s</span>
                                     <span style="color: #64748b; font-weight: 400;">(${escapeHtml(initialData.reason)})</span>
                                 </div>
@@ -920,7 +920,7 @@ pub fn get_scripts() -> &'static str {
                             <div class="chat-bubble-bot">
                                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 6px;">
                                     <div style="font-size: 0.75rem; color: var(--primary); font-weight: 700; display: flex; align-items: center; gap: 6px;">
-                                        <span>🌸 Aina</span>
+                                        <span>Aina</span>
                                         <span style="color: #94a3b8; font-weight: 400;">• ${jobData.duration_seconds ? jobData.duration_seconds.toFixed(1) : secondsElapsed}s</span>
                                         <span style="color: #64748b; font-weight: 400;">(${escapeHtml(jobData.reason)})</span>
                                     </div>
@@ -939,14 +939,14 @@ pub fn get_scripts() -> &'static str {
             } catch(err) {
                 botRow.innerHTML = `
                     <div class="chat-bubble-system" style="border-color: rgba(239,68,68,0.4); color: #f87171;">
-                        ⚠️ Gagal memproses simulasi: ${escapeHtml(err.message)}
+                        Gagal memproses simulasi: ${escapeHtml(err.message)}
                     </div>
                 `;
                 threadEl.scrollTop = threadEl.scrollHeight;
             } finally {
                 clearInterval(timerInterval);
                 btn.disabled = false;
-                btn.innerHTML = '<span>Kirim</span> 🚀';
+                btn.innerHTML = '<span>Kirim</span>';
             }
         }
 
@@ -1003,20 +1003,13 @@ pub fn get_scripts() -> &'static str {
             tempDiv.querySelectorAll('blockquote').forEach((bq) => {
                 const text = bq.innerHTML.trim();
                 const alertTypes = ['NOTE', 'TIP', 'IMPORTANT', 'WARNING', 'CAUTION'];
-                const icons = {
-                    NOTE: 'ℹ️',
-                    TIP: '💡',
-                    IMPORTANT: '📌',
-                    WARNING: '⚠️',
-                    CAUTION: '🚨'
-                };
                 for (const type of alertTypes) {
                     const marker = `[!${type}]`;
                     if (text.includes(marker)) {
                         const alertDiv = document.createElement('div');
                         alertDiv.className = `markdown-alert markdown-alert-${type.toLowerCase()}`;
                         const content = text.replace(marker, '').trim();
-                        alertDiv.innerHTML = `<div class="markdown-alert-title">${icons[type]} ${type}</div><div>${content}</div>`;
+                        alertDiv.innerHTML = `<div class="markdown-alert-title">${type}</div><div>${content}</div>`;
                         bq.parentNode.replaceChild(alertDiv, bq);
                         break;
                     }
@@ -1032,7 +1025,7 @@ pub fn get_scripts() -> &'static str {
             if (!codeEl) return;
             navigator.clipboard.writeText(codeEl.innerText).then(() => {
                 const orig = btn.innerText;
-                btn.innerText = '✓ Tersalin!';
+                btn.innerText = 'Tersalin!';
                 btn.style.color = '#10b981';
                 setTimeout(() => {
                     btn.innerText = orig;
@@ -1049,7 +1042,7 @@ pub fn get_scripts() -> &'static str {
 
             navigator.clipboard.writeText(textToCopy).then(() => {
                 const orig = btn.innerHTML;
-                btn.innerHTML = '<span>✓ Jawaban Tersalin!</span>';
+                btn.innerHTML = '<span>Jawaban Tersalin!</span>';
                 btn.style.color = '#10b981';
                 btn.style.borderColor = '#10b981';
                 setTimeout(() => {
@@ -1208,8 +1201,8 @@ pub fn get_scripts() -> &'static str {
                         toolsEl.innerHTML = htmlTools;
                     }
                 } else if (res.status === 401) {
-                    usecasesEl.innerHTML = '<span style="color: #f59e0b; font-size: 0.82rem;">🔒 Masukkan Admin Key di simulator untuk membuka metrik observabilitas.</span>';
-                    toolsEl.innerHTML = '<span style="color: #f59e0b; font-size: 0.82rem;">🔒 Masukkan Admin Key di simulator untuk membuka metrik observabilitas.</span>';
+                    usecasesEl.innerHTML = '<span style="color: #f59e0b; font-size: 0.82rem;">Masukkan Admin Key di simulator untuk membuka metrik observabilitas.</span>';
+                    toolsEl.innerHTML = '<span style="color: #f59e0b; font-size: 0.82rem;">Masukkan Admin Key di simulator untuk membuka metrik observabilitas.</span>';
                 } else {
                     usecasesEl.innerHTML = '<span style="color: #ef4444; font-size: 0.82rem;">Gagal memuat metrik: ' + (data.error || 'Server error') + '</span>';
                     toolsEl.innerHTML = '<span style="color: #ef4444; font-size: 0.82rem;">Gagal memuat metrik: ' + (data.error || 'Server error') + '</span>';
@@ -1222,16 +1215,16 @@ pub fn get_scripts() -> &'static str {
 
         function formatUsecaseLabel(key) {
             const labels = {
-                'code_and_devops': '💻 Coding & DevOps',
-                'document_and_vision': '📄 Dokumen & Vision',
-                'data_analysis': '📊 Analisis Data',
-                'information_and_research': '🔍 Riset & Informasi',
-                'task_and_scheduling': '⏰ Jadwal & Tugas',
-                'knowledge_and_context': '🧠 Konteks & Memori',
-                'system_and_control': '⚙️ Kontrol Sistem',
-                'media_and_whatsapp': '📱 Media & WhatsApp',
-                'casual_and_consultation': '💬 Konsultasi & Santai',
-                'other': '📦 Lainnya'
+                'code_and_devops': 'Coding & DevOps',
+                'document_and_vision': 'Dokumen & Vision',
+                'data_analysis': 'Analisis Data',
+                'information_and_research': 'Riset & Informasi',
+                'task_and_scheduling': 'Jadwal & Tugas',
+                'knowledge_and_context': 'Konteks & Memori',
+                'system_and_control': 'Kontrol Sistem',
+                'media_and_whatsapp': 'Media & WhatsApp',
+                'casual_and_consultation': 'Konsultasi & Santai',
+                'other': 'Lainnya'
             };
             return labels[key] || key;
         }

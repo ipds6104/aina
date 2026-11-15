@@ -188,3 +188,19 @@ Bab ini mencatat keputusan-keputusan arsitektur penting (*Architecture Decision 
 - **Konsekuensi Positif**:
   Integrasi SSO mulus bagi pegawai instansi tanpa kata sandi manual, keamanan sesi berbasis HMAC-SHA256 tanpa dependensi library eksternal berlebih, dan kode sumber upstream tetap portabel untuk Keycloak, Authentik, Okta, maupun Google Workspace.
 - **Risiko yang Muncul**: RISK-14
+
+---
+
+### ADR-015: Standar Zero-Emoticon dan Higienitas Desain UI Dasbor Web
+
+- **Status**: Diterima (*Accepted*)
+- **Konteks**:
+  Dasbor web Aina (`/`) sebelumnya memuat berbagai karakter unicode emoticon dan emoji (`🌸`, `🟢`, `🛡️`, `🚀`, `🔒`, dll.) pada tajuk, status badge, pesan dialog, opsi select, dan simulator. Hal ini menimbulkan inkonsistensi rendering antar sistem operasi/font, menurunkan kesan enterprise profesional, dan melanggar panduan *UI Design Hygiene*.
+- **Keputusan**:
+  Menerapkan kebijakan *Zero-Emoticon* 100% pada seluruh antarmuka web Aina (`src/adapters/driving/web/ui/` dan error handler `oidc.rs`):
+  1. Seluruh emoji dihapus atau digantikan dengan teks semantik deterministik, CSS status pills (misal `ENGINE ONLINE`, `Aktif`, `[Perhatian]`), atau ikon vektor SVG inline standar.
+  2. Tajuk bot distandarisasi menjadi teks tipografi bersih: `Aina (あいな)` tanpa bunga/simbol unicode.
+  3. Respons pesan internal simulator (seperti `/reset` dan `/model`) dibersihkan dari emoji teks.
+- **Konsekuensi Positif**:
+  Tampilan visual sangat rapi, profesional, konsisten di seluruh browser dan platform tanpa ketergantungan paket font emoji OS, serta mematuhi standar higienitas antarmuka perusahaan.
+- **Risiko yang Muncul**: Tidak ada.
