@@ -1416,44 +1416,51 @@
     <!-- ==========================================
          SLIDE 8: THE OFFICIAL MERMAID ARCHITECTURE DIAGRAM
          ========================================== -->
-    <div class="slide slide-architecture" data-notes="Diagram arsitektur Mermaid resmi dari dokumen arc42 bab 3.1 ini memetakan batas sistem Aina: Pengguna Pendamping (Companion) memiliki wewenang penuh, rekan kerja berinteraksi via mention di grup WhatsApp, dan Aina Core menghubungkan Antigravity CLI dengan brankas rahasia Infisical serta layanan cloud eksternal.">
-      <h2 class="a" style="margin-bottom: 6px;">Konteks Bisnis &amp; Arsitektur Sistem (arc42)</h2>
-      <p class="a" style="margin-bottom: 12px; text-align: center; color: var(--text-secondary); font-size: 0.9rem;">
-        Pemetaan interaksi pengguna, batas sistem Aina Core Daemon, dan layanan eksternal
+    <div class="slide slide-architecture" data-notes="Diagram arsitektur resmi ini memetakan seluruh ekosistem Aina yang beroperasi 24/7 di atas server fisik lokal ThinkStation P320 BPS Mempawah. Di sini terlihat jelas bagaimana Aina Core Daemon di Rust dan Google Antigravity CLI menjembatani pengguna dengan Dokter V untuk generate SPK/BAST dan pembayaran honor, Google Suite untuk live monitoring sheets dan drive, brankas Infisical untuk keamanan zero-trust, serta web search bawaan AGY CLI untuk riset dan grounding faktual bebas halusinasi.">
+      <h2 class="a" style="margin-bottom: 4px;">Konteks Bisnis &amp; Arsitektur Sistem (arc42)</h2>
+      <p class="a" style="margin-bottom: 10px; text-align: center; color: var(--text-secondary); font-size: 0.9rem;">
+        Operasional ThinkStation 24/7, Integrasi Dokter V, Google Suite, Infisical Vault, dan Antigravity CLI
       </p>
       <div class="mermaid-container a">
         <div class="mermaid">
 flowchart TD
-    subgraph Pengguna ["1. Pengguna & Lingkungan Kerja"]
+    subgraph Pengguna ["1. Pengguna & Lingkungan Kerja BPS Mempawah"]
         direction LR
-        Companion["Pengguna Pendamping<br><b>(User Companion / Admin)</b>"]
-        RekanGrup["Rekan Kerja di Grup WA<br><b>(Mention @Aina)</b>"]
-        AdminWeb["Administrator Sistem<br><b>(Web Setup / Simulator)</b>"]
+        Companion["<b>User Companion (Admin)</b><br>Instruksi Privat &amp; Otoritas Tertinggi"]
+        RekanGrup["<b>Rekan Kerja di Grup WA</b><br>Kolaborasi Kegiatan Lapangan (@Aina)"]
+        AdminWeb["<b>Administrator Sistem</b><br>Web Setup (/setup) &amp; Simulator Chat"]
     end
 
-    subgraph CoreGateway ["2. Gerbang & Inti Sistem Aina"]
+    subgraph HostServer ["2. Server Fisik On-Premise: Lenovo ThinkStation P320 (Operasional 24/7 Lokal BPS Mempawah)"]
         direction LR
-        Whatsmeow["<b>Whatsmeow Gateway</b><br>Webhook Ingress / Egress HTTP"]
-        AinaCore["<b>Aina Core Daemon (Rust)</b><br>&bull; Alur Pesan &amp; Etika Kerja<br>&bull; Memori Profiling &amp; Task Scheduler<br>&bull; Kolam Akun AI &amp; Otoritas Zero Trust"]
+        Whatsmeow["<b>Whatsmeow Gateway</b><br>Webhook HTTP Ingress / Egress<br>(Microservice Multi-Device)"]
+        
+        subgraph CoreStack ["Stack Inti Sistem Aina (Docker Container)"]
+            direction TB
+            AinaCore["<b>Aina Core Daemon (Rust)</b><br>&bull; Event Loop &amp; Etika Kerja Selevel<br>&bull; Memori Profiling &amp; Task Scheduler<br>&bull; Basis Data SQLite WAL (Kebal Mati Lampu)"]
+            AGY["<b>Google Antigravity CLI (agy)</b><br>&bull; Mesin Penalaran Agentik Gemini<br>&bull; Sandbox Eksekusi Bash, Python &amp; DuckDB"]
+            AinaCore <-->|"Subprocess Pipe stdin/stdout"| AGY
+        end
+        
         Whatsmeow <-->|"Inbound / Outbound"| AinaCore
     end
 
-    subgraph SistemLuar ["3. Layanan Eksternal &amp; Tool Sandbox"]
+    subgraph IntegrasiEksternal ["3. Layanan Terhubung, Sistem Mitra &amp; Ekosistem Tools"]
         direction LR
-        AGY["<b>Google Antigravity CLI</b><br>(Penalaran &amp; Sandbox Bash/Python)"]
-        SecretVault["<b>Infisical Vault</b><br>(Kunci API &amp; Sandi JIT)"]
-        CloudExt["<b>Cloud &amp; Knowledge Base</b><br>(Google Drive, Git POK SAKTI)"]
-        EnvAPI["<b>Layanan Eksternal</b><br>(Open-Meteo &amp; Web Search)"]
+        DokterV["<b>Dokter V (SIMETRA)</b><br>&bull; Validasi ID Sobat Mitra<br>&bull; Generate SPK &amp; BAST Bulanan<br>&bull; Pengajuan Pembayaran Honor"]
+        GSuite["<b>Google Workspace Suite</b><br>&bull; Sheets (Live Monitoring Progres)<br>&bull; Google Drive, Forms, Slides, Docs"]
+        Infisical["<b>Infisical Secret Vault</b><br>&bull; Zero-Trust Runtime Broker<br>&bull; Kunci API &amp; Sandi Aman JIT"]
+        WebSearch["<b>AGY Live Web Search</b><br>&bull; Grounding Faktual Bebas Halusinasi<br>&bull; Cuaca Wilayah (Open-Meteo)"]
     end
 
     Companion <-->|"Pesan Privat / !aina"| Whatsmeow
-    RekanGrup <-->|"Tag @Aina"| Whatsmeow
+    RekanGrup <-->|"Tag @Aina di grup"| Whatsmeow
     AdminWeb <-->|"Setup OAuth / Web UI"| AinaCore
 
-    AinaCore <-->|"Subprocess Engine Runner"| AGY
-    AinaCore <-->|"Secret Broker JIT"| SecretVault
-    AGY <-->|"Ambil Dokumen &amp; Eksekusi"| CloudExt
-    AinaCore <-->|"Grounding Data Faktual"| EnvAPI
+    AGY <-->|"Automasi SPK &amp; BAST"| DokterV
+    AGY <-->|"Otomasi Sheet &amp; Drive"| GSuite
+    AinaCore <-->|"Ambil Kredensial JIT"| Infisical
+    AGY <-->|"Riset Web &amp; Grounding"| WebSearch
         </div>
       </div>
     </div>
