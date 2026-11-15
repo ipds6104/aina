@@ -492,8 +492,8 @@ pub fn get_scripts() -> &'static str {
                            onmouseout="this.style.background='none'">&times;</button>
                     </div>
                     <p id="model-picker-current" style="
-                        margin:0; font-size:0.82rem; color:var(--text-muted,#64748b);
-                    ">Model aktif: —</p>
+                        margin:0; font-size:0.82rem; color:var(--text-muted,#94a3b8);
+                    ">Model aktif: (Memuat...)</p>
                     <div id="model-picker-loading" style="
                         text-align:center; padding:32px 0; color:var(--text-muted,#64748b); font-size:0.9rem;
                     ">
@@ -654,7 +654,7 @@ pub fn get_scripts() -> &'static str {
 
             const key = localStorage.getItem('aina_admin_key');
             if (!key) {
-                // No admin key yet — keep only the "default" option; the list
+                // No admin key yet: keep only the "default" option; the list
                 // will refresh once the user authenticates.
                 return;
             }
@@ -676,7 +676,7 @@ pub fn get_scripts() -> &'static str {
                 });
                 sel.appendChild(frag);
             } catch (e) {
-                // Discovery failed — drop the loading placeholder so the user
+                // Discovery failed: drop the loading placeholder so the user
                 // still has a working "default" choice; the modal remains the
                 // primary path for switching models.
                 if (loadingOpt) loadingOpt.remove();
