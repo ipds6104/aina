@@ -168,6 +168,17 @@ if [ -n "$INFISICAL_CLIENT_ID" ] && [ -n "$INFISICAL_CLIENT_SECRET" ] && [ -x "/
         --client-secret="$INFISICAL_CLIENT_SECRET" \
         --plain > /root/.infisical/cached_token 2>/dev/null || true
     chmod 600 /root/.infisical/cached_token 2>/dev/null || true
+
+    # Auto-retrieve OIDC secrets from Infisical vault if configured
+    if [ -f "/root/.infisical/cached_token" ]; then
+        [ -z "$OIDC_ENABLED" ] && export OIDC_ENABLED=$(/usr/local/bin/infisical secrets get AINA_OIDC_ENABLED --projectId "${INFISICAL_PROJECT_ID:-f13379e0-9661-4f8e-81ef-0e81d1502da1}" --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
+        [ -z "$OIDC_ISSUER_URL" ] && export OIDC_ISSUER_URL=$(/usr/local/bin/infisical secrets get AINA_OIDC_ISSUER_URL --projectId "${INFISICAL_PROJECT_ID:-f13379e0-9661-4f8e-81ef-0e81d1502da1}" --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
+        [ -z "$OIDC_CLIENT_ID" ] && export OIDC_CLIENT_ID=$(/usr/local/bin/infisical secrets get AINA_OIDC_CLIENT_ID --projectId "${INFISICAL_PROJECT_ID:-f13379e0-9661-4f8e-81ef-0e81d1502da1}" --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
+        [ -z "$OIDC_CLIENT_SECRET" ] && export OIDC_CLIENT_SECRET=$(/usr/local/bin/infisical secrets get AINA_OIDC_CLIENT_SECRET --projectId "${INFISICAL_PROJECT_ID:-f13379e0-9661-4f8e-81ef-0e81d1502da1}" --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
+        [ -z "$OIDC_REDIRECT_URI" ] && export OIDC_REDIRECT_URI=$(/usr/local/bin/infisical secrets get AINA_OIDC_REDIRECT_URI --projectId "${INFISICAL_PROJECT_ID:-f13379e0-9661-4f8e-81ef-0e81d1502da1}" --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
+        [ -z "$OIDC_PROVIDER_NAME" ] && export OIDC_PROVIDER_NAME=$(/usr/local/bin/infisical secrets get AINA_OIDC_PROVIDER_NAME --projectId "${INFISICAL_PROJECT_ID:-f13379e0-9661-4f8e-81ef-0e81d1502da1}" --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
+        [ -z "$OIDC_ADMIN_USERS" ] && export OIDC_ADMIN_USERS=$(/usr/local/bin/infisical secrets get AINA_OIDC_ADMIN_USERS --projectId "${INFISICAL_PROJECT_ID:-f13379e0-9661-4f8e-81ef-0e81d1502da1}" --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
+    fi
 fi
 
 
