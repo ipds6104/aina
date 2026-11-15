@@ -87,15 +87,27 @@ pub fn is_intermediate_agent_status(line: &str) -> bool {
     let lower = line.to_lowercase();
 
     // 1. Task waiting patterns
-    if (lower.starts_with("i am waiting for ") || lower.starts_with("waiting for "))
-        && (lower.contains("task") || lower.contains("finish") || lower.contains("complete"))
+    if (lower.starts_with("i am waiting for ")
+        || lower.starts_with("waiting for ")
+        || lower.starts_with("i have launched ")
+        || lower.starts_with("i will wait for "))
+        && (lower.contains("task") || lower.contains("finish") || lower.contains("complete") || lower.contains("background"))
     {
         return true;
     }
 
     // 2. Indonesian task waiting patterns
-    if lower.starts_with("sedang menunggu ")
-        && (lower.contains("task") || lower.contains("selesai") || lower.contains("proses kompilasi"))
+    if (lower.starts_with("sedang menunggu ")
+        || lower.starts_with("menunggu proses ")
+        || lower.starts_with("sedang memproses dan merender ")
+        || lower.starts_with("sedang memproses "))
+        && (lower.contains("task")
+            || lower.contains("selesai")
+            || lower.contains("proses")
+            || lower.contains("rendering")
+            || lower.contains("kompilasi")
+            || lower.contains("pengiriman")
+            || lower.contains("monitoring"))
     {
         return true;
     }
@@ -218,5 +230,17 @@ Halo Tim SRE / OpenObserve, berikut hasil analisis akar masalah (*Root Cause Ana
         assert!(!cleaned.contains("as soon as it finishes"));
         assert!(cleaned.starts_with("*[TRIAGE OBSERVABILITY]"));
         assert!(cleaned.contains("Halo Tim SRE / OpenObserve"));
+    }
+
+    #[test]
+    fn test_sanitize_agent_response_strips_launch_waiting_and_indonesian_progress() {
+        let raw = r#"I have launched the monitoring rendering and WhatsApp dispatch task in the background. I will wait for it to complete.
+Menunggu proses rendering dan pengiriman selesai...
+[NO_SEND]"#;
+
+        let cleaned = sanitize_agent_response(raw);
+        assert!(!cleaned.contains("I have launched"));
+        assert!(!cleaned.contains("Menunggu proses"));
+        assert_eq!(cleaned, "[NO_SEND]");
     }
 }

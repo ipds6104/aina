@@ -298,4 +298,89 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    struct MockSilentAgent;
+
+    #[async_trait::async_trait]
+    impl AgentEnginePort for MockSilentAgent {
+        async fn execute_with_model(
+            &self,
+            _conversation_id: Option<&str>,
+            _prompt: &str,
+            _model_override: Option<&str>,
+        ) -> anyhow::Result<crate::core::ports::AgentResponse> {
+            Ok(crate::core::ports::AgentResponse {
+                response_text: "I have launched the monitoring rendering and WhatsApp dispatch task in the background. I will wait for it to complete.\nMenunggu proses rendering dan pengiriman selesai...\n[NO_SEND]".to_string(),
+                conversation_id: "conv_test_silent".to_string(),
+                duration_seconds: 0.1,
+            })
+        }
+        async fn get_model(&self) -> String { "gemini-3.8-flash".to_string() }
+        async fn set_model(&self, _model: &str) -> anyhow::Result<()> { Ok(()) }
+        async fn is_authenticated(&self) -> bool { true }
+        async fn save_auth_token(&self, _token_content: &str) -> anyhow::Result<()> { Ok(()) }
+    }
+
+    #[tokio::test]
+    async fn test_scheduled_tick_agent_action_silent_skip_and_internal_silent_never_sends_to_group() {
+        let dir = std::env::temp_dir().join(format!("aina_test_silent_{}", rand::random::<u32>()));
+        let db_file = dir.join("silent_test.db");
+        let store = Arc::new(SqliteSessionStore::new(&db_file).unwrap());
+
+        let sent = Arc::new(tokio::sync::Mutex::new(Vec::new()));
+        let whatsapp = Arc::new(TestRecordingWhatsApp {
+            sent_messages: Arc::clone(&sent),
+        });
+
+        // Group task where payload contains [NO_SEND]
+        let group_task = NewScheduledTask {
+            title: "Monitoring Harian Matching SBR SE2026".to_string(),
+            task_type: ScheduledTaskType::AgentAction,
+            target_jid: "120363433281094659@g.us".to_string(),
+            payload: "Jalankan render rekap lalu akhiri dengan [NO_SEND]".to_string(),
+            schedule_type: "once".to_string(),
+            schedule_expr: "07:00".to_string(),
+            next_run_epoch: 100,
+            slug: None,
+            category: None,
+            source: None,
+            metadata: None,
+        };
+        let _task_id = store.create_scheduled_task(&group_task).await.unwrap();
+
+        let persona = Arc::new(PersonaEngine::new(
+            "Persona text".to_string(),
+            "Org text".to_string(),
+            "6289625345646@s.whatsapp.net".to_string(),
+            "Asia/Jakarta".to_string(),
+            7,
+            "id-ID".to_string(),
+            "https://aina-wa.dvlpid.my.id".to_string(),
+            "628982157341@s.whatsapp.net".to_string(),
+            None,
+        ));
+
+        let usecase = ScheduledTickUseCase::new(
+            Arc::clone(&store) as _,
+            Arc::clone(&whatsapp) as _,
+            Some(Arc::new(MockSilentAgent)),
+            Some(persona),
+            None,
+            7,
+        );
+
+        // Execute tick
+        usecase.execute().await.unwrap();
+
+        let msgs = sent.lock().await.clone();
+        // ZERO messages sent because it requested silent skip and was internal silent!
+        assert_eq!(msgs.len(), 0);
+
+        // Task should be marked as success in runs history
+        let runs = store.list_scheduled_task_runs(1).await.unwrap();
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].status, "success");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

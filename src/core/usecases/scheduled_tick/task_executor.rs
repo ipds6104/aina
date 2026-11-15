@@ -354,17 +354,21 @@ impl TaskExecutor {
                         return;
                     }
 
-                    // Check for Silent Skip / No-Op protocol: [NO_SEND], [SKIP], [SILENT], [SKIP_MESSAGE]
-                    let is_silent_skip = clean_res.starts_with("[NO_SEND]")
-                        || clean_res.starts_with("[SKIP]")
-                        || clean_res.starts_with("[SILENT]")
-                        || clean_res.starts_with("[SKIP_MESSAGE]")
+                    // Check for Internal Silent or Silent Skip / No-Op protocol: [NO_SEND], [SKIP], [SILENT], [SKIP_MESSAGE]
+                    let is_silent_skip = is_internal_silent
+                        || clean_res.contains("[NO_SEND]")
+                        || clean_res.contains("[SKIP]")
+                        || clean_res.contains("[SILENT]")
+                        || clean_res.contains("[SKIP_MESSAGE]")
                         || clean_res.eq_ignore_ascii_case("NO_SEND")
-                        || clean_res.eq_ignore_ascii_case("SKIP");
+                        || clean_res.eq_ignore_ascii_case("SKIP")
+                        || actual_target == "self"
+                        || actual_target == "internal"
+                        || actual_target.is_empty();
 
                     if is_silent_skip {
                         info!(
-                            "AgentAction task #{} requested silent skip ([NO_SEND]). Suppressed sending message to {}. Output: {}",
+                            "AgentAction task #{} is internal silent or requested silent skip ([NO_SEND]). Suppressed sending message to {}. Output: {}",
                             task.id, actual_target, preview
                         );
                         return;
