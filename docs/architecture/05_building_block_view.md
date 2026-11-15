@@ -1,7 +1,7 @@
 # 5. Struktur Blok Pembangun (Building Block View)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `1396d4c` (branch: `main`)
+> - **Verified Commit**: `3d712a5` (branch: `main`)
 > - **Verified Timestamp**: `2026-11-14T19:40:00+07:00`
 > - **Tracked Paths**: `src/core/domain/`, `src/adapters/`
 > - **Drift Status**: `verified`
