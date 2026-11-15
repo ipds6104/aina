@@ -1,8 +1,8 @@
 # 5. Struktur Blok Pembangun (Building Block View)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `69e8da9` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-15T10:16:00+07:00`
+> - **Verified Commit**: `22e209b` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-15T10:17:00+07:00`
 > - **Tracked Paths**: `src/core/domain/`, `src/adapters/`
 > - **Drift Status**: `verified`
 

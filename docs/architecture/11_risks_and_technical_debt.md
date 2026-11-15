@@ -1,8 +1,8 @@
 # 11. Risiko dan Hutang Teknis (Risks and Technical Debt)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `69e8da9` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-15T10:16:00+07:00`
+> - **Verified Commit**: `22e209b` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-15T10:17:00+07:00`
 > - **Tracked Paths**: `src/core/domain/audit/`, `src/core/usecases/process_message/`, `src/adapters/driven/sqlite_store/`
 > - **Drift Status**: `verified`
 

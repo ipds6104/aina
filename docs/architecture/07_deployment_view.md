@@ -1,8 +1,8 @@
 # 7. Pandangan Penerapan (Deployment View)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `69e8da9` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-15T10:16:00+07:00`
+> - **Verified Commit**: `22e209b` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-15T10:17:00+07:00`
 > - **Tracked Paths**: `src/`, `config/`, `skills/`
 > - **Drift Status**: `verified`
 
@@ -74,6 +74,7 @@ Tabel berikut memetakan seluruh komponen dari Bab 5 (*Building Block View*) ke k
 | SkillRegistry | `aina-app` | Modul Rust `metacognition` dan utilitas `skill_scaffolder.py` yang memindai `/app/data/custom-skills`. |
 | ActivityReconciler | `aina-app` | Modul domain Rust yang dieksekusi saat booting dan via CLI `aina activity`. |
 | ActivityReflectionEngine | `aina-app` | Skrip Python `skills/activity-reflection/scripts/reflect.py` untuk evaluasi otonom harian. |
+| OidcAuthController | `aina-app` | Modul controller HTTP Axum di `src/adapters/driving/web/controllers/oidc.rs` menangani endpoint `/auth/*`. |
 
 ---
 
