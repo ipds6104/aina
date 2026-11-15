@@ -461,6 +461,19 @@ pub fn get_styles() -> &'static str {
             border: 1px solid rgba(16, 185, 129, 0.4);
             margin-left: 6px;
         }
+        .sso-staff-tag {
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 4px;
+            background: rgba(59, 130, 246, 0.2);
+            color: #60a5fa;
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            margin-left: 6px;
+        }
+        .admin-only-card {
+            transition: all 0.3s ease;
+        }
         .btn-sso-login {
             display: inline-flex;
             align-items: center;

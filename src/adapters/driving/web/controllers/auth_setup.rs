@@ -266,7 +266,12 @@ pub async fn api_verify_admin_handler(
     State(state): State<Arc<WebhookServerState>>,
     Json(payload): Json<VerifyAdminRequest>,
 ) -> impl IntoResponse {
-    if payload.admin_key.trim() == state.setup_code.trim() {
+    let key = payload.admin_key.trim();
+    let is_valid = (!state.setup_code.trim().is_empty() && key == state.setup_code.trim())
+        || (!state.whatsmeow_api_key.trim().is_empty() && key == state.whatsmeow_api_key.trim())
+        || state.companion_api_key.as_deref().map(|k| !k.trim().is_empty() && key == k.trim()).unwrap_or(false);
+
+    if is_valid {
         (
             StatusCode::OK,
             Json(json!({

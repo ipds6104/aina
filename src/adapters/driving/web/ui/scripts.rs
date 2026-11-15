@@ -5,37 +5,75 @@ pub fn get_scripts() -> &'static str {
         let lastSimulationResponseText = '';
 
         async function checkAdminAuth() {
-            const key = localStorage.getItem('aina_admin_key');
             const simCard = document.getElementById('simulator-card');
             const lockCard = document.getElementById('sim-lock-card');
-            if (!simCard || !lockCard) return;
+            const adminOnlyEls = document.querySelectorAll('.admin-only-card');
+            const adminStatusText = document.getElementById('admin-session-status-text');
 
-            if (key) {
-                simCard.style.display = 'block';
-                lockCard.style.display = 'none';
-                loadAccountPool();
-                loadObservabilityMetrics();
-                return;
-            }
-
+            // 1. Check server-side SSO session via /auth/me first
             try {
                 const meRes = await fetch('/auth/me');
                 if (meRes.ok) {
                     const meData = await meRes.json();
-                    if (meData.authenticated && meData.user && meData.user.is_admin) {
-                        simCard.style.display = 'block';
-                        lockCard.style.display = 'none';
-                        loadAccountPool();
+                    if (meData.authenticated && meData.user) {
+                        if (simCard) simCard.style.display = 'block';
+                        if (lockCard) lockCard.style.display = 'none';
+                        if (adminStatusText) {
+                            const roleTag = meData.user.is_admin ? '<span class="sso-admin-tag">ADMIN</span>' : '<span class="sso-staff-tag">PEGAWAI</span>';
+                            adminStatusText.innerHTML = `🛡️ Sesi SSO: <strong>${escapeHtml(meData.user.name)}</strong> ${roleTag}`;
+                        }
+
+                        if (meData.user.is_admin) {
+                            adminOnlyEls.forEach(el => el.style.display = 'block');
+                            loadAccountPool();
+                        } else {
+                            adminOnlyEls.forEach(el => el.style.display = 'none');
+                        }
                         loadObservabilityMetrics();
                         return;
                     }
                 }
-            } catch(e) {}
+            } catch(e) {
+                console.warn('OIDC check failed:', e);
+            }
 
-            simCard.style.display = 'none';
-            lockCard.style.display = 'block';
-            loadAccountPool();
-            loadObservabilityMetrics();
+            // 2. If not authenticated via SSO, check if localStorage has an admin key AND VERIFY IT with backend
+            const key = localStorage.getItem('aina_admin_key');
+            if (key) {
+                try {
+                    const verifyRes = await fetch('/api/auth/verify', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ admin_key: key })
+                    });
+                    if (verifyRes.ok) {
+                        const verifyData = await verifyRes.json();
+                        if (verifyData.success) {
+                            if (simCard) simCard.style.display = 'block';
+                            if (lockCard) lockCard.style.display = 'none';
+                            if (adminStatusText) {
+                                adminStatusText.innerHTML = '🛡️ Sesi Terverifikasi (Admin Key)';
+                            }
+                            adminOnlyEls.forEach(el => el.style.display = 'block');
+                            loadAccountPool();
+                            loadObservabilityMetrics();
+                            return;
+                        }
+                    }
+                    // Stale or invalid key in localStorage - purge it!
+                    localStorage.removeItem('aina_admin_key');
+                } catch(e) {
+                    // Network error: do not unlock blindly
+                }
+            }
+
+            // 3. Neither SSO nor valid Admin Key: strictly LOCK
+            if (simCard) simCard.style.display = 'none';
+            if (lockCard) lockCard.style.display = 'block';
+            adminOnlyEls.forEach(el => el.style.display = 'none');
+            if (adminStatusText) {
+                adminStatusText.innerHTML = '🔒 Akses Terkunci';
+            }
         }
 
         async function loadAccountPool() {

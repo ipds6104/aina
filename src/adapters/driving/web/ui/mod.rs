@@ -21,18 +21,21 @@ pub fn render_html(
     current_model: &str,
     current_user: Option<&crate::adapters::driving::web::state::AuthenticatedUserSession>,
 ) -> String {
+    let is_user_authenticated = current_user.is_some();
+    let is_user_admin = current_user.map(|u| u.is_admin).unwrap_or(false);
+
     let (badge_class, badge_text, badge_bg) = if is_authenticated {
-        ("badge-success", "ONLINE & TERAUTENTIKASI", "#10b981")
+        ("badge-success", "🟢 ENGINE ONLINE", "#10b981")
     } else {
-        ("badge-warning", "PERLU SETUP AUTENTIKASI", "#f59e0b")
+        ("badge-warning", "🟡 ENGINE PERLU SETUP", "#f59e0b")
     };
 
     let sso_bar = if state.oidc_config.enabled {
         if let Some(user) = current_user {
-            let admin_badge = if user.is_admin {
+            let role_badge = if user.is_admin {
                 "<span class=\"sso-admin-tag\">ADMIN</span>"
             } else {
-                ""
+                "<span class=\"sso-staff-tag\">PEGAWAI</span>"
             };
             let sub_text = format!(
                 "{} • {}",
@@ -56,7 +59,7 @@ pub fn render_html(
                 </div>
                 "#,
                 html_escape(&user.name),
-                admin_badge,
+                role_badge,
                 html_escape(&sub_text),
             )
         } else {
@@ -76,6 +79,31 @@ pub fn render_html(
         }
     } else {
         String::new()
+    };
+
+    let model_change_action = if is_user_admin {
+        r#"<a href="javascript:void(0)" onclick="openModelModal()" style="font-size: 0.75rem; color: var(--primary); text-decoration: none; font-weight: 600;">⚡ Ganti</a>"#
+    } else {
+        ""
+    };
+
+    let account_card_style = if is_user_admin {
+        "border-color: #3b82f6; display: block;"
+    } else {
+        "border-color: #3b82f6; display: none;"
+    };
+
+    let (sim_lock_display, simulator_display) = if is_user_authenticated {
+        ("display: none;", "display: block;")
+    } else {
+        ("display: block;", "display: none;")
+    };
+
+    let session_status_label = if let Some(u) = current_user {
+        let tag = if u.is_admin { "Admin" } else { "Pegawai" };
+        format!("Sesi SSO: {} ({})", html_escape(&u.name), tag)
+    } else {
+        "Sesi Terverifikasi".to_string()
     };
 
     let companion_info = if let Some(c_jid) = &state.companion_jid {
@@ -102,7 +130,7 @@ pub fn render_html(
                         <span class="label">Model AI Aktif</span>
                         <div style="display: flex; justify-content: space-between; align-items: baseline;">
                             <span class="val" id="active-model-display">{model}</span>
-                            <a href="javascript:void(0)" onclick="openModelModal()" style="font-size: 0.75rem; color: var(--primary); text-decoration: none; font-weight: 600;">⚡ Ganti</a>
+                            {model_change_action}
                         </div>
                     </div>
                     <div class="info-item"><span class="label">Whatsmeow</span><span class="val">{url}</span></div>
@@ -116,7 +144,7 @@ pub fn render_html(
             </div>
 
             <!-- MULTI-ACCOUNT POOL CARD -->
-            <div class="card" style="border-color: #3b82f6;">
+            <div class="card admin-only-card" style="{account_card_style}">
                 <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <span style="font-size: 1.2rem;">👥</span>
@@ -239,13 +267,13 @@ pub fn render_html(
             </div>
 
             <!-- ADMIN LOCK CARD -->
-            <div id="sim-lock-card" class="card" style="border-color: #f59e0b; display: none;">
+            <div id="sim-lock-card" class="card" style="border-color: #f59e0b; {sim_lock_display}">
                 <div class="card-header">
                     <span style="font-size: 1.2rem;">🔒</span>
-                    <h2>Akses Simulator Terproteksi</h2>
+                    <h2>Akses Simulator & Dasbor Terproteksi</h2>
                 </div>
                 <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 14px;">
-                    Untuk mencegah orang luar mengeksekusi agen AI di server Anda, fitur simulator dilindungi. Masukkan <strong>Setup Code / Admin Key</strong> server Anda untuk membuka sesi.
+                    Untuk mencegah orang luar mengeksekusi agen AI di server Anda, fitur simulator dilindungi. Masuk melalui <strong>SSO Pegawai BPS Mempawah</strong> di atas atau masukkan <strong>Setup Code / Admin Key</strong> server Anda untuk membuka sesi.
                 </p>
                 <div style="display: flex; gap: 8px;">
                     <input id="admin-passcode-input" class="form-input" type="password" placeholder="Masukkan Admin Key / Setup Code..." style="margin-bottom: 0;" />
@@ -255,9 +283,9 @@ pub fn render_html(
             </div>
 
             <!-- SIMULATOR CHAT REAL END-TO-END -->
-            <div id="simulator-card" class="card simulator-card">
+            <div id="simulator-card" class="card simulator-card" style="{simulator_display}">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding: 6px 12px; background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.2); border-radius: 6px; font-size: 0.8rem; color: #10b981;">
-                    <span>🛡️ Sesi Admin Terverifikasi</span>
+                    <span id="admin-session-status-text">🛡️ {session_status_label}</span>
                     <a href="javascript:void(0)" onclick="lockAdminSession()" style="color: #f87171; text-decoration: none; font-weight: 600;">Kunci Dashboard</a>
                 </div>
                 <div class="card-header">
@@ -341,9 +369,14 @@ pub fn render_html(
             jid = state.bot_jid,
             companion_info = companion_info,
             model = current_model,
+            model_change_action = model_change_action,
             url = state.whatsmeow_url,
             timezone = state.timezone,
             locale = state.locale,
+            account_card_style = account_card_style,
+            sim_lock_display = sim_lock_display,
+            simulator_display = simulator_display,
+            session_status_label = session_status_label,
         )
     } else {
         r#"
