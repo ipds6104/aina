@@ -1,4 +1,6 @@
-use crate::adapters::driving::web::auth::{is_admin_authorized, is_api_authorized};
+use crate::adapters::driving::web::auth::{
+    is_admin_session_or_key_authorized, is_api_authorized,
+};
 use crate::adapters::driving::web::state::WebhookServerState;
 use axum::{
     extract::{Query, State},
@@ -106,7 +108,7 @@ pub async fn api_set_model_handler(
     headers: HeaderMap,
     Json(payload): Json<SetModelRequest>,
 ) -> impl IntoResponse {
-    let authorized = is_admin_authorized(&headers, &state.setup_code)
+    let authorized = is_admin_session_or_key_authorized(&headers, &state)
         || payload.admin_key.as_deref().map(|k| k.trim() == state.setup_code.trim()).unwrap_or(false);
 
     if !authorized {

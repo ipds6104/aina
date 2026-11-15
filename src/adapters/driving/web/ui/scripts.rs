@@ -4,7 +4,7 @@ pub fn get_scripts() -> &'static str {
     r#"
         let lastSimulationResponseText = '';
 
-        function checkAdminAuth() {
+        async function checkAdminAuth() {
             const key = localStorage.getItem('aina_admin_key');
             const simCard = document.getElementById('simulator-card');
             const lockCard = document.getElementById('sim-lock-card');
@@ -13,10 +13,27 @@ pub fn get_scripts() -> &'static str {
             if (key) {
                 simCard.style.display = 'block';
                 lockCard.style.display = 'none';
-            } else {
-                simCard.style.display = 'none';
-                lockCard.style.display = 'block';
+                loadAccountPool();
+                loadObservabilityMetrics();
+                return;
             }
+
+            try {
+                const meRes = await fetch('/auth/me');
+                if (meRes.ok) {
+                    const meData = await meRes.json();
+                    if (meData.authenticated && meData.user && meData.user.is_admin) {
+                        simCard.style.display = 'block';
+                        lockCard.style.display = 'none';
+                        loadAccountPool();
+                        loadObservabilityMetrics();
+                        return;
+                    }
+                }
+            } catch(e) {}
+
+            simCard.style.display = 'none';
+            lockCard.style.display = 'block';
             loadAccountPool();
             loadObservabilityMetrics();
         }

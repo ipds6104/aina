@@ -1,4 +1,4 @@
-use crate::adapters::driving::web::auth::is_admin_authorized;
+use crate::adapters::driving::web::auth::is_admin_session_or_key_authorized;
 use crate::adapters::driving::web::state::{SimulationJob, SimulationJobStatus, WebhookServerState};
 use crate::adapters::driving::web::ui::chrono_now_secs;
 use crate::core::domain::{ChatType, Gatekeeper, GatekeeperDecision, IncomingMessage, Sender};
@@ -38,7 +38,7 @@ pub async fn simulate_reset_handler(
     State(state): State<Arc<WebhookServerState>>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    if !is_admin_authorized(&headers, &state.setup_code) {
+    if !is_admin_session_or_key_authorized(&headers, &state) {
         return (
             StatusCode::UNAUTHORIZED,
             Json(json!({
@@ -66,7 +66,7 @@ pub async fn simulate_handler(
     Json(payload): Json<SimulateRequest>,
 ) -> impl IntoResponse {
     // 1. Enforce Admin Authentication
-    if !is_admin_authorized(&headers, &state.setup_code) {
+    if !is_admin_session_or_key_authorized(&headers, &state) {
         return (
             StatusCode::UNAUTHORIZED,
             Json(json!({
@@ -482,7 +482,7 @@ pub async fn simulate_job_status_handler(
     headers: HeaderMap,
     Path(job_id): Path<String>,
 ) -> impl IntoResponse {
-    if !is_admin_authorized(&headers, &state.setup_code) {
+    if !is_admin_session_or_key_authorized(&headers, &state) {
         return (
             StatusCode::UNAUTHORIZED,
             Json(json!({

@@ -15,11 +15,67 @@ pub fn chrono_now_secs() -> i64 {
         .unwrap_or(0)
 }
 
-pub fn render_html(is_authenticated: bool, state: &WebhookServerState, current_model: &str) -> String {
+pub fn render_html(
+    is_authenticated: bool,
+    state: &WebhookServerState,
+    current_model: &str,
+    current_user: Option<&crate::adapters::driving::web::state::AuthenticatedUserSession>,
+) -> String {
     let (badge_class, badge_text, badge_bg) = if is_authenticated {
         ("badge-success", "ONLINE & TERAUTENTIKASI", "#10b981")
     } else {
         ("badge-warning", "PERLU SETUP AUTENTIKASI", "#f59e0b")
+    };
+
+    let sso_bar = if state.oidc_config.enabled {
+        if let Some(user) = current_user {
+            let admin_badge = if user.is_admin {
+                "<span class=\"sso-admin-tag\">ADMIN</span>"
+            } else {
+                ""
+            };
+            let sub_text = format!(
+                "{} • {}",
+                user.nip
+                    .as_deref()
+                    .or(user.preferred_username.as_deref())
+                    .unwrap_or("SSO User"),
+                user.unit_kerja.as_deref().unwrap_or("Pegawai")
+            );
+            format!(
+                r#"
+                <div class="sso-bar">
+                    <div class="sso-user-info">
+                        <span class="sso-avatar">👤</span>
+                        <div class="sso-user-text">
+                            <span class="sso-user-name">{} {}</span>
+                            <span class="sso-user-sub">{}</span>
+                        </div>
+                    </div>
+                    <a href="/auth/logout" class="btn-sso-logout">🚪 Keluar (Logout)</a>
+                </div>
+                "#,
+                html_escape(&user.name),
+                admin_badge,
+                html_escape(&sub_text),
+            )
+        } else {
+            format!(
+                r#"
+                <div class="sso-bar">
+                    <div style="font-size: 0.88rem; color: #cbd5e1;">
+                        🔒 Masuk via SSO untuk mengelola dasbor administratif dan simulator:
+                    </div>
+                    <a href="/auth/login" class="btn-sso-login">
+                        <span>🔐</span> Masuk dengan {}
+                    </a>
+                </div>
+                "#,
+                html_escape(&state.oidc_config.provider_name),
+            )
+        }
+    } else {
+        String::new()
     };
 
     let companion_info = if let Some(c_jid) = &state.companion_jid {
@@ -335,6 +391,8 @@ pub fn render_html(is_authenticated: bool, state: &WebhookServerState, current_m
             <span class="badge {badge_class}">{badge_text}</span>
         </div>
 
+        {sso_bar}
+
         {status_card}
 
         <div id="auth-form-container" class="card" style="{auth_form_display}">
@@ -371,5 +429,14 @@ pub fn render_html(is_authenticated: bool, state: &WebhookServerState, current_m
         badge_text = badge_text,
         status_card = status_card,
         auth_form_display = auth_form_display,
+        sso_bar = sso_bar,
     )
+}
+
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
 }

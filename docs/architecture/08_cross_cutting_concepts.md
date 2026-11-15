@@ -238,3 +238,21 @@ Untuk mendukung interaksi masif hingga 100 pengguna simultan di satu server:
 1. **Bounded Semaphore Isolation**: Kapasitas eksekusi agen dibatasi oleh konfigurasi `AINA_MAX_CONCURRENT_AGENTS` (default 8). Hal ini mencegah lonjakan memori (RAM) yang tidak terkendali pada container.
 2. **Zero-429 Rate Limit Invariant**: Setiap akun di kolam Google Antigravity dibatasi maksimal 2 *in-flight requests* aktif secara bersamaan. Akun yang sedang berada dalam status jeda (*cooldown*) otomatis dilewati.
 3. **RAII Lease Drop**: Manajemen sewa token menggunakan pola RAII Rust (`AccountLease`), sehingga atomisitas hitungan beban terjamin surut kembali secara aman baik saat eksekusi berhasil maupun saat terjadi kegagalan jaringan.
+
+---
+
+## 8.15 Autentikasi Terpusat Web Dashboard (OpenID Connect SSO & Stateless HMAC-SHA256 Session)
+
+Untuk mengamankan akses ke antarmuka web dashboard dan simulator (`/`, `/setup`, `/api/simulate`) di lingkungan produksi satker (misalnya BPS Kabupaten Mempawah via rIDM):
+1. **OIDC Authorization Code Flow dengan PKCE (RFC 7636)**:
+   - Endpoint login `/auth/login` menghasilkan `state` acak 16-byte dan PKCE `code_verifier` 32-byte berkekuatan kriptografi tinggi.
+   - Mengarahkan browser ke endpoint IdP (`/authorize`) dengan `code_challenge_method=S256`.
+2. **Pertukaran Token & Validasi Klaim Identitas (RFC 6749)**:
+   - Endpoint `/auth/callback` menukar `code` ke IdP (`/token`) dan mengambil profil pengguna (`/userinfo`).
+   - Ekstrak atribut identitas: `sub`, `name`, `email`, `preferred_username`, `nip`, `unit_kerja`, dan `role`.
+3. **Sesi Kriptografis Mandiri (Stateless HMAC-SHA256 Cookie)**:
+   - Token sesi dikemas dalam format `{payload_base64}.{signature_base64}` menggunakan tanda tangan HMAC-SHA256 (RFC 2104) dengan waktu kedaluwarsa 7 hari.
+   - Disimpan di peramban sebagai cookie `aina_session` (`HttpOnly; SameSite=Lax; Path=/; Max-Age=604800`).
+   - Zero-dependency: verifikasi sesi dilakukan secara instan tanpa perlu tabel sesi basis data terpisah.
+4. **Otorisasi Administratif Otomatis**:
+   - Jika pengguna SSO terdaftar dalam konfigurasi `OIDC_ADMIN_USERS` atau memiliki peran admin, sesi otomatis memperoleh wewenang administratif (`is_admin=true`), sehingga dapat membuka fitur simulator dan konfigurasi tanpa memasukkan setup code manual.

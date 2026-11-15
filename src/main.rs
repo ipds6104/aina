@@ -201,6 +201,8 @@ async fn main() -> anyhow::Result<()> {
         presence_tracker: Arc::clone(&presence_tracker),
         workspace_dir: std::path::PathBuf::from(&config.agent.workspace_dir),
         brain_dir: crate::core::domain::AuditEngine::default_brain_path(),
+        oidc_config: config.oidc.clone(),
+        oidc_states: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
     });
     let app = create_router(state);
 

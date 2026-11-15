@@ -66,6 +66,7 @@ Tabel berikut menghubungkan nama komponen dengan antarmuka teknis (`IF-xx`) dan 
 | SkillRegistry | Memindai keahlian bawaan dan keahlian kustom di `data/custom-skills`, serta memasang keahlian baru secara otomatis dari repositori Git. | IF-07 | `skills/skill-builder/scripts/` & `src/core/domain/metacognition/` |
 | ActivityReconciler | Merekonsiliasi baseline activities deklaratif (`config/activities.default.json`) dengan custom overrides (`data/activities/`) ke scheduler SQLite. | IF-04, IF-08 | `src/core/domain/activity.rs` |
 | ActivityReflectionEngine | Mengaudit tempo harian, menghitung skor kebosanan (*boredom score*), mengambil cuaca riil via API, dan memodifikasi aktivitas terjadwal secara adaptif. | IF-08, IF-09 | `skills/activity-reflection/` |
+| OidcAuthController | Klien OpenID Connect (OIDC) agnostik kerangka kerja untuk SSO dashboard: manajemen login PKCE, pertukaran token, dan verifikasi sesi stateless HMAC-SHA256. | IF-01, IF-05 | `src/adapters/driving/web/controllers/oidc.rs` |
 
 ---
 

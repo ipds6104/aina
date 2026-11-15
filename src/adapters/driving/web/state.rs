@@ -1,11 +1,38 @@
+use crate::config::settings::OidcConfig;
 use crate::core::domain::{IncomingMessage, PersonaEngine};
 use crate::core::ports::{AgentEnginePort, SessionStorePort};
 use crate::core::usecases::ProcessIncomingMessageUseCase;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+
+#[derive(Debug, Clone)]
+pub struct OidcPendingState {
+    pub code_verifier: String,
+    pub created_at: i64,
+    pub return_to: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthenticatedUserSession {
+    pub sub: String,
+    pub name: String,
+    #[serde(default)]
+    pub email: Option<String>,
+    #[serde(default)]
+    pub preferred_username: Option<String>,
+    #[serde(default)]
+    pub nip: Option<String>,
+    #[serde(default)]
+    pub unit_kerja: Option<String>,
+    #[serde(default)]
+    pub role: Option<String>,
+    #[serde(default)]
+    pub is_admin: bool,
+    pub exp: i64,
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
@@ -71,4 +98,6 @@ pub struct WebhookServerState {
     /// temporary directory. Walking the real per-user brain made the audit
     /// diagnostics endpoint (and its test) depend on ambient machine state.
     pub brain_dir: PathBuf,
+    pub oidc_config: OidcConfig,
+    pub oidc_states: Arc<RwLock<HashMap<String, OidcPendingState>>>,
 }

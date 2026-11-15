@@ -408,5 +408,91 @@ pub fn get_styles() -> &'static str {
             color: #94a3b8;
             font-style: italic;
         }
+
+        /* SSO Integration Bar */
+        .sso-bar {
+            background: rgba(30, 41, 59, 0.7);
+            border: 1px solid rgba(56, 189, 248, 0.25);
+            border-radius: 10px;
+            padding: 12px 18px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            backdrop-filter: blur(8px);
+        }
+        .sso-user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .sso-avatar {
+            font-size: 1.4rem;
+            background: rgba(56, 189, 248, 0.15);
+            border-radius: 50%;
+            width: 38px;
+            height: 38px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .sso-user-text {
+            display: flex;
+            flex-direction: column;
+            line-height: 1.3;
+        }
+        .sso-user-name {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: #f8fafc;
+        }
+        .sso-user-sub {
+            font-size: 0.78rem;
+            color: #94a3b8;
+        }
+        .sso-admin-tag {
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 4px;
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.4);
+            margin-left: 6px;
+        }
+        .btn-sso-login {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%);
+            color: #ffffff;
+            text-decoration: none;
+            font-size: 0.88rem;
+            font-weight: 600;
+            padding: 8px 16px;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);
+            transition: all 0.2s ease;
+        }
+        .btn-sso-login:hover {
+            background: linear-gradient(135deg, #0369a1 0%, #1d4ed8 100%);
+            box-shadow: 0 6px 16px rgba(2, 132, 199, 0.4);
+            transform: translateY(-1px);
+        }
+        .btn-sso-logout {
+            color: #f87171;
+            font-size: 0.82rem;
+            text-decoration: none;
+            font-weight: 600;
+            padding: 6px 12px;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+        .btn-sso-logout:hover {
+            background: rgba(239, 68, 68, 0.1);
+        }
     "#
 }

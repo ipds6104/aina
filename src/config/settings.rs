@@ -12,6 +12,8 @@ pub struct AppConfig {
     pub agent: AgentConfig,
     pub scheduler: SchedulerConfig,
     pub database: DatabaseConfig,
+    #[serde(default)]
+    pub oidc: OidcConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -158,6 +160,59 @@ fn default_db_path() -> String {
     "data/aina.db".to_string()
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct OidcConfig {
+    #[serde(default = "default_oidc_enabled")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub issuer_url: Option<String>,
+    #[serde(default)]
+    pub client_id: Option<String>,
+    #[serde(default)]
+    pub client_secret: Option<String>,
+    #[serde(default)]
+    pub redirect_uri: Option<String>,
+    #[serde(default = "default_oidc_scopes")]
+    pub scopes: String,
+    #[serde(default = "default_oidc_provider_name")]
+    pub provider_name: String,
+    #[serde(default)]
+    pub session_secret: Option<String>,
+    #[serde(default)]
+    pub admin_users: Option<Vec<String>>,
+    #[serde(default)]
+    pub allowed_domains: Option<Vec<String>>,
+}
+
+fn default_oidc_enabled() -> bool {
+    false
+}
+
+fn default_oidc_scopes() -> String {
+    "openid profile email".to_string()
+}
+
+fn default_oidc_provider_name() -> String {
+    "Single Sign-On (SSO)".to_string()
+}
+
+impl Default for OidcConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_oidc_enabled(),
+            issuer_url: None,
+            client_id: None,
+            client_secret: None,
+            redirect_uri: None,
+            scopes: default_oidc_scopes(),
+            provider_name: default_oidc_provider_name(),
+            session_secret: None,
+            admin_users: None,
+            allowed_domains: None,
+        }
+    }
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
@@ -197,6 +252,7 @@ impl Default for AppConfig {
             database: DatabaseConfig {
                 path: default_db_path(),
             },
+            oidc: OidcConfig::default(),
         }
     }
 }
@@ -389,6 +445,59 @@ impl AppConfig {
         if let Ok(val) = env::var("AINA_LOCALE").or_else(|_| env::var("LANG")).or_else(|_| env::var("LC_ALL")) {
             if !val.trim().is_empty() {
                 self.app.locale = val;
+            }
+        }
+
+        // OIDC / Single Sign-On (SSO) overrides (Framework-Agnostic)
+        if let Ok(val) = env::var("OIDC_ENABLED") {
+            let lower = val.to_lowercase();
+            self.oidc.enabled = lower == "true" || lower == "1" || lower == "yes";
+        }
+        if let Ok(val) = env::var("OIDC_ISSUER_URL") {
+            if !val.trim().is_empty() {
+                self.oidc.issuer_url = Some(val.trim().to_string());
+            }
+        }
+        if let Ok(val) = env::var("OIDC_CLIENT_ID") {
+            if !val.trim().is_empty() {
+                self.oidc.client_id = Some(val.trim().to_string());
+            }
+        }
+        if let Ok(val) = env::var("OIDC_CLIENT_SECRET") {
+            if !val.trim().is_empty() {
+                self.oidc.client_secret = Some(val.trim().to_string());
+            }
+        }
+        if let Ok(val) = env::var("OIDC_REDIRECT_URI").or_else(|_| env::var("OIDC_REDIRECT_URL")) {
+            if !val.trim().is_empty() {
+                self.oidc.redirect_uri = Some(val.trim().to_string());
+            }
+        }
+        if let Ok(val) = env::var("OIDC_SCOPES") {
+            if !val.trim().is_empty() {
+                self.oidc.scopes = val.trim().to_string();
+            }
+        }
+        if let Ok(val) = env::var("OIDC_PROVIDER_NAME") {
+            if !val.trim().is_empty() {
+                self.oidc.provider_name = val.trim().to_string();
+            }
+        }
+        if let Ok(val) = env::var("OIDC_SESSION_SECRET").or_else(|_| env::var("SESSION_SECRET")) {
+            if !val.trim().is_empty() {
+                self.oidc.session_secret = Some(val.trim().to_string());
+            }
+        }
+        if let Ok(val) = env::var("OIDC_ADMIN_USERS") {
+            if !val.trim().is_empty() {
+                let list: Vec<String> = val.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+                self.oidc.admin_users = Some(list);
+            }
+        }
+        if let Ok(val) = env::var("OIDC_ALLOWED_DOMAINS") {
+            if !val.trim().is_empty() {
+                let list: Vec<String> = val.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+                self.oidc.allowed_domains = Some(list);
             }
         }
     }

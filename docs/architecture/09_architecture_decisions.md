@@ -175,3 +175,16 @@ Bab ini mencatat keputusan-keputusan arsitektur penting (*Architecture Decision 
 - **Konsekuensi Positif**:
   Server stabil bebas OOM, antrean pesan tertib, dan bebas dari lonjakan error batas kuota 429.
 - **Risiko yang Muncul**: RISK-13
+
+---
+
+### ADR-014: Integrasi Single Sign-On (SSO) OpenID Connect (OIDC) Agnostik Kerangka Kerja
+
+- **Status**: Diterima (*Accepted*)
+- **Konteks**:
+  Akses ke antarmuka web dashboard dan simulator (`/`, `/setup`, `/api/simulate`) membutuhkan mekanisme autentikasi terpusat berstandar industri untuk karyawan dan administrator satker (misal BPS Mempawah via rIDM). Namun sebagai kerangka kerja upstream sumber terbuka, Aina dilarang memuat dependensi keras (*hardcoded*) terhadap domain, instansi, atau penyedia identitas tertentu.
+- **Keputusan**:
+  Mengimplementasikan klien OpenID Connect (OIDC) Authorization Code Flow dengan PKCE (RFC 7636) dan session cookie bertanda tangan kriptografis HMAC-SHA256 (RFC 2104) yang 100% agnostik. Seluruh parameter identitas dikonfigurasikan via variabel lingkungan (`OIDC_ENABLED`, `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URI`, `OIDC_PROVIDER_NAME`, `OIDC_ADMIN_USERS`, `OIDC_ALLOWED_DOMAINS`). Di lingkungan deployment BPS Mempawah, Aina dihubungkan ke penyedia identitas rIDM (`https://auth.dvlpid.my.id/t/bps`) menggunakan client `aina-dashboard`.
+- **Konsekuensi Positif**:
+  Integrasi SSO mulus bagi pegawai instansi tanpa kata sandi manual, keamanan sesi berbasis HMAC-SHA256 tanpa dependensi library eksternal berlebih, dan kode sumber upstream tetap portabel untuk Keycloak, Authentik, Okta, maupun Google Workspace.
+- **Risiko yang Muncul**: RISK-14

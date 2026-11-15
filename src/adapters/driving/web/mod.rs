@@ -40,6 +40,10 @@ pub fn create_router(state: Arc<WebhookServerState>) -> Router {
         .route("/api/auth/oauth/init", post(api_oauth_init_handler))
         .route("/api/auth/oauth/exchange", post(api_oauth_exchange_handler))
         .route("/api/auth/verify", post(api_verify_admin_handler))
+        .route("/auth/login", get(oidc_login_handler))
+        .route("/auth/callback", get(oidc_callback_handler))
+        .route("/auth/me", get(oidc_me_handler))
+        .route("/auth/logout", get(oidc_logout_handler))
         .route("/api/simulate", post(simulate_handler))
         .route("/api/simulate/reset", post(simulate_reset_handler))
         .route("/api/simulate/job/{id}", get(simulate_job_status_handler))
@@ -742,6 +746,8 @@ mod tests {
             presence_tracker: Arc::new(crate::core::domain::PresenceTracker::new()),
             workspace_dir: temp_dir.clone(),
             brain_dir: temp_dir.join("brain"),
+            oidc_config: crate::config::settings::OidcConfig::default(),
+            oidc_states: Arc::new(RwLock::new(HashMap::new())),
         });
 
         let app = create_router(state);
@@ -856,6 +862,8 @@ mod tests {
             presence_tracker: Arc::new(crate::core::domain::PresenceTracker::new()),
             workspace_dir: temp_dir.clone(),
             brain_dir: temp_dir.join("brain"),
+            oidc_config: crate::config::settings::OidcConfig::default(),
+            oidc_states: Arc::new(RwLock::new(HashMap::new())),
         });
 
         let app = create_router(state);

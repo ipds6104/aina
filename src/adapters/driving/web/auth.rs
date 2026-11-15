@@ -49,6 +49,14 @@ pub fn is_api_authorized(
         }
     }
 
+    // Check if authenticated admin user session is active via OIDC cookie
+    let secret = crate::adapters::driving::web::controllers::oidc::resolve_session_secret(state);
+    if let Some(session) = crate::adapters::driving::web::controllers::oidc::extract_session_from_headers(headers, &secret) {
+        if session.is_admin {
+            return true;
+        }
+    }
+
     false
 }
 
@@ -69,6 +77,24 @@ pub fn is_admin_authorized(headers: &HeaderMap, expected_code: &str) -> bool {
             if bearer.trim() == expected {
                 return true;
             }
+        }
+    }
+
+    false
+}
+
+pub fn is_admin_session_or_key_authorized(
+    headers: &HeaderMap,
+    state: &WebhookServerState,
+) -> bool {
+    if is_admin_authorized(headers, &state.setup_code) {
+        return true;
+    }
+
+    let secret = crate::adapters::driving::web::controllers::oidc::resolve_session_secret(state);
+    if let Some(session) = crate::adapters::driving::web::controllers::oidc::extract_session_from_headers(headers, &secret) {
+        if session.is_admin {
+            return true;
         }
     }
 

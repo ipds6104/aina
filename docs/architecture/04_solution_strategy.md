@@ -171,3 +171,12 @@ Untuk mencegah rekayasa sosial di mana pihak luar mengaku sebagai admin atau ata
 Menghadapi skenario 100 pengguna chat serentak:
 1. **Bounded Semaphore Tokio**: Membatasi agen serentak maksimal 8 proses (`AINA_MAX_CONCURRENT_AGENTS`). Pesan ke-9 dan seterusnya mengantre secara tertib di memori tanpa memakan alokasi RAM proses biner baru.
 2. **Token Lease Aware**: Kolam akun menyaring akun yang sedang cooldown, dan memprioritaskan akun dengan `in_flight < 2`. Pola RAII guard `AccountLease` otomatis menurunkan hitungan in-flight begitu giliran selesai atau error.
+
+---
+
+## 4.9 Autentikasi Agnostik Berstandar Industri (OpenID Connect SSO)
+
+Untuk memfasilitasi akses dasbor web bagi pegawai dan admin instansi tanpa mengorbankan sifat agnostik kerangka kerja Aina:
+1. **Pemisahan Konfigurasi Lingkungan dari Inti Kode**: Seluruh rincian penyedia identitas (URL issuer, client ID, client secret, redirect URI) disuntikkan via environment variable, tanpa ada hardcode domain atau entitas institusi di kode sumber.
+2. **Standar OIDC Authorization Code Flow & PKCE**: Memanfaatkan standar industri RFC 6749 dan RFC 7636 untuk pertukaran kredensial secara aman.
+3. **Stateless Signed Session Token**: Sesi web ditandatangani menggunakan HMAC-SHA256 tanpa membebani basis data dan dapat diverifikasi secara mandiri.

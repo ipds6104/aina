@@ -365,3 +365,33 @@ sequenceDiagram
     Admin->>DB: aina user reject-claim <jid> --reason "Penyamaran"
     DB-->>Admin: Status Disetel REJECTED
 ```
+
+---
+
+## 6.8 Skenario 8: Alur Autentikasi Single Sign-On (OpenID Connect PKCE Flow)
+
+Skenario ini menunjukkan bagaimana pengguna web dasbor masuk secara aman menggunakan akun instansi (rIDM) tanpa kata sandi manual:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Pegawai as Pegawai BPS (Browser)
+    participant Aina as Aina Web Dashboard (/auth/login)
+    participant IdP as rIDM Central IdP (auth.dvlpid.my.id)
+    participant Callback as Aina Callback (/auth/callback)
+
+    Pegawai->>Aina: Klik "Masuk dengan SSO Pegawai BPS Mempawah"
+    Aina->>Aina: Generate random state & PKCE code_verifier (S256)
+    Aina-->>Pegawai: 303 Redirect ke IdP /authorize (dengan state & code_challenge)
+    Pegawai->>IdP: Buka halaman login rIDM & verifikasi kredensial / Passkey
+    IdP-->>Pegawai: 303 Redirect kembali ke /auth/callback?code=...&state=...
+    Pegawai->>Callback: Akses /auth/callback?code=...&state=...
+    Callback->>Callback: Validasi parameter state dengan cache memori
+    Callback->>IdP: POST /token (tukar authorization_code & code_verifier)
+    IdP-->>Callback: Respon Token (access_token, id_token)
+    Callback->>IdP: GET /userinfo (Bearer access_token)
+    IdP-->>Callback: Data Profil Pegawai (sub, nip, name, unit_kerja, role)
+    Callback->>Callback: Evaluasi status admin & buat sesi HMAC-SHA256
+    Callback-->>Pegawai: Set-Cookie: aina_session=... & 303 Redirect ke /
+    Pegawai->>Aina: Buka Dashboard dengan Sesi Terautentikasi SSO
+```

@@ -38,6 +38,9 @@ Bab ini menyajikan daftar istilah penting yang digunakan di seluruh sistem dan d
 | **Tawaqquf** | Sikap menahan diri untuk tidak membagikan data kantor atau dokumen rahasia kepada orang asing di grup sebelum mendapat persetujuan pemilik bot. |
 | **SQLite FTS5** | Teknologi database lokal berkecepatan tinggi yang mampu mencari kata di puluhan ribu riwayat obrolan dalam waktu hitungan milidetik. |
 | **TurnCapability** | Tiket otorisasi berumur pendek (TTL 10 menit) yang mengikat nomor pengirim pesan asli dan tingkat wewenangnya ke setiap pemanggilan tool oleh AI. |
+| **OpenID Connect (OIDC)** | Protokol standar industri berbasis OAuth 2.0 untuk autentikasi identitas pengguna terpusat secara aman antar aplikasi. |
+| **Single Sign-On (SSO)** | Mekanisme di mana pengguna cukup masuk sekali di satu gerbang identitas (seperti rIDM) untuk mengakses berbagai aplikasi kerja tanpa memasukkan sandi berulang kali. |
+| **PKCE (RFC 7636)** | *Proof Key for Code Exchange*, pengamanan kriptografis untuk alur otorisasi kode agar kode otorisasi tidak dapat dibajak di jalur peramban. |
 | **Non-Repudiation (Anti-Sangkalan)** | Jaminan hukum dan matematis bahwa suatu aksi tool yang dilakukan AI tidak dapat disangkal oleh pihak yang memerintahkannya (NIST SP 800-53 AU-10). |
 | **Rantai Hash SHA-256 (*Hash Chaining*)** | Metode penguncian log audit bergaya blockchain di mana setiap blok memuat hash dari blok sebelumnya, sehingga manipulasi baris data lama akan mematahkan seluruh rantai hash. |
 | **Zero Implicit Trust** | Doktrin keamanan di mana tidak ada nomor WhatsApp atau keanggotaan grup yang dipercaya secara bawaan tanpa verifikasi eksplisit oleh Companion. |
