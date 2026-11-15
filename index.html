@@ -1,0 +1,1793 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aina (あいな) — AI Co-Worker &amp; Company Brain BPS Mempawah</title>
+
+  <!-- Pretendard Variable Font -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+  <!-- JetBrains Mono -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap">
+  <!-- Prism.js Tomorrow Theme -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+
+  <style>
+
+    /* ===== Reset ===== */
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    /* ===== CSS Variables ===== */
+    :root {
+      --bg: #ffffff;
+      --text: #333333;
+      --text-secondary: #666666;
+      --accent: #1e3a5f;
+      --accent-light: #2c5282;
+      --accent-gold: #c8a45c;
+      --accent-gold-light: #d4b97a;
+      --surface: #f4f5f7;
+      --border: #e0e3e8;
+      --code-bg: #1e2736;
+      --hint-bg: #f0f1f4;
+      --hint-border: #d0d3d8;
+      --hint-color: #999;
+      --navy-bar: #1e3a5f;
+      --font-body: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    /* ===== Body ===== */
+    body {
+      font-family: var(--font-body);
+      background: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* ===== Progress Bar ===== */
+    .progress-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 3px;
+      background: var(--accent-gold);
+      transition: width 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      z-index: 1000;
+    }
+
+    /* ===== Slide Counter ===== */
+    .slide-counter {
+      position: fixed;
+      bottom: 24px;
+      right: 32px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--text-secondary);
+      z-index: 900;
+      user-select: none;
+    }
+
+    /* ===== Keyboard Hints ===== */
+    .hint {
+      position: fixed;
+      bottom: 24px;
+      left: 32px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      z-index: 900;
+      user-select: none;
+    }
+
+    .hint kbd {
+      display: inline-block;
+      background: var(--hint-bg);
+      border: 1px solid var(--hint-border);
+      color: var(--hint-color);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      line-height: 1.6;
+    }
+
+    .hint span {
+      color: var(--hint-color);
+      font-size: 11px;
+      margin-right: 4px;
+    }
+
+    /* ===== Fullscreen Button ===== */
+    .fullscreen-btn {
+      position: fixed;
+      top: 16px;
+      right: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      font-family: var(--font-body);
+      font-size: 13px;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      z-index: 900;
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+
+    .fullscreen-btn:hover {
+      background: var(--border);
+      color: var(--text);
+    }
+
+    /* ===== Deck & Slides ===== */
+    .deck {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+    }
+
+    .slide {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 60px 80px;
+      opacity: 0;
+      visibility: hidden;
+      overflow-y: auto;
+      transition: opacity 0.5s ease, visibility 0.5s ease;
+    }
+
+    .slide.active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    /* Navy accent bar at top of each slide */
+    .slide::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: var(--navy-bar);
+    }
+
+    /* ===== Stagger Animations ===== */
+    .slide.active .a {
+      animation: staggerIn 0.6s ease forwards;
+      opacity: 0;
+      transform: translateY(18px);
+    }
+
+    .slide.active .a:nth-child(1) { animation-delay: 0.05s; }
+    .slide.active .a:nth-child(2) { animation-delay: 0.12s; }
+    .slide.active .a:nth-child(3) { animation-delay: 0.19s; }
+    .slide.active .a:nth-child(4) { animation-delay: 0.26s; }
+    .slide.active .a:nth-child(5) { animation-delay: 0.33s; }
+    .slide.active .a:nth-child(6) { animation-delay: 0.40s; }
+    .slide.active .a:nth-child(7) { animation-delay: 0.47s; }
+    .slide.active .a:nth-child(8) { animation-delay: 0.54s; }
+    .slide.active .a:nth-child(9) { animation-delay: 0.61s; }
+    .slide.active .a:nth-child(10) { animation-delay: 0.68s; }
+    .slide.active .a:nth-child(11) { animation-delay: 0.75s; }
+    .slide.active .a:nth-child(12) { animation-delay: 0.82s; }
+
+    @keyframes staggerIn {
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* ===== Typography ===== */
+    h1 {
+      font-size: 3.4rem;
+      font-weight: 700;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+      margin-bottom: 16px;
+      color: var(--accent);
+    }
+
+    h2 {
+      font-size: 2.3rem;
+      font-weight: 700;
+      line-height: 1.2;
+      letter-spacing: -0.015em;
+      margin-bottom: 12px;
+      color: var(--accent);
+    }
+
+    h3 {
+      font-size: 1.4rem;
+      font-weight: 600;
+      line-height: 1.3;
+      margin-bottom: 8px;
+      color: var(--text);
+    }
+
+    p {
+      font-size: 1.2rem;
+      line-height: 1.7;
+      color: var(--text-secondary);
+      max-width: 700px;
+    }
+
+    .hi {
+      color: var(--accent-gold);
+    }
+
+    /* ===== Slide-specific Layouts ===== */
+
+    /* Title Slide */
+    .slide-title {
+      text-align: center;
+    }
+
+    .slide-title h1 {
+      font-size: 3.6rem;
+      color: var(--accent);
+    }
+
+    .slide-title .subtitle {
+      font-size: 1.35rem;
+      color: var(--text-secondary);
+      margin-bottom: 24px;
+      font-weight: 400;
+    }
+
+    .slide-title .date {
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      color: var(--hint-color);
+      letter-spacing: 0.05em;
+    }
+
+    .slide-title .tag {
+      display: inline-block;
+      background: var(--accent);
+      color: #fff;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 4px 14px;
+      border-radius: 100px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+
+    /* Gold underline decoration for title */
+    .slide-title h1::after {
+      content: '';
+      display: block;
+      width: 80px;
+      height: 3px;
+      background: var(--accent-gold);
+      margin: 16px auto 0;
+    }
+
+    /* Agenda / TOC */
+    .toc-list {
+      list-style: none;
+      text-align: left;
+      width: 100%;
+      max-width: 580px;
+    }
+
+    .toc-list li {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 1.2rem;
+      color: var(--text);
+    }
+
+    .toc-list li:last-child {
+      border-bottom: none;
+    }
+
+    .toc-num {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: var(--accent-gold);
+      font-weight: 600;
+      min-width: 28px;
+    }
+
+    /* Content Slide */
+    .content-body {
+      text-align: left;
+      max-width: 740px;
+      width: 100%;
+    }
+
+    .content-body h2 {
+      margin-bottom: 20px;
+    }
+
+    .content-body h2::after {
+      content: '';
+      display: block;
+      width: 48px;
+      height: 3px;
+      background: var(--accent-gold);
+      margin-top: 10px;
+    }
+
+    .content-body p {
+      margin-bottom: 16px;
+    }
+
+    .content-body ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    .content-body ul li {
+      position: relative;
+      padding-left: 24px;
+      margin-bottom: 10px;
+      font-size: 1.15rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    .content-body ul li::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 10px;
+      width: 8px;
+      height: 8px;
+      background: var(--accent-gold);
+      border-radius: 2px;
+    }
+
+    /* Quote Slide */
+    .slide-quote {
+      text-align: center;
+      max-width: 800px;
+    }
+
+    .quote-mark {
+      font-size: 5rem;
+      color: var(--accent-gold);
+      line-height: 1;
+      margin-bottom: -10px;
+      font-family: Georgia, serif;
+    }
+
+    .quote-text {
+      font-size: 1.85rem;
+      font-weight: 500;
+      line-height: 1.5;
+      color: var(--text);
+      margin-bottom: 24px;
+      font-style: italic;
+    }
+
+    .quote-attr {
+      font-size: 1rem;
+      color: var(--text-secondary);
+    }
+
+    .quote-attr strong {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* Comparison Slide */
+    .comparison {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+      width: 100%;
+      max-width: 920px;
+    }
+
+    .comparison-col {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 32px;
+      border-top: 3px solid var(--border);
+    }
+
+    .comparison-col.before {
+      border-top-color: var(--text-secondary);
+    }
+
+    .comparison-col.after {
+      border-top-color: var(--accent);
+    }
+
+    .comparison-col h3 {
+      margin-bottom: 16px;
+      font-size: 1.1rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .comparison-col.before h3 {
+      color: var(--text-secondary);
+    }
+
+    .comparison-col.after h3 {
+      color: var(--accent);
+    }
+
+    .comparison-col ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    .comparison-col ul li {
+      padding: 8px 0;
+      font-size: 1rem;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border);
+      line-height: 1.5;
+    }
+
+    .comparison-col ul li:last-child {
+      border-bottom: none;
+    }
+
+    .comparison-col.before ul li::before {
+      content: '\2717  ';
+      color: #c53030;
+    }
+
+    .comparison-col.after ul li::before {
+      content: '\2713  ';
+      color: #276749;
+    }
+
+    /* Flow / Steps */
+    .steps {
+      display: flex;
+      align-items: flex-start;
+      gap: 0;
+      width: 100%;
+      max-width: 960px;
+      justify-content: center;
+    }
+
+    .step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      flex: 1;
+      max-width: 200px;
+    }
+
+    .step-num {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 1.1rem;
+      margin-bottom: 14px;
+      flex-shrink: 0;
+    }
+
+    .step-title {
+      font-weight: 600;
+      font-size: 1.05rem;
+      margin-bottom: 6px;
+      color: var(--text);
+    }
+
+    .step-desc {
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    .step-arrow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding-top: 12px;
+      color: var(--accent-gold);
+      font-size: 1.5rem;
+      flex-shrink: 0;
+      width: 48px;
+    }
+
+    /* Cards */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      width: 100%;
+      max-width: 920px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 28px 24px;
+      border-top: 3px solid var(--accent);
+      transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+
+    .card:hover {
+      border-top-color: var(--accent-gold);
+      transform: translateY(-2px);
+    }
+
+    .card-icon {
+      font-size: 2rem;
+      margin-bottom: 14px;
+      display: block;
+    }
+
+    .card h3 {
+      font-size: 1.1rem;
+      margin-bottom: 8px;
+      color: var(--accent);
+    }
+
+    .card p {
+      font-size: 0.92rem;
+      color: var(--text-secondary);
+      line-height: 1.55;
+    }
+
+    /* Bar Chart */
+    .chart {
+      display: flex;
+      align-items: flex-end;
+      gap: 24px;
+      height: 240px;
+      width: 100%;
+      max-width: 620px;
+      padding: 0 20px;
+    }
+
+    .chart-bar-group {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      height: 100%;
+      justify-content: flex-end;
+    }
+
+    .chart-bar {
+      width: 52px;
+      background: var(--accent);
+      border-radius: 4px 4px 0 0;
+      transition: height 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      position: relative;
+    }
+
+    .chart-bar-group:nth-child(1) .chart-bar { opacity: 0.50; }
+    .chart-bar-group:nth-child(2) .chart-bar { opacity: 0.65; }
+    .chart-bar-group:nth-child(3) .chart-bar { opacity: 0.80; }
+    .chart-bar-group:nth-child(4) .chart-bar { opacity: 0.92; }
+    .chart-bar-group:nth-child(5) .chart-bar { opacity: 1.00; }
+
+    .chart-value {
+      font-family: var(--font-mono);
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .chart-label {
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      margin-top: 10px;
+      text-align: center;
+    }
+
+    .chart-baseline {
+      width: 100%;
+      max-width: 620px;
+      height: 1px;
+      background: var(--border);
+      margin-top: 0;
+    }
+
+    /* Code Block */
+    .code-container {
+      width: 100%;
+      max-width: 740px;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .code-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 18px;
+      background: #16202e;
+      border-bottom: 1px solid #2a3a4e;
+    }
+
+    .code-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .code-dot.red { background: #ef4444; }
+    .code-dot.yellow { background: #eab308; }
+    .code-dot.green { background: #22c55e; }
+
+    .code-filename {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: #8899aa;
+      margin-left: 8px;
+    }
+
+    .code-container pre {
+      margin: 0;
+      padding: 20px;
+      overflow-x: auto;
+      max-height: 50vh;
+      overflow-y: auto;
+    }
+
+    .code-container pre code {
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      line-height: 1.7;
+    }
+
+    /* Override Prism background */
+    .code-container pre[class*="language-"] {
+      background: var(--code-bg);
+      margin: 0;
+      border-radius: 0;
+    }
+
+    /* Image Placeholder */
+    .image-placeholder {
+      width: 100%;
+      max-width: 720px;
+      height: 360px;
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      color: var(--text-secondary);
+      font-size: 1rem;
+      background: var(--surface);
+    }
+
+    .image-placeholder .placeholder-icon {
+      font-size: 3rem;
+    }
+
+    .image-placeholder .placeholder-label {
+      font-size: 0.95rem;
+      color: var(--hint-color);
+    }
+
+    .image-placeholder .placeholder-size {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--hint-color);
+    }
+
+    /* Closing Slide */
+    .slide-closing {
+      text-align: center;
+    }
+
+    .slide-closing h1 {
+      font-size: 3.8rem;
+      margin-bottom: 12px;
+      color: var(--accent);
+    }
+
+    .slide-closing h1::after {
+      content: '';
+      display: block;
+      width: 80px;
+      height: 3px;
+      background: var(--accent-gold);
+      margin: 16px auto 0;
+    }
+
+    .slide-closing p {
+      text-align: center;
+      margin: 0 auto;
+    }
+
+    .contact-links {
+      display: flex;
+      gap: 24px;
+      margin-top: 32px;
+      justify-content: center;
+    }
+
+    .contact-link {
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      color: var(--accent);
+      text-decoration: none;
+      padding: 8px 20px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .contact-link:hover {
+      border-color: var(--accent);
+      background: rgba(30, 58, 95, 0.06);
+      color: var(--accent);
+    }
+
+    /* ===== Speaker Notes Panel ===== */
+    .notes-panel {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: none;
+      grid-template-columns: 2fr 1fr;
+      gap: 1px;
+      z-index: 950;
+      max-height: 35vh;
+      overflow-y: auto;
+    }
+
+    .notes-panel.open {
+      display: grid;
+    }
+
+    .notes-current,
+    .notes-preview {
+      padding: 20px 28px;
+    }
+
+    .notes-preview {
+      border-left: 1px solid var(--border);
+    }
+
+    .notes-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--hint-color);
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+
+    .notes-slide-num {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--accent);
+      margin-bottom: 8px;
+    }
+
+    .notes-text {
+      font-size: 0.95rem;
+      line-height: 1.6;
+      color: var(--text-secondary);
+    }
+
+    .notes-next-title {
+      font-size: 0.95rem;
+      color: var(--text-secondary);
+    }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 768px) {
+      .slide {
+        padding: 40px 28px;
+      }
+
+      h1 {
+        font-size: 2rem;
+      }
+
+      h2 {
+        font-size: 1.5rem;
+      }
+
+      .comparison {
+        grid-template-columns: 1fr;
+        gap: 20px;
+      }
+
+      .cards {
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+
+      .steps {
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .step-arrow {
+        transform: rotate(90deg);
+        width: auto;
+        padding: 0;
+      }
+
+      .chart {
+        gap: 12px;
+        height: 180px;
+      }
+
+      .chart-bar {
+        width: 32px;
+      }
+
+      .hint {
+        display: none;
+      }
+
+      .notes-panel {
+        grid-template-columns: 1fr;
+      }
+
+      .notes-preview {
+        border-left: none;
+        border-top: 1px solid var(--border);
+      }
+    }
+
+    /* ===== Print / PDF Export ===== */
+    @media print {
+      body {
+        overflow: visible;
+        background: #ffffff;
+      }
+
+      .progress-bar,
+      .slide-counter,
+      .hint,
+      .fullscreen-btn,
+      .notes-panel {
+        display: none !important;
+      }
+
+      .deck {
+        width: auto;
+        height: auto;
+        position: static;
+      }
+
+      .slide {
+        position: relative;
+        opacity: 1;
+        visibility: visible;
+        page-break-after: always;
+        page-break-inside: avoid;
+        width: 100vw;
+        height: 100vh;
+        padding: 60px 80px;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      .slide .a {
+        opacity: 1 !important;
+        transform: none !important;
+        animation: none !important;
+      }
+
+      @page {
+        size: landscape;
+        margin: 0;
+      }
+    }
+  
+
+    /* Enterprise Custom Enhancements */
+    .badge-hero {
+      background: #e2e8f0;
+      color: var(--accent);
+      border: 1px solid #cbd5e1;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+    .cards-4 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      max-width: 1120px;
+      width: 100%;
+      margin: 16px auto 0;
+    }
+    .card-small {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-top: 3px solid var(--accent);
+      border-radius: 8px;
+      padding: 20px 16px;
+      text-align: left;
+    }
+    .card-small h3 {
+      font-size: 1.15rem;
+      margin-bottom: 8px;
+      color: var(--accent);
+    }
+    .card-small p {
+      font-size: 0.88rem;
+      line-height: 1.45;
+      color: var(--text-secondary);
+    }
+    .chat-bubble-mockup {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-left: 4px solid #16a34a;
+      border-radius: 8px;
+      padding: 16px 20px;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      color: #1e3a5f;
+      text-align: left;
+      font-family: var(--font-body);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+      margin: 16px auto 0;
+      max-width: 900px;
+    }
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      max-width: 1040px;
+      width: 100%;
+      margin: 20px auto 0;
+    }
+    .metric-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-top: 3px solid var(--accent-gold);
+      border-radius: 8px;
+      padding: 18px 14px;
+      text-align: center;
+    }
+    .metric-number {
+      font-family: var(--font-mono);
+      font-size: 2.1rem;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1.1;
+      margin-bottom: 4px;
+    }
+    .metric-label {
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      font-weight: 500;
+      line-height: 1.3;
+    }
+    .quadrant-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      max-width: 1080px;
+      width: 100%;
+      margin: 16px auto 0;
+    }
+    .quadrant-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--accent);
+      border-radius: 8px;
+      padding: 20px 22px;
+      text-align: left;
+    }
+    .quadrant-card h3 {
+      font-size: 1.25rem;
+      color: var(--accent);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .quadrant-card ul {
+      margin-left: 18px;
+      font-size: 0.9rem;
+      color: var(--text);
+      line-height: 1.45;
+    }
+    
+  </style>
+</head>
+<body>
+
+  <!-- Progress Bar -->
+  <div class="progress-bar" id="progress"></div>
+
+  <!-- Slide Counter -->
+  <div class="slide-counter" id="counter"></div>
+
+  <!-- Keyboard Navigation Hints -->
+  <div class="hint">
+    <kbd>&larr;</kbd><kbd>&rarr;</kbd><span>Navigasi</span>
+    <kbd>Space</kbd><span>Lanjut</span>
+    <kbd>S</kbd><span>Notes</span>
+    <kbd>F</kbd><span>Layar Penuh</span>
+  </div>
+
+  <!-- Fullscreen Button -->
+  <button class="fullscreen-btn" onclick="toggleFullscreen()" title="Toggle Fullscreen (F)">Layar Penuh</button>
+
+  <!-- Main Slide Deck (16 Slides) -->
+  <div class="deck">
+
+    <!-- ==========================================
+         SLIDE 1: Cover
+         ========================================== -->
+    <div class="slide active" data-notes="Selamat pagi/siang Bapak, Ibu Kepala Satker, Ketua Tim, dan rekan-rekan BPS se-Kalimantan Barat. Hari ini kami membagikan pengalaman nyata BPS Kabupaten Mempawah dalam menjawab tantangan keterbatasan pegawai melalui Aina—sebuah AI Co-Worker mandiri yang bekerja mendampingi staf dalam tugas administrasi, monitoring lapangan, dan pengelolaan pengetahuan institusi.">
+      <div class="slide-title">
+        <div class="a tag">INOVASI TEKNOLOGI STATISTIK BPS</div>
+        <h1 class="a">Aina (あいな): AI Co-Worker<br><span style="color: var(--accent-gold);">&amp; Company Brain BPS Mempawah</span></h1>
+        <p class="a subtitle">
+          Menjawab Keterbatasan SDM Satker Daerah Melalui Otomasi Agentik<br>
+          Berbasis Google Antigravity CLI &amp; Rust Core
+        </p>
+        <p class="a date">Ihza Fikri Zaki Karunia, S.Tr.Stat. &bull; BPS Kabupaten Mempawah &bull; 2026</p>
+      </div>
+    </div>
+
+    <!-- ==========================================
+         SLIDE 2: Realitas & Dilema Satker BPS di Daerah
+         ========================================== -->
+    <div class="slide" data-notes="Kita semua di daerah merasakan hal yang sama: tuntutan kegiatan statistik semakin masif, namun jumlah pegawai organik kita terbatas. Akibatnya, tenaga ahli dan statistisi kita yang seharusnya fokus pada kendali mutu data justru habis waktunya untuk urusan administratif rutin.">
+      <div class="content-body">
+        <div class="a badge-hero">&#9888;&#65039; TANTANGAN OPERASIONAL DAERAH</div>
+        <h2 class="a">Realitas Lapangan: <span class="hi">Beban Bertambah, SDM Terbatas</span></h2>
+        <p class="a">
+          Satuan kerja BPS di tingkat Kabupaten/Kota menghadapi tantangan ganda: tuntutan output statistik berkualitas tinggi yang terus bertambah, berhadapan langsung dengan keterbatasan jumlah aparatur organik.
+        </p>
+        <ul>
+          <li class="a"><strong>Volume Kegiatan Masif:</strong> Sensus Ekonomi 2026, Sakernas, Susenas, Seruti, dan survei rutin berjalan paralel sepanjang tahun.</li>
+          <li class="a"><strong>Jumlah Pegawai Terbatas:</strong> Satu orang staf fungsional sering kali merangkap berbagai peran teknis dan kepanitiaan sekaligus.</li>
+          <li class="a"><strong>Defisit Waktu Analisis:</strong> Energi terkuras untuk urusan klerikal mekanis (pembuatan ratusan SPK/BAST honor, cek POK manual, rekap chat WA).</li>
+          <li class="a"><strong>Risiko Human Error:</strong> Beban kerja berlebih memperbesar peluang salah hitung honor mitra atau keterlambatan laporan dinas.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ==========================================
+         SLIDE 3: Pengkategorian 4 Masalah Utama Satker
+         ========================================== -->
+    <div class="slide" data-notes="Jika kita bedah secara objektif, hambatan di kantor kita terbagi ke dalam 4 kategori ini: administrasi mitra yang memakan waktu, pemantauan lapangan yang lambat, informasi POK yang tercecer, serta pengolahan data mikro yang berat. Masalah-masalah inilah yang sebenarnya sangat ideal untuk didelegasikan ke AI.">
+      <h2 class="a" style="margin-bottom: 8px;">Pengkategorian 4 Masalah Utama Satker</h2>
+      <p class="a" style="margin-bottom: 24px; text-align: center; color: var(--text-secondary);">
+        Pemetaan hambatan operasional nyata yang dialami oleh seluruh satuan kerja di daerah
+      </p>
+      <div class="cards-4">
+        <div class="card-small a">
+          <span style="font-size: 24px;">&#128221;</span>
+          <h3>1. Beban Klerikal Mitra</h3>
+          <p>Pembuatan ratusan SPK, surat tugas, dan BAST honor mitra berulang tiap bulan menyita hari kerja staf.</p>
+        </div>
+        <div class="card-small a">
+          <span style="font-size: 24px;">&#128241;</span>
+          <h3>2. Friksi Monitoring</h3>
+          <p>Google Sheet puluhan ribu baris lambat dibuka di ponsel; pimpinan terlambat tahu kecamatan yang tertinggal.</p>
+        </div>
+        <div class="card-small a">
+          <span style="font-size: 24px;">&#128451;&#65039;</span>
+          <h3>3. Fragmentasi POK</h3>
+          <p>Revisi POK SAKTI tercecer; SOP dan jadwal tenggelam di chat; rotasi pegawai memicu hilangnya memori kerja.</p>
+        </div>
+        <div class="card-small a">
+          <span style="font-size: 24px;">&#128187;</span>
+          <h3>4. Bottleneck Data Mikro</h3>
+          <p>Query jutaan baris data sensus (Regsosek, SE) membuat laptop hang dan membutuhkan server komputasi mahal.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==========================================
+         SLIDE 4: Tren Global: Dari Chatbot Menuju Company Brain
+         ========================================== -->
+    <div class="slide" data-notes="Tren enterprise AI dunia saat ini telah meninggalkan paradigma chatbot FAQ sederhana. Model AI publik secerdas apa pun tidak akan berguna jika tidak memahami dokumen resmi kantor kita. Yang dibutuhkan instansi pemerintah adalah Company Brain: sebuah repositori pengetahuan hidup yang memberi konteks nyata kepada AI.">
+      <h2 class="a" style="margin-bottom: 20px;">Tren Global: Dari Chatbot Menuju "Company Brain"</h2>
+      <div class="comparison">
+        <div class="comparison-col before a">
+          <h3>Chatbot Konvensional (Lama)</h3>
+          <ul>
+            <li>Pasif, hanya menunggu pertanyaan pengguna</li>
+            <li>Hanya mengandalkan data umum internet yang umum</li>
+            <li>Tidak memahami dokumen internal, POK, dan SOP dinas</li>
+            <li>Rawan "halusinasi" saat ditanya angka anggaran atau jadwal</li>
+            <li>Tidak memiliki kemampuan mengeksekusi aksi nyata di terminal</li>
+          </ul>
+        </div>
+        <div class="comparison-col after a">
+          <h3>Company Brain Paradigm (Aina)</h3>
+          <ul>
+            <li>Proaktif, terhubung langsung ke alur kerja harian WhatsApp</li>
+            <li><em>Single Source of Truth</em> institusi (POK SAKTI, jadwal, SOP)</li>
+            <li>Memahami struktur organisasi, wewenang, dan relasi kerja staf</li>
+            <li>Beroperasi deterministik &amp; zero-hallucination berbasis dokumen</li>
+            <li>Mampu mengeksekusi skrip, query data lake, dan browser headless</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==========================================
+         SLIDE 5: Implementasi Company Brain di BPS Mempawah
+         ========================================== -->
+    <div class="slide" data-notes="Di BPS Mempawah, Company Brain diwujudkan melalui repositori knowledge-base berbasis Git. Di sinilah tersimpan dokumen POK SAKTI, SOP kegiatan, dan matriks jadwal dinas. Aina bertindak sebagai kurator yang merawat dan membaca dokumen ini sebagai satu-satunya rujukan kebenaran.">
+      <h2 class="a" style="margin-bottom: 12px;">Implementasi Nyata: <code>ipds6104/knowledge-base</code></h2>
+      <p class="a" style="margin-bottom: 28px; text-align: center; color: var(--text-secondary);">
+        Repositori pengetahuan institusi terstruktur berbasis Git yang dirawat secara otonom
+      </p>
+      <div class="cards">
+        <div class="card a">
+          <span class="card-icon">&#128181;</span>
+          <h3>POK SAKTI 2026 &amp; 2027</h3>
+          <p>
+            Rincian alokasi honor mitra, pagu translok, dan belanja operasional tersimpan dalam format terstruktur. Siap dicek instan oleh staf tanpa membuka aplikasi SAKTI.
+          </p>
+        </div>
+        <div class="card a">
+          <span class="card-icon">&#128197;</span>
+          <h3>Kalender &amp; SOP Dinas</h3>
+          <p>
+            Matriks linimasa kegiatan seluruh fungsi (pelatihan, pengawasan, deadline entri) yang selalu diperbarui, mendasari pengingat otonom H-3 sebelum cut-off.
+          </p>
+        </div>
+        <div class="card a">
+          <span class="card-icon">&#128218;</span>
+          <h3>Pola "LLM Wiki" (Living Memory)</h3>
+          <p>
+            Aina secara berkala melakukan linting, indexing, dan grooming dokumen dinas. Pengetahuan institusi tetap abadi meskipun terjadi mutasi atau rotasi pegawai.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==========================================
+         SLIDE 6: Menjamin Ketepatan: Zero Hallucination
+         ========================================== -->
+    <div class="slide" data-notes="Kekhawatiran terbesar dalam adopsi AI di pemerintahan adalah risiko salah informasi atau halusinasi. Aina menerapkan prinsip verifikasi ketat: seluruh jawaban harus berbasis dokumen faktual di Company Brain. Jika informasi tidak ada di POK resmi, Aina akan jujur menyatakan belum tersedia dan tidak mengarang jawaban.">
+      <div class="content-body">
+        <div class="a badge-hero">&#128737;&#65039; INTEGRITAS DATA RESMI</div>
+        <h2 class="a">Menjamin Ketepatan: <span class="hi">Zero Hallucination</span></h2>
+        <p class="a">
+          Di lingkungan pemerintahan, akurasi angka anggaran dan tanggal kegiatan adalah harga mati. Aina menerapkan arsitektur <em>Strict Grounding</em> untuk menjamin kebenaran informasi:
+        </p>
+        <ul>
+          <li class="a"><strong>Deterministic Retrieval:</strong> Aina wajib mengambil data langsung dari file POK SAKTI dan basis data resmi; dilarang keras menebak angka pagu atau honor.</li>
+          <li class="a"><strong>Epistemic Humility (Disiplin Tabayyun):</strong> Jika instruksi ambigu atau data belum tercantum di Company Brain, Aina menanyakan klarifikasi secara santun dan tidak berspekulasi.</li>
+          <li class="a"><strong>Audit Trail Version Control:</strong> Setiap mutasi dokumen dicatat dalam riwayat Git commit yang transparan, dapat diaudit, dan dapat di-rollback kapan saja.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ==========================================
+         SLIDE 7: Arsitektur Engine: Rust Core + Antigravity CLI
+         ========================================== -->
+    <div class="slide" data-notes="Aina bukan sekadar bot wrapper. Di balik penampilannya yang ramah di WhatsApp, Aina digerakkan oleh kombinasi bahasa Rust yang super cepat dan Google Antigravity CLI sebagai mesin penalaran agentik. Ini memungkinkan Aina mengeksekusi perintah terminal, menjalankan browser headless, hingga menganalisis data besar secara otonom.">
+      <h2 class="a" style="margin-bottom: 12px;">Fakta Arsitektur: Didukung Antigravity CLI</h2>
+      <p class="a" style="margin-bottom: 28px; text-align: center; color: var(--text-secondary);">
+        Sinergi dua teknologi inti: performa tingkat rendah Rust dan kecerdasan agentik Google
+      </p>
+      <div class="cards">
+        <div class="card a">
+          <span class="card-icon">&#9874;&#65039;</span>
+          <h3>Aina Core Daemon (Rust)</h3>
+          <p>
+            Beroperasi 24/7 di server lokal. Mengatur gerbang webhook WhatsApp, memvalidasi profil dan wewenang lawan bicara, menyaring etika percakapan kerja, dan mengelola task scheduler persisten.
+          </p>
+        </div>
+        <div class="card a">
+          <span class="card-icon">&#128302;</span>
+          <h3>Google Antigravity CLI (agy)</h3>
+          <p>
+            Mesin agen AI tingkat lanjut yang menjadi 'otak' penalaran. Mampu memanggil ratusan tools dinamis, mengeksekusi terminal bash, menjalankan skrip Python, dan mengontrol Chromium headless.
+          </p>
+        </div>
+        <div class="card a">
+          <span class="card-icon">&#129513;</span>
+          <h3>Extensible Skill Framework</h3>
+          <p>
+            Keahlian baru ditambahkan secara modular via folder <code>skills/</code> tanpa merestart server. Siap dikembangkan sesuai kebutuhan spesifik masing-masing satker BPS.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==========================================
+         SLIDE 8: Peta Antarmuka Teknis Resmi (arc42)
+         ========================================== -->
+    <div class="slide" data-notes="Sesuai standar arsitektur perangkat lunak enterprise arc42, seluruh antarmuka Aina terisolasi dengan rapi. Data obrolan disimpan di database SQLite WAL lokal yang kebal mati lampu, dan token keamanan dikelola terpusat tanpa ada password yang tertulis di berkas terbuka.">
+      <h2 class="a" style="margin-bottom: 24px;">Peta Antarmuka Sistem Terstandarisasi (arc42)</h2>
+      <div class="steps">
+        <div class="step a">
+          <div class="step-num">IF-01</div>
+          <div class="step-title">Whatsmeow</div>
+          <div class="step-desc">Webhook real-time untuk transmisi pesan dua arah via WhatsApp gateway.</div>
+        </div>
+        <div class="step-arrow a">&rarr;</div>
+        <div class="step a">
+          <div class="step-num">IF-03</div>
+          <div class="step-title">Engine Runner</div>
+          <div class="step-desc">Pipa stdin/stdout menghubungkan Core Rust ke Antigravity CLI secara terisolasi.</div>
+        </div>
+        <div class="step-arrow a">&rarr;</div>
+        <div class="step a">
+          <div class="step-num">IF-04</div>
+          <div class="step-title">SQLite WAL</div>
+          <div class="step-desc">Penyimpanan lokal transaksi obrolan, profil wewenang, dan tugas kebal mati lampu.</div>
+        </div>
+        <div class="step-arrow a">&rarr;</div>
+        <div class="step a">
+          <div class="step-num">IF-06</div>
+          <div class="step-title">Secret Broker</div>
+          <div class="step-desc">Pengambilan kredensial Infisical secara Just-In-Time tanpa simpan password di file.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==========================================
+         SLIDE 9: Matriks Solusi Berdasarkan Tim Kerja BPS
+         ========================================== -->
+    <div class="slide" data-notes="Slide ini menunjukkan bagaimana Aina dirancang untuk memberi dampak ke seluruh ruangan: Kepala BPS mendapat laporan ringkas tanpa menagih, Bagian Umum terbantu dalam administrasi mitra, Tim Teknis memiliki dashboard pemantauan lapangan otomatis, dan IPDS memegang kendali kedaulatan data dan infrastruktur lokal.">
+      <h2 class="a" style="margin-bottom: 8px;">Nilai Manfaat untuk Seluruh Tim Satker</h2>
+      <p class="a" style="margin-bottom: 20px; text-align: center; color: var(--text-secondary);">
+        Solusi yang dirancang spesifik untuk menjawab kebutuhan masing-masing fungsi di BPS
+      </p>
+      <div class="quadrant-grid">
+        <div class="quadrant-card a">
+          <h3>&#128084; Kepala Satker (Pimpinan)</h3>
+          <ul>
+            <li>Executive summary visual di WhatsApp 3x sehari tanpa perlu menagih</li>
+            <li>Peringatan dini wilayah/kecamatan dengan deviasi target kritis</li>
+            <li>Pemantauan realisasi serapan anggaran POK secara transparan</li>
+          </ul>
+        </div>
+        <div class="quadrant-card a">
+          <h3>&#128188; Bagian Umum &amp; Keuangan</h3>
+          <ul>
+            <li>Otomasi berkas kontrak SPK &amp; BAST honor mitra via Dokter V</li>
+            <li>Cek instan pagu POK, translok lokal, dan alokasi paket meeting</li>
+            <li>Reminder otomatis H-3 sebelum batas revisi anggaran dan SPK</li>
+          </ul>
+        </div>
+        <div class="quadrant-card a">
+          <h3>&#128202; Bidang Teknis (Sosial/Prod/Dist/Neraca)</h3>
+          <ul>
+            <li>Live monitoring prelist Google Sheet per kecamatan secara otomatis</li>
+            <li>Deteksi anomali data (NIK ganda, usaha tanpa identitas standar)</li>
+            <li>Broadcast capaian harian transparan ke grup koordinasi lapangan</li>
+          </ul>
+        </div>
+        <div class="quadrant-card a">
+          <h3>&#128187; Tim IPDS (Provinsi &amp; Kab/Kota)</h3>
+          <ul>
+            <li>Stack 100% self-hosted di ThinkStation lokal, kedaulatan data terjaga</li>
+            <li>Engine data lake DuckDB (<50MB RAM) untuk jutaan data mikro</li>
+            <li>Arsitektur terbuka siap direplikasi ke seluruh satker < 1 jam</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==========================================
+         SLIDE 10: Automasi Bagian Umum: Dokter V & Mitra
+         ========================================== -->
+    <div class="slide" data-notes="Setiap kegiatan survei menuntut puluhan hingga ratusan berkas SPK dan BAST honor. Melalui integrasi skill Dokter V, Aina mengotomasikan validasi data mitra dan pencetakan dokumen kontrak dalam hitungan menit, menghilangkan kesalahan manual pengetikan NIK atau salah hitung pagu honor.">
+      <h2 class="a" style="margin-bottom: 12px;">Otomasi Bagian Umum: Kontrak &amp; BAST Mitra</h2>
+      <p class="a" style="margin-bottom: 28px; text-align: center; color: var(--text-secondary);">
+        Pendelegasian tugas administrasi mitra SIMETRA dari berhari-hari menjadi hitungan menit
+      </p>
+      <div class="cards">
+        <div class="card a">
+          <span class="card-icon">&#128100;</span>
+          <h3>Kroscek Mitra Instan</h3>
+          <p>
+            Memvalidasi identitas ID Sobat mitra 2026 langsung ke database Dokter V BPS Mempawah, memastikan status seleksi dan kepesertaan terdaftar valid.
+          </p>
+        </div>
+        <div class="card a">
+          <span class="card-icon">&#128196;</span>
+          <h3>Surat Tugas &amp; SPK Otomatis</h3>
+          <p>
+            Mencocokkan nomor surat tugas dinas dan pagu honor kegiatan, lalu menghasilkan berkas Perjanjian Kerja (SPK) tanpa risiko salah ketik NIK atau nama.
+          </p>
+        </div>
+        <div class="card a">
+          <span class="card-icon">&#128179;</span>
+          <h3>Penerbitan Dokumen BAST</h3>
+          <p>
+            Menyusun lembar Berita Acara Serah Terima (BAST) pekerjaan mitra secara batch siap cetak untuk kelengkapan berkas pencairan keuangan di Bagian Umum.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==========================================
+         SLIDE 11: Penjadwal Cerdas: POK & Reminder
+         ========================================== -->
+    <div class="slide" data-notes="Sering kali agenda penting terhambat karena jadwal pimpinan dan tim yang bentrok, atau laporan terlambat karena staf lupa tanggal cut-off. Dengan Company Brain, Aina dapat mendeteksi tanggal kosong di kalender dan mengirimkan pengingat H-3 secara deterministik langsung ke WhatsApp penanggung jawab.">
+      <h2 class="a" style="margin-bottom: 12px;">Perencanaan Cerdas &amp; Reminder Deterministik</h2>
+      <p class="a" style="margin-bottom: 28px; text-align: center; color: var(--text-secondary);">
+        Pengawalan timeline dan koordinasi agenda dinas tanpa pernah terlewat
+      </p>
+      <div class="cards">
+        <div class="card a">
+          <span class="card-icon">&#128269;</span>
+          <h3>Deteksi Slot Rapat Kosong</h3>
+          <p>
+            Menganalisis matriks jadwal seluruh fungsi di Company Brain untuk mendeteksi tanggal kosong tanpa bentrok saat pimpinan ingin mengadakan rapat atau pelatihan.
+          </p>
+        </div>
+        <div class="card a">
+          <span class="card-icon">&#9200;</span>
+          <h3>Pengingat Deterministik H-3</h3>
+          <p>
+            Mengirim notifikasi otomatis ke WhatsApp penanggung jawab sebelum batas waktu upload berkas SPK, batas entri data, atau penutupan revisi anggaran POK.
+          </p>
+        </div>
+        <div class="card a">
+          <span class="card-icon">&#129302;</span>
+          <h3>Otonom di Server Lokal</h3>
+          <p>
+            Penjadwalan dikelola oleh internal scheduler yang kebal dari gangguan ponsel staf, memastikan pesan peringatan selalu terkirim tepat waktu.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==========================================
+         SLIDE 12: Hero Showcase: Live Monitoring Google Sheet
+         ========================================== -->
+    <div class="slide" data-notes="Inilah use case unggulan yang memberikan dampak paling instan di lapangan. Petugas di desa mengisi progres di Google Sheet, formulanya menghitung capaian secara live, dan Aina memotret tabel tersebut menggunakan headless browser beresolusi tinggi, lalu mengirimkannya ke grup WhatsApp pengawas. Pimpinan dan tim tidak perlu membuka lembar kerja berat di ponsel.">
+      <h2 class="a" style="margin-bottom: 8px;">Hero Showcase: Live Sheet &amp; WA Screenshot</h2>
+      <p class="a" style="margin-bottom: 20px; text-align: center; color: var(--text-secondary);">
+        Ujung tombak pemantauan kegiatan: dari lembar kerja pasif ke dashboard visual instan
+      </p>
+      <div class="steps" style="margin-bottom: 20px;">
+        <div class="step a">
+          <div class="step-num">1</div>
+          <div class="step-title">Input Lapangan</div>
+          <div class="step-desc">Mitra / PML menginput progres di Google Sheet lapangan.</div>
+        </div>
+        <div class="step-arrow a">&rarr;</div>
+        <div class="step a">
+          <div class="step-num">2</div>
+          <div class="step-title">Formula Live</div>
+          <div class="step-desc">Tab rekap menghitung persentase capaian &amp; ranking kecamatan.</div>
+        </div>
+        <div class="step-arrow a">&rarr;</div>
+        <div class="step a">
+          <div class="step-num">3</div>
+          <div class="step-title">Patchright HiDPI</div>
+          <div class="step-desc">Headless browser memotret canvas tabel dalam skala Retina 2x.</div>
+        </div>
+        <div class="step-arrow a">&rarr;</div>
+        <div class="step a">
+          <div class="step-num">4</div>
+          <div class="step-title">Broadcast WA</div>
+          <div class="step-desc">Gambar jernih + narasi analitis terkirim ke grup koordinasi.</div>
+        </div>
+      </div>
+
+      <div class="chat-bubble-mockup a">
+        <strong>[Update Progres Kegiatan - BPS Mempawah Pukul 17:00 WIB]</strong><br>
+        &bull; <em>Capaian Total:</em> 85,12% (34.820 dari 40.907 target tercapai)<br>
+        &bull; <em>Kecamatan Tercepat:</em> Sungai Pinyuh (94,2%), Mempawah Hilir (91,0%)<br>
+        &bull; <em>Perhatian Khusus:</em> Sadaniang (68,4% - sisa 412 target belum padan NIK)<br>
+        <em>Tangkapan layar resolusi tinggi terlampir otomatis di atas &uarr;</em>
+      </div>
+    </div>
+
+    <!-- ==========================================
+         SLIDE 13: Pembuktian Nyata BPS Mempawah
+         ========================================== -->
+    <div class="slide" data-notes="Sistem ini telah teruji mengawal 40.907 direktori usaha prelist SBR SE2026 di Kabupaten Mempawah. Dengan pemantauan visual berkala tiap sore di grup WA, seluruh kecamatan dapat melihat capaian mereka secara transparan, mendorong percepatan target secara alami.">
+      <h2 class="a" style="margin-bottom: 12px;">Studi Kasus Riil: Prelist SBR SE2026 &amp; BKSDM</h2>
+      <p class="a" style="margin-bottom: 28px; text-align: center; color: var(--text-secondary);">
+        Pengawalan skala besar pada kegiatan sensus dan pemadanan data kepegawaian daerah
+      </p>
+      <div class="cards">
+        <div class="card a">
+          <span class="card-icon">&#127970;</span>
+          <h3>Prelist SBR SE2026</h3>
+          <p>
+            Mengawal pemadanan <strong>40.907 direktori usaha</strong> di 9 kecamatan. Memantau 6 tab anomali data (NIK ganda, nama umum, alamat tidak standar) via tab <code>Rekap Monitoring</code>.
+          </p>
+        </div>
+        <div class="card a">
+          <span class="card-icon">&#128101;</span>
+          <h3>Pemadanan BKSDM</h3>
+          <p>
+            Monitoring progress pemadanan data pendapatan pejabat daerah Pemkab Mempawah dengan formula live dan conditional formatting visual per instansi dinas.
+          </p>
+        </div>
+        <div class="card a">
+          <span class="card-icon">&#128640;</span>
+          <h3>Transparansi &amp; Kecepatan</h3>
+          <p>
+            Jadwal pengiriman otomatis pukul 08:00, 12:00, dan 17:00 WIB memicu iklim kompetisi sehat antar-wilayah, mempercepat penyelesaian target sebelum deadline.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==========================================
+         SLIDE 14: Efisiensi Terukur: 15-20 Jam/Minggu Dihemat
+         ========================================== -->
+    <div class="slide" data-notes="Dampak terbesar dari integrasi Company Brain dan Aina adalah pengembalian waktu kerja produktif. Penghematan hingga 20 jam per minggu membebaskan pegawai dari kelelahan klerikal dan mengembalikan fokus mereka ke substansi statistik.">
+      <h2 class="a" style="margin-bottom: 8px;">Kuantifikasi Efisiensi &amp; Penghematan Waktu</h2>
+      <p class="a" style="margin-bottom: 20px; text-align: center; color: var(--text-secondary);">
+        Dampak nyata penerapan otomasi agentik terhadap kapasitas kerja pegawai
+      </p>
+      <div class="chart a">
+        <div class="chart-bar-group">
+          <div class="chart-value">100</div>
+          <div class="chart-bar" style="height: 30%;"></div>
+          <div class="chart-label">W1 Manual</div>
+        </div>
+        <div class="chart-bar-group">
+          <div class="chart-value">145</div>
+          <div class="chart-bar" style="height: 48%;"></div>
+          <div class="chart-label">W2 Live Sync</div>
+        </div>
+        <div class="chart-bar-group">
+          <div class="chart-value">190</div>
+          <div class="chart-bar" style="height: 65%;"></div>
+          <div class="chart-label">W3 Otomasi WA</div>
+        </div>
+        <div class="chart-bar-group">
+          <div class="chart-value">240</div>
+          <div class="chart-bar" style="height: 82%;"></div>
+          <div class="chart-label">W4 Dokter V</div>
+        </div>
+        <div class="chart-bar-group">
+          <div class="chart-value">285</div>
+          <div class="chart-bar" style="height: 96%;"></div>
+          <div class="chart-label">W5 Tuntas 100%</div>
+        </div>
+      </div>
+      <div class="chart-baseline a"></div>
+
+      <div class="metric-grid a">
+        <div class="metric-card">
+          <div class="metric-number">15-20 Jam</div>
+          <div class="metric-label">Waktu Kerja Dihemat / Minggu</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-number">&lt; 10 Detik</div>
+          <div class="metric-label">Durasi Generate Rekap &amp; Kirim</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-number">100%</div>
+          <div class="metric-label">Akurasi Perhitungan Matematis</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-number">0 Rupiah</div>
+          <div class="metric-label">Biaya Lisensi Perangkat Lunak</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==========================================
+         SLIDE 15: Kedaulatan Data & Keamanan Berlapis (Zero Trust)
+         ========================================== -->
+    <div class="slide" data-notes="BPS mengelola data statistik strategis yang wajib dijaga kerahasiaannya. Seluruh sistem Aina beroperasi di server lokal internal tanpa ketergantungan vendor pihak ketiga. Didukung pengamanan hak akses Zero Trust, data dinas dijamin aman dari kebocoran.">
+      <h2 class="a" style="margin-bottom: 12px;">Kedaulatan Data &amp; Keamanan Berlapis</h2>
+      <p class="a" style="margin-bottom: 28px; text-align: center; color: var(--text-secondary);">
+        Standar keamanan kedaulatan data statistik nasional di lingkungan server lokal
+      </p>
+      <div class="cards">
+        <div class="card a">
+          <span class="card-icon">&#128274;</span>
+          <h3>100% On-Premise &amp; Self-Hosted</h3>
+          <p>
+            Beroperasi di server fisik lokal ThinkStation P320. Seluruh database, token otentikasi, dan memori obrolan berada di dalam perimeter jaringan kantor yang aman.
+          </p>
+        </div>
+        <div class="card a">
+          <span class="card-icon">&#128737;&#65039;</span>
+          <h3>Zero Trust Guard (`data_guard`)</h3>
+          <p>
+            Otoritas berjenjang (Admin, Staff, Guest). Script <code>data_guard.py</code> secara deterministik mencegah pembocoran data mikro atau dokumen internal ke pihak luar.
+          </p>
+        </div>
+        <div class="card a">
+          <span class="card-icon">&#9889;</span>
+          <h3>Crash-Resilient WAL Storage</h3>
+          <p>
+            Basis data SQLite mode WAL dan DuckDB berbasis disk kebal terhadap korupsi data saat terjadi gangguan pasokan listrik server secara tiba-tiba.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==========================================
+         SLIDE 16: Cetak Biru Replikasi (< 1 Jam) & Penutup
+         ========================================== -->
+    <div class="slide" data-notes="Sistem ini 100% siap direplikasi oleh BPS Provinsi maupun BPS Kabupaten/Kota lain di Kalimantan Barat dalam waktu kurang dari satu jam. Mari kita wujudkan birokrasi statistik yang cerdas, efisien, dan berdaulat. Terima kasih, kami membuka sesi tanya jawab dan kolaborasi.">
+      <div class="slide-closing">
+        <div class="a badge-hero" style="margin-bottom: 10px;">KOLABORASI DIGITAL SE-KALBAR</div>
+        <h1 class="a" style="font-size: 2.8rem; margin-bottom: 12px;">Siap Direplikasi Satker BPS Lain<br><span style="color: var(--accent-gold);">&lt; 1 Jam Waktu Setup</span></h1>
+        <p class="a" style="max-width: 720px; margin: 0 auto 24px; font-size: 1.05rem; line-height: 1.5;">
+          1. Clone repo <code>github.com/ipds6104/aina</code> &bull; 2. Pasang POK &amp; SOP di Company Brain &bull; 3. Jalankan Docker di server lokal &bull; 4. Scan QR WhatsApp dinas.
+        </p>
+        <p class="a" style="color: var(--text-secondary); margin-bottom: 24px;">
+          <em>"Mewujudkan birokrasi statistik yang cerdas, efisien, dan berdaulat data."</em>
+        </p>
+        <div class="contact-links a">
+          <a href="https://github.com/ipds6104/aina" class="contact-link" target="_blank">github.com/ipds6104/aina</a>
+          <a href="mailto:bps6104@bps.go.id" class="contact-link">bps6104@bps.go.id</a>
+          <span class="contact-link">BPS Kabupaten Mempawah (6104)</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Speaker Notes Panel -->
+  <div class="notes-panel" id="notes-panel">
+    <div class="notes-current">
+      <div class="notes-label">Speaker Notes (Tekan 'S' untuk Buka/Tutup)</div>
+      <div class="notes-slide-num" id="notes-slide-num"></div>
+      <div class="notes-text" id="notes-text"></div>
+    </div>
+    <div class="notes-preview">
+      <div class="notes-label">Slide Berikutnya</div>
+      <div class="notes-next-title" id="notes-next"></div>
+    </div>
+  </div>
+
+  <!-- Prism.js Scripts -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+
+  <!-- Interactive Slide Deck Engine -->
+<script>
+    (function () {
+      'use strict';
+
+      // ===== DOM References =====
+      const slides = Array.from(document.querySelectorAll('.slide'));
+      const progressBar = document.getElementById('progress');
+      const counter = document.getElementById('counter');
+      const notesPanel = document.getElementById('notes-panel');
+      const notesSlideNum = document.getElementById('notes-slide-num');
+      const notesText = document.getElementById('notes-text');
+      const notesNext = document.getElementById('notes-next');
+
+      let current = 0;
+      const total = slides.length;
+
+      // ===== Navigation =====
+      function goTo(index) {
+        if (index < 0 || index >= total) return;
+
+        slides[current].classList.remove('active');
+        current = index;
+        slides[current].classList.add('active');
+
+        if (history.replaceState) {
+          history.replaceState(null, null, '#' + (current + 1));
+        }
+        updateUI();
+      }
+
+      window.addEventListener('hashchange', function () {
+        if (window.location.hash) {
+          const hashNum = parseInt(window.location.hash.replace('#', '')) - 1;
+          if (!isNaN(hashNum) && hashNum >= 0 && hashNum < total && hashNum !== current) {
+            goTo(hashNum);
+          }
+        }
+      });
+
+      function next() {
+        goTo(current + 1);
+      }
+
+      function prev() {
+        goTo(current - 1);
+      }
+
+      function updateUI() {
+        // Progress bar
+        const pct = ((current + 1) / total) * 100;
+        progressBar.style.width = pct + '%';
+
+        // Counter
+        counter.textContent = (current + 1) + ' / ' + total;
+
+        // Speaker notes
+        updateNotes();
+      }
+
+      // ===== Speaker Notes =====
+      function updateNotes() {
+        const slideEl = slides[current];
+        const notes = slideEl.getAttribute('data-notes') || 'No notes for this slide.';
+
+        notesSlideNum.textContent = 'Slide ' + (current + 1) + ' of ' + total;
+        notesText.textContent = notes;
+
+        // Next slide title
+        if (current + 1 < total) {
+          const nextSlide = slides[current + 1];
+          const nextTitle = nextSlide.querySelector('h1, h2');
+          notesNext.textContent = nextTitle ? nextTitle.textContent : 'Untitled Slide';
+        } else {
+          notesNext.textContent = '(End of presentation)';
+        }
+      }
+
+      function toggleNotes() {
+        notesPanel.classList.toggle('open');
+      }
+
+      // ===== Fullscreen =====
+      window.toggleFullscreen = function () {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(function () {});
+        } else {
+          document.exitFullscreen().catch(function () {});
+        }
+      };
+
+      // ===== Keyboard Events =====
+      document.addEventListener('keydown', function (e) {
+        // Ignore if user is typing in an input
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+        switch (e.key) {
+          case 'ArrowRight':
+          case 'ArrowDown':
+            e.preventDefault();
+            next();
+            break;
+          case 'ArrowLeft':
+          case 'ArrowUp':
+            e.preventDefault();
+            prev();
+            break;
+          case ' ':
+            e.preventDefault();
+            next();
+            break;
+          case 'f':
+          case 'F':
+            e.preventDefault();
+            window.toggleFullscreen();
+            break;
+          case 's':
+          case 'S':
+            e.preventDefault();
+            toggleNotes();
+            break;
+          case 'Home':
+            e.preventDefault();
+            goTo(0);
+            break;
+          case 'End':
+            e.preventDefault();
+            goTo(total - 1);
+            break;
+        }
+      });
+
+      // ===== Click Navigation =====
+      document.querySelector('.deck').addEventListener('click', function (e) {
+        // Don't navigate when clicking on links or buttons
+        if (e.target.closest('a, button, .notes-panel, .code-container')) return;
+
+        const x = e.clientX;
+        const width = window.innerWidth;
+        const leftThird = width / 3;
+
+        if (x < leftThird) {
+          prev();
+        } else {
+          next();
+        }
+      });
+
+      // ===== Touch / Swipe Navigation =====
+      let touchStartX = 0;
+      let touchStartY = 0;
+      let touchEndX = 0;
+      let touchEndY = 0;
+
+      document.addEventListener('touchstart', function (e) {
+        touchStartX = e.changedTouches[0].screenX;
+        touchStartY = e.changedTouches[0].screenY;
+      }, { passive: true });
+
+      document.addEventListener('touchend', function (e) {
+        touchEndX = e.changedTouches[0].screenX;
+        touchEndY = e.changedTouches[0].screenY;
+        handleSwipe();
+      }, { passive: true });
+
+      function handleSwipe() {
+        const diffX = touchStartX - touchEndX;
+        const diffY = touchStartY - touchEndY;
+        const minSwipe = 50;
+
+        // Only process horizontal swipes (ignore vertical)
+        if (Math.abs(diffX) < minSwipe || Math.abs(diffX) < Math.abs(diffY)) return;
+
+        if (diffX > 0) {
+          // Swiped left -> next
+          next();
+        } else {
+          // Swiped right -> prev
+          prev();
+        }
+      }
+
+      // ===== Initialize =====
+      if (window.location.hash) {
+        const initialSlide = parseInt(window.location.hash.replace('#', '')) - 1;
+        if (!isNaN(initialSlide) && initialSlide >= 0 && initialSlide < total) {
+          slides[current].classList.remove('active');
+          current = initialSlide;
+          slides[current].classList.add('active');
+        }
+      }
+      updateUI();
+
+      // Re-highlight code blocks after Prism loads
+      if (typeof Prism !== 'undefined') {
+        Prism.highlightAll();
+      }
+    })();
+  
+
+</body>
+</html>
