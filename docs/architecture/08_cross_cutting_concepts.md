@@ -1,8 +1,8 @@
 # 8. Konsep Lintas Bidang (Cross-Cutting Concepts)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `22e209b` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-15T10:17:00+07:00`
+> - **Verified Commit**: `19f6bc9` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-15T10:45:00+07:00`
 > - **Tracked Paths**: `src/core/domain/`, `src/core/ports/`, `src/adapters/driven/sqlite_store/`, `skills/`
 > - **Drift Status**: `verified`
 
