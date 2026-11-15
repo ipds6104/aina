@@ -449,52 +449,59 @@ impl AppConfig {
         }
 
         // OIDC / Single Sign-On (SSO) overrides (Framework-Agnostic)
-        if let Ok(val) = env::var("OIDC_ENABLED") {
+        if let Ok(val) = env::var("OIDC_ENABLED").or_else(|_| env::var("AINA_OIDC_ENABLED")) {
             let lower = val.to_lowercase();
             self.oidc.enabled = lower == "true" || lower == "1" || lower == "yes";
         }
-        if let Ok(val) = env::var("OIDC_ISSUER_URL") {
+        if let Ok(val) = env::var("OIDC_ISSUER_URL").or_else(|_| env::var("AINA_OIDC_ISSUER_URL")) {
             if !val.trim().is_empty() {
                 self.oidc.issuer_url = Some(val.trim().to_string());
             }
         }
-        if let Ok(val) = env::var("OIDC_CLIENT_ID") {
+        if let Ok(val) = env::var("OIDC_CLIENT_ID").or_else(|_| env::var("AINA_OIDC_CLIENT_ID")) {
             if !val.trim().is_empty() {
                 self.oidc.client_id = Some(val.trim().to_string());
             }
         }
-        if let Ok(val) = env::var("OIDC_CLIENT_SECRET") {
+        if let Ok(val) = env::var("OIDC_CLIENT_SECRET").or_else(|_| env::var("AINA_OIDC_CLIENT_SECRET")) {
             if !val.trim().is_empty() {
                 self.oidc.client_secret = Some(val.trim().to_string());
             }
         }
-        if let Ok(val) = env::var("OIDC_REDIRECT_URI").or_else(|_| env::var("OIDC_REDIRECT_URL")) {
+        if let Ok(val) = env::var("OIDC_REDIRECT_URI")
+            .or_else(|_| env::var("OIDC_REDIRECT_URL"))
+            .or_else(|_| env::var("AINA_OIDC_REDIRECT_URI"))
+            .or_else(|_| env::var("AINA_OIDC_REDIRECT_URL"))
+        {
             if !val.trim().is_empty() {
                 self.oidc.redirect_uri = Some(val.trim().to_string());
             }
         }
-        if let Ok(val) = env::var("OIDC_SCOPES") {
+        if let Ok(val) = env::var("OIDC_SCOPES").or_else(|_| env::var("AINA_OIDC_SCOPES")) {
             if !val.trim().is_empty() {
                 self.oidc.scopes = val.trim().to_string();
             }
         }
-        if let Ok(val) = env::var("OIDC_PROVIDER_NAME") {
+        if let Ok(val) = env::var("OIDC_PROVIDER_NAME").or_else(|_| env::var("AINA_OIDC_PROVIDER_NAME")) {
             if !val.trim().is_empty() {
                 self.oidc.provider_name = val.trim().to_string();
             }
         }
-        if let Ok(val) = env::var("OIDC_SESSION_SECRET").or_else(|_| env::var("SESSION_SECRET")) {
+        if let Ok(val) = env::var("OIDC_SESSION_SECRET")
+            .or_else(|_| env::var("SESSION_SECRET"))
+            .or_else(|_| env::var("AINA_OIDC_SESSION_SECRET"))
+        {
             if !val.trim().is_empty() {
                 self.oidc.session_secret = Some(val.trim().to_string());
             }
         }
-        if let Ok(val) = env::var("OIDC_ADMIN_USERS") {
+        if let Ok(val) = env::var("OIDC_ADMIN_USERS").or_else(|_| env::var("AINA_OIDC_ADMIN_USERS")) {
             if !val.trim().is_empty() {
                 let list: Vec<String> = val.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
                 self.oidc.admin_users = Some(list);
             }
         }
-        if let Ok(val) = env::var("OIDC_ALLOWED_DOMAINS") {
+        if let Ok(val) = env::var("OIDC_ALLOWED_DOMAINS").or_else(|_| env::var("AINA_OIDC_ALLOWED_DOMAINS")) {
             if !val.trim().is_empty() {
                 let list: Vec<String> = val.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
                 self.oidc.allowed_domains = Some(list);

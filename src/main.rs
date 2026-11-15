@@ -172,6 +172,11 @@ async fn main() -> anyhow::Result<()> {
     info!("========================================================================");
     info!("🔐 SETUP / ADMIN CODE: {}", setup_code);
     info!("Use this code in the Web Setup Wizard (/setup) to claim or update Aina.");
+    if config.oidc.enabled {
+        info!("🔑 SSO / OIDC ENABLED via provider: {} (Issuer: {:?})", config.oidc.provider_name, config.oidc.issuer_url);
+    } else {
+        info!("ℹ️ SSO / OIDC is disabled (set OIDC_ENABLED=true to activate)");
+    }
     info!("========================================================================");
 
     // 6. Setup Webhook Router & HTTP Server (Driving Adapter)
