@@ -28,7 +28,7 @@
         tertiaryColor: '#F8FAFC',
         tertiaryTextColor: '#0F172A',
         tertiaryBorderColor: '#94A3B8',
-        fontSize: '12px',
+        fontSize: '17px',
         fontFamily: 'Pretendard Variable, -apple-system, sans-serif'
       }
     });
@@ -1147,24 +1147,47 @@
       color: #0f172a;
     }
 
-    /* Mermaid Architecture Container */
-    .mermaid-container {
-      width: 100%;
-      max-width: 1020px;
-      background: #ffffff;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 16px;
-      margin: 10px auto 0;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.04);
-      display: flex;
-      justify-content: center;
-      align-items: center;
+    /* Mermaid Architecture Widescreen Container */
+    .slide-architecture {
+      padding: 24px 32px !important;
+      justify-content: flex-start !important;
     }
-    .mermaid-container svg {
-      max-height: 520px;
+    .slide-architecture h2 {
+      margin-top: 6px !important;
+      margin-bottom: 4px !important;
+      font-size: 2.1rem !important;
+    }
+    .slide-architecture p {
+      margin-bottom: 12px !important;
+      font-size: 0.95rem !important;
+    }
+    .mermaid-container {
+      width: 96vw !important;
+      max-width: 1280px !important;
+      height: calc(100vh - 160px) !important;
+      max-height: 740px !important;
+      background: #ffffff !important;
+      border: 1px solid var(--border) !important;
+      border-radius: 12px !important;
+      padding: 14px !important;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.06) !important;
+      display: flex !important;
+      justify-content: center !important;
+      align-items: center !important;
+      box-sizing: border-box !important;
+    }
+    .mermaid {
       width: 100% !important;
-      height: auto !important;
+      height: 100% !important;
+      display: flex !important;
+      justify-content: center !important;
+      align-items: center !important;
+    }
+    .mermaid svg {
+      width: 100% !important;
+      height: 100% !important;
+      max-width: 100% !important;
+      max-height: 100% !important;
     }
 
     /* Git Knowledge Base Tree Mockup */
@@ -1393,7 +1416,7 @@
     <!-- ==========================================
          SLIDE 8: THE OFFICIAL MERMAID ARCHITECTURE DIAGRAM
          ========================================== -->
-    <div class="slide" data-notes="Diagram arsitektur Mermaid resmi dari dokumen arc42 bab 3.1 ini memetakan batas sistem Aina: Pengguna Pendamping (Companion) memiliki wewenang penuh, rekan kerja berinteraksi via mention di grup WhatsApp, dan Aina Core menghubungkan Antigravity CLI dengan brankas rahasia Infisical serta layanan cloud eksternal.">
+    <div class="slide slide-architecture" data-notes="Diagram arsitektur Mermaid resmi dari dokumen arc42 bab 3.1 ini memetakan batas sistem Aina: Pengguna Pendamping (Companion) memiliki wewenang penuh, rekan kerja berinteraksi via mention di grup WhatsApp, dan Aina Core menghubungkan Antigravity CLI dengan brankas rahasia Infisical serta layanan cloud eksternal.">
       <h2 class="a" style="margin-bottom: 6px;">Konteks Bisnis &amp; Arsitektur Sistem (arc42)</h2>
       <p class="a" style="margin-bottom: 12px; text-align: center; color: var(--text-secondary); font-size: 0.9rem;">
         Pemetaan interaksi pengguna, batas sistem Aina Core Daemon, dan layanan eksternal
@@ -1401,32 +1424,36 @@
       <div class="mermaid-container a">
         <div class="mermaid">
 flowchart TD
-    subgraph Pengguna ["Pengguna & Lingkungan Kerja"]
-        Companion["Pengguna Pendamping (User Companion)"]
-        RekanGrup["Rekan Kerja di Grup WhatsApp"]
-        AdminWeb["Administrator Sistem (Web Browser)"]
+    subgraph Pengguna ["1. Pengguna & Lingkungan Kerja"]
+        direction LR
+        Companion["Pengguna Pendamping<br><b>(User Companion / Admin)</b>"]
+        RekanGrup["Rekan Kerja di Grup WA<br><b>(Mention @Aina)</b>"]
+        AdminWeb["Administrator Sistem<br><b>(Web Setup / Simulator)</b>"]
     end
 
-    subgraph BatasSistem ["Sistem Aina (AI Co-Worker)"]
-        AinaCore["Aina Core Daemon (Rust)<br>- Pengatur Alur Pesan & Etika<br>- Memori Profiling & Penjadwal Tugas<br>- Pengelola Kolam Akun AI<br>- Rekonsiliasi Aktivitas Persisten"]
+    subgraph CoreGateway ["2. Gerbang & Inti Sistem Aina"]
+        direction LR
+        Whatsmeow["<b>Whatsmeow Gateway</b><br>Webhook Ingress / Egress HTTP"]
+        AinaCore["<b>Aina Core Daemon (Rust)</b><br>&bull; Alur Pesan &amp; Etika Kerja<br>&bull; Memori Profiling &amp; Task Scheduler<br>&bull; Kolam Akun AI &amp; Otoritas Zero Trust"]
+        Whatsmeow <-->|"Inbound / Outbound"| AinaCore
     end
 
-    subgraph SistemLuar ["Layanan Eksternal"]
-        Whatsmeow["Whatsmeow WhatsApp Gateway"]
-        AGY["Google Antigravity CLI (agy)"]
-        SecretVault["Secret Vault (Infisical / Vault)"]
-        CloudExt["Layanan Cloud (Google Drive, Vision VLM, Git)"]
-        EnvAPI["Layanan Cuaca & Riset Web (Open-Meteo, Search)"]
+    subgraph SistemLuar ["3. Layanan Eksternal &amp; Tool Sandbox"]
+        direction LR
+        AGY["<b>Google Antigravity CLI</b><br>(Penalaran &amp; Sandbox Bash/Python)"]
+        SecretVault["<b>Infisical Vault</b><br>(Kunci API &amp; Sandi JIT)"]
+        CloudExt["<b>Cloud &amp; Knowledge Base</b><br>(Google Drive, Git POK SAKTI)"]
+        EnvAPI["<b>Layanan Eksternal</b><br>(Open-Meteo &amp; Web Search)"]
     end
 
-    Companion <-->|"Pesan Pribadi / !aina di grup"| Whatsmeow
-    RekanGrup <-->|"Tag @Aina di grup kantor"| Whatsmeow
-    Whatsmeow <-->|"Kirim pesan masuk & terima balasan"| AinaCore
-    AdminWeb <-->|"Atur akun & uji pesan (/setup)"| AinaCore
-    AinaCore <-->|"Proses penalaran & eksekusi kode"| AGY
-    AinaCore <-->|"Ambil password & kunci API aman"| SecretVault
-    AGY <-->|"Ambil dokumen & pasang keahlian"| CloudExt
-    AinaCore <-->|"Grounding cuaca faktual & riset"| EnvAPI
+    Companion <-->|"Pesan Privat / !aina"| Whatsmeow
+    RekanGrup <-->|"Tag @Aina"| Whatsmeow
+    AdminWeb <-->|"Setup OAuth / Web UI"| AinaCore
+
+    AinaCore <-->|"Subprocess Engine Runner"| AGY
+    AinaCore <-->|"Secret Broker JIT"| SecretVault
+    AGY <-->|"Ambil Dokumen &amp; Eksekusi"| CloudExt
+    AinaCore <-->|"Grounding Data Faktual"| EnvAPI
         </div>
       </div>
     </div>
