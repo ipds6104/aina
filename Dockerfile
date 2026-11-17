@@ -1,4 +1,6 @@
 # syntax=docker/dockerfile:1
+ARG BASE_IMAGE=aina-base:latest
+
 # ==========================================
 # Stage 1: Build binary
 # ==========================================
@@ -15,53 +17,25 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo build --release && \
     rm -rf src build.rs target/release/deps/aina* target/release/aina* target/release/build/aina*
 
-# Copy actual source code, build script, and compile
-COPY . .
+# Copy compilation inputs (source code, build script, and compile-time baseline configuration)
+COPY build.rs ./
+COPY src/ ./src/
+COPY config/activities.default.json ./config/activities.default.json
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     cargo build --release
 
 # ==========================================
-# Stage 2: Runtime image
+# Stage 2: Runtime image (High-Speed Base)
 # ==========================================
-FROM debian:bookworm-slim
+FROM ${BASE_IMAGE}
 
 WORKDIR /app
 
-# Install runtime utilities (essential for agentic coding & headless browser)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    bash \
-    git \
-    gh \
-    python3 \
-    python3-pip \
-    python3-requests \
-    sqlite3 \
-    poppler-utils \
-    chromium \
-    fonts-liberation \
-    fonts-noto-color-emoji \
-    && rm -rf /var/lib/apt/lists/*
-
-# Pre-install OLAP analytics engines for Parquet and tabular data
-RUN pip install --no-cache-dir --break-system-packages duckdb pyarrow
-
-
-# Install official Google Antigravity CLI (agy)
-RUN curl -fsSL https://antigravity.google/cli/install.sh | bash && \
-    (cp /root/.local/bin/agy /usr/local/bin/agy || true)
-
-
-
-# Copy compiled Aina binary
+# Copy compiled Aina binary from builder
 COPY --from=builder /usr/src/aina/target/release/aina /usr/local/bin/aina
 
-# Create application directories
-RUN mkdir -p /app/config /app/data /app/workspaces /app/scripts /app/assets /root/.gemini/antigravity-cli
-
-# Copy configuration, workspaces, skills, scripts, assets, and entrypoint
+# Copy application configuration, workspaces, skills, scripts, and assets
 COPY config/ /app/config/
 COPY workspaces/ /app/workspaces/
 COPY skills/ /app/skills/
@@ -69,30 +43,6 @@ COPY scripts/ /app/scripts/
 COPY assets/ /app/assets/
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh /app/scripts/*.py 2>/dev/null || true
-
-# Default environment configuration
-ENV SERVER_HOST=0.0.0.0
-ENV SERVER_PORT=8090
-ENV TZ=Asia/Jakarta
-ENV AINA_TIMEZONE=Asia/Jakarta
-ENV AINA_LOCALE=id-ID
-ENV AINA_TIMEZONE_OFFSET=7
-ENV AGENT_BINARY_PATH=/usr/local/bin/agy
-ENV AGENT_WORKSPACE=/app/workspaces/default
-ENV DATABASE_PATH=/app/data/aina.db
-ENV AGENT_PERSONA_FILE=/app/config/persona.md
-ENV AGENT_ORGANIZATION_FILE=/app/config/organization.md
-ENV PYTHONUSERBASE=/app/data/python-packages
-ENV PIP_BREAK_SYSTEM_PACKAGES=1
-ENV PATH="/app/data/python-packages/bin:/app/scripts:/root/.local/bin:/usr/local/bin:${PATH}"
-
-# Configure global pip defaults to auto-install on-demand packages to persistent storage
-RUN mkdir -p /etc/pip && printf "[global]\nbreak-system-packages = true\nuser = true\n" > /etc/pip.conf
-
-EXPOSE 8090
-
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://127.0.0.1:${SERVER_PORT:-8090}/health || exit 1
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["aina"]

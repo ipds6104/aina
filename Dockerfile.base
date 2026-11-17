@@ -1,0 +1,60 @@
+# syntax=docker/dockerfile:1
+# ==============================================================================
+# Aina Enterprise Base Runtime Image
+# Pre-installed: Debian Bookworm Slim, Headless Chromium, Python 3, DuckDB,
+#                PyArrow, SQLite3, Poppler-utils, and Google Antigravity CLI (agy)
+# ==============================================================================
+FROM debian:bookworm-slim
+
+WORKDIR /app
+
+# Install runtime utilities (essential for agentic coding & headless browser)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    bash \
+    git \
+    gh \
+    python3 \
+    python3-pip \
+    python3-requests \
+    sqlite3 \
+    poppler-utils \
+    chromium \
+    fonts-liberation \
+    fonts-noto-color-emoji \
+    && rm -rf /var/lib/apt/lists/*
+
+# Pre-install OLAP analytics engines for Parquet and tabular data
+RUN pip install --no-cache-dir --break-system-packages duckdb pyarrow
+
+# Install official Google Antigravity CLI (agy)
+RUN curl -fsSL https://antigravity.google/cli/install.sh | bash && \
+    (cp /root/.local/bin/agy /usr/local/bin/agy || true)
+
+# Create application directories
+RUN mkdir -p /app/config /app/data /app/workspaces /app/scripts /app/assets /root/.gemini/antigravity-cli
+
+# Configure global pip defaults to auto-install on-demand packages to persistent storage
+RUN mkdir -p /etc/pip && printf "[global]\nbreak-system-packages = true\nuser = true\n" > /etc/pip.conf
+
+# Default environment configuration
+ENV SERVER_HOST=0.0.0.0 \
+    SERVER_PORT=8090 \
+    TZ=Asia/Jakarta \
+    AINA_TIMEZONE=Asia/Jakarta \
+    AINA_LOCALE=id-ID \
+    AINA_TIMEZONE_OFFSET=7 \
+    AGENT_BINARY_PATH=/usr/local/bin/agy \
+    AGENT_WORKSPACE=/app/workspaces/default \
+    DATABASE_PATH=/app/data/aina.db \
+    AGENT_PERSONA_FILE=/app/config/persona.md \
+    AGENT_ORGANIZATION_FILE=/app/config/organization.md \
+    PYTHONUSERBASE=/app/data/python-packages \
+    PIP_BREAK_SYSTEM_PACKAGES=1 \
+    PATH="/app/data/python-packages/bin:/app/scripts:/root/.local/bin:/usr/local/bin:${PATH}"
+
+EXPOSE 8090
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://127.0.0.1:${SERVER_PORT:-8090}/health || exit 1
