@@ -1,8 +1,8 @@
 # 7. Pandangan Penerapan (Deployment View)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `050b5fa` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-16T22:35:01+07:00`
+> - **Verified Commit**: `5bbaa9d` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-17T18:29:08+07:00`
 > - **Tracked Paths**: `src/`, `config/`, `skills/`
 > - **Drift Status**: `verified`
 
