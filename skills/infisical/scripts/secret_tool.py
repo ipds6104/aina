@@ -27,10 +27,10 @@ import urllib.request
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-# Paths & Defaults
-CACHE_FILE = Path("/root/.infisical/cached_token")
-DEFAULT_INFISICAL_DOMAIN = "https://secrets.dvlpid.my.id/api"
-DEFAULT_INFISICAL_PROJECT_ID = "f13379e0-9661-4f8e-81ef-0e81d1502da1"
+# Paths & Neutral Upstream Defaults (No hardcoded tenant domains or credentials)
+CACHE_FILE = Path.home() / ".infisical" / "cached_token"
+DEFAULT_INFISICAL_DOMAIN = ""
+DEFAULT_INFISICAL_PROJECT_ID = ""
 DEFAULT_INFISICAL_ENV = "dev"
 
 
@@ -103,13 +103,25 @@ class BaseSecretProvider(ABC):
 class InfisicalProvider(BaseSecretProvider):
     def __init__(self, domain: str = None, project_id: str = None, env: str = None):
         cfg = get_persisted_config()
-        self.domain = domain or os.getenv("INFISICAL_DOMAIN") or cfg.get("domain") or DEFAULT_INFISICAL_DOMAIN
-        self.project_id = project_id or os.getenv("INFISICAL_PROJECT_ID") or cfg.get("project_id") or DEFAULT_INFISICAL_PROJECT_ID
-        self.env = env or os.getenv("INFISICAL_ENV") or cfg.get("env") or DEFAULT_INFISICAL_ENV
-        self.client_id = os.getenv("INFISICAL_CLIENT_ID") or cfg.get("client_id") or "d972328c-3c0c-4617-8c63-1cb1f7391f0f"
-        self.client_secret = os.getenv("INFISICAL_CLIENT_SECRET") or cfg.get("client_secret") or "1a73548b812589b6edf888ab64d8b0e52d615611feb7425ec75f5ea46017ae11"
+        self.domain = (domain or os.getenv("INFISICAL_DOMAIN") or cfg.get("domain") or DEFAULT_INFISICAL_DOMAIN).strip()
+        self.project_id = (project_id or os.getenv("INFISICAL_PROJECT_ID") or cfg.get("project_id") or DEFAULT_INFISICAL_PROJECT_ID).strip()
+        self.env = (env or os.getenv("INFISICAL_ENV") or cfg.get("env") or DEFAULT_INFISICAL_ENV).strip()
+        self.client_id = (os.getenv("INFISICAL_CLIENT_ID") or cfg.get("client_id") or "").strip()
+        self.client_secret = (os.getenv("INFISICAL_CLIENT_SECRET") or cfg.get("client_secret") or "").strip()
         self.bin_path = self._find_bin()
         self._ensure_authenticated()
+
+    def _require_config(self):
+        missing = []
+        if not self.domain:
+            missing.append("INFISICAL_DOMAIN")
+        if not self.project_id:
+            missing.append("INFISICAL_PROJECT_ID")
+        if missing:
+            raise RuntimeError(
+                f"Infisical provider is not configured: missing {', '.join(missing)}. "
+                "Set environment variables or run `secret_tool configure --provider infisical ...`."
+            )
 
     def name(self) -> str:
         return "infisical"
@@ -134,7 +146,7 @@ class InfisicalProvider(BaseSecretProvider):
                 os.environ["INFISICAL_TOKEN"] = token
                 return
 
-        if self.client_id and self.client_secret:
+        if self.domain and self.client_id and self.client_secret:
             cmd = [
                 self.bin_path,
                 "login",
@@ -158,6 +170,7 @@ class InfisicalProvider(BaseSecretProvider):
                 sys.stderr.write(f"[WARN] Infisical universal auth login attempt failed: {e}\n")
 
     def set(self, key: str, value: str) -> dict:
+        self._require_config()
         cmd = [
             self.bin_path,
             "secrets",
@@ -186,6 +199,7 @@ class InfisicalProvider(BaseSecretProvider):
             raise RuntimeError(res.stderr.strip() or res.stdout.strip() or f"Exit {res.returncode}")
 
     def get(self, key: str) -> str:
+        self._require_config()
         cmd = [
             self.bin_path,
             "secrets",
@@ -207,6 +221,7 @@ class InfisicalProvider(BaseSecretProvider):
             raise RuntimeError(res.stderr.strip() or res.stdout.strip() or f"Key '{key}' not found in Infisical")
 
     def list(self) -> list:
+        self._require_config()
         cmd = [
             self.bin_path,
             "secrets",
@@ -233,6 +248,7 @@ class InfisicalProvider(BaseSecretProvider):
             raise RuntimeError(res.stderr.strip() or res.stdout.strip())
 
     def run(self, command: list) -> int:
+        self._require_config()
         cmd = [
             self.bin_path,
             "run",
@@ -249,11 +265,12 @@ class InfisicalProvider(BaseSecretProvider):
 
     def status(self) -> dict:
         has_token = bool(os.environ.get("INFISICAL_TOKEN") or (CACHE_FILE.is_file() and CACHE_FILE.stat().st_size > 0))
+        is_configured = bool(self.domain and self.project_id and (has_token or (self.client_id and self.client_secret)))
         return {
-            "status": "online" if has_token else "configured",
+            "status": "online" if (has_token and self.domain and self.project_id) else ("configured" if is_configured else "unconfigured"),
             "provider": "infisical",
-            "domain": self.domain,
-            "project_id": self.project_id,
+            "domain": self.domain or None,
+            "project_id": self.project_id or None,
             "environment": self.env,
             "binary_path": self.bin_path,
             "has_cached_token": has_token,

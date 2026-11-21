@@ -18,12 +18,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-def _decode_key(arr, k=42):
-    return "".join(chr(c ^ k) for c in arr)
-
-CLIENT_ID = _decode_key([27, 26, 29, 27, 26, 26, 28, 26, 28, 26, 31, 19, 27, 7, 94, 71, 66, 89, 89, 67, 68, 24, 66, 24, 27, 70, 73, 88, 79, 24, 25, 31, 92, 94, 69, 70, 69, 64, 66, 30, 77, 30, 26, 25, 79, 90, 4, 75, 90, 90, 89, 4, 77, 69, 69, 77, 70, 79, 95, 89, 79, 88, 73, 69, 68, 94, 79, 68, 94, 4, 73, 69, 71])
-CLIENT_SECRET = _decode_key([109, 101, 105, 121, 122, 114, 7, 97, 31, 18, 108, 125, 120, 30, 18, 28, 102, 78, 102, 96, 27, 71, 102, 104, 18, 89, 114, 105, 30, 80, 28, 91, 110, 107, 76])
-REDIRECT_URI = "https://antigravity.google/oauth-callback"
+REDIRECT_URI = os.environ.get(
+    "GOOGLE_OAUTH_REDIRECT_URI",
+    "https://antigravity.google/oauth-callback",
+)
 SCOPES = [
     "https://www.googleapis.com/auth/cloud-platform",
     "https://www.googleapis.com/auth/userinfo.email",
@@ -33,6 +31,26 @@ SCOPES = [
     "https://www.googleapis.com/auth/aicode",
     "openid",
 ]
+
+
+def load_oauth_credentials() -> tuple[str, str]:
+    client_id = (
+        os.environ.get("GOOGLE_CLIENT_ID")
+        or os.environ.get("AINA_GOOGLE_CLIENT_ID")
+        or ""
+    ).strip()
+    client_secret = (
+        os.environ.get("GOOGLE_CLIENT_SECRET")
+        or os.environ.get("AINA_GOOGLE_CLIENT_SECRET")
+        or ""
+    ).strip()
+    if not client_id or not client_secret:
+        raise RuntimeError(
+            "GOOGLE_CLIENT_ID dan GOOGLE_CLIENT_SECRET belum disetel di environment. "
+            "Jalankan melalui `secret_tool run -- python3 scripts/login_account.py` "
+            "atau ekspor variabel lingkungan tersebut terlebih dahulu."
+        )
+    return client_id, client_secret
 
 def sanitize_code(raw: str) -> str:
     s = raw.strip()
@@ -61,7 +79,8 @@ def extract_email_from_jwt(id_token: str) -> str:
         pass
     return "unknown_account"
 
-def run_single_oauth_session(account_idx=1, admin_key=None, server_url="https://aina.dvlpid.my.id"):
+def run_single_oauth_session(account_idx=1, admin_key=None, server_url="http://127.0.0.1:8090"):
+    client_id, client_secret = load_oauth_credentials()
     # Generate PKCE verifier & challenge
     verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("utf-8").rstrip("=")
     digest = hashlib.sha256(verifier.encode("utf-8")).digest()
@@ -70,7 +89,7 @@ def run_single_oauth_session(account_idx=1, admin_key=None, server_url="https://
 
     params = {
         "access_type": "offline",
-        "client_id": CLIENT_ID,
+        "client_id": client_id,
         "code_challenge": challenge,
         "code_challenge_method": "S256",
         "prompt": "consent",
@@ -105,8 +124,8 @@ def run_single_oauth_session(account_idx=1, admin_key=None, server_url="https://
     print(f"⏳ Menghubungkan langsung ke Google OAuth untuk menukar token...")
 
     post_data = {
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET,
+        "client_id": client_id,
+        "client_secret": client_secret,
         "code": clean_code,
         "code_verifier": verifier,
         "grant_type": "authorization_code",
@@ -216,15 +235,21 @@ def main():
     print("=" * 70)
     print("Alat ini menghubungkan langsung ke Google OAuth tanpa batas waktu 60 detik.")
 
-    admin_key = os.environ.get("WHATSMEOW_API_KEY") or os.environ.get("ADMIN_KEY")
+    try:
+        load_oauth_credentials()
+    except RuntimeError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    admin_key = os.environ.get("ADMIN_KEY") or os.environ.get("AINA_ADMIN_KEY")
     if not admin_key:
         try:
-            admin_key = input("\nMasukkan Admin Key / WHATSMEOW_API_KEY Aina Anda (tekan Enter untuk simpan lokal saja): ").strip()
+            admin_key = input("\nMasukkan Admin Key / Setup Code Aina Anda (tekan Enter untuk simpan lokal saja): ").strip()
         except (KeyboardInterrupt, EOFError):
             print("\nBatal.")
             sys.exit(0)
 
-    server_url = os.environ.get("AINA_SERVER_URL", "https://aina.dvlpid.my.id")
+    server_url = os.environ.get("AINA_SERVER_URL", "http://127.0.0.1:8090")
 
     added_count = 0
     current_idx = 1

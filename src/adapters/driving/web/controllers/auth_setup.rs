@@ -539,6 +539,16 @@ pub async fn api_oauth_exchange_handler(
         );
     }
 
+    if !crate::adapters::driven::agy_cli::is_safe_session_id(&payload.session_id) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "error": "Invalid session_id: must be 16-64 ASCII alphanumeric, '_' or '-' characters."
+            })),
+        );
+    }
+
     match state
         .agent_engine
         .exchange_oauth_code(&payload.session_id, &payload.code)

@@ -89,11 +89,11 @@ mkdir -p /etc/pip && printf "[global]\nbreak-system-packages = true\nuser = true
 
 # Setup default Git author identity and authentication if GH_TOKEN is present
 git config --global user.name "${GIT_AUTHOR_NAME:-Aina}" 2>/dev/null || true
-git config --global user.email "${GIT_AUTHOR_EMAIL:-aina@dvlpid.my.id}" 2>/dev/null || true
+git config --global user.email "${GIT_AUTHOR_EMAIL:-aina@localhost}" 2>/dev/null || true
 
-# If GH_TOKEN is not in environment, attempt to retrieve from Infisical vault
-if [ -z "$GH_TOKEN" ] && [ -x "/usr/local/bin/infisical" ]; then
-    GH_TOKEN=$(/usr/local/bin/infisical secrets get GH_TOKEN --projectId "${INFISICAL_PROJECT_ID:-f13379e0-9661-4f8e-81ef-0e81d1502da1}" --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
+# If GH_TOKEN is not in environment, optionally retrieve from Infisical vault when explicitly configured
+if [ -z "$GH_TOKEN" ] && [ -n "$INFISICAL_PROJECT_ID" ] && [ -x "/usr/local/bin/infisical" ]; then
+    GH_TOKEN=$(/usr/local/bin/infisical secrets get GH_TOKEN --projectId "$INFISICAL_PROJECT_ID" --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
 fi
 
 if [ -n "$GH_TOKEN" ]; then
@@ -158,11 +158,11 @@ if [ -d "/app/data/custom-skills" ]; then
     done
 fi
 
-# Optional Infisical machine identity auto-authentication
-if [ -n "$INFISICAL_CLIENT_ID" ] && [ -n "$INFISICAL_CLIENT_SECRET" ] && [ -x "/usr/local/bin/infisical" ]; then
+# Optional Infisical machine identity auto-authentication (only when explicitly configured by operator)
+if [ -n "$INFISICAL_DOMAIN" ] && [ -n "$INFISICAL_PROJECT_ID" ] && [ -n "$INFISICAL_CLIENT_ID" ] && [ -n "$INFISICAL_CLIENT_SECRET" ] && [ -x "/usr/local/bin/infisical" ]; then
     echo "Authenticating Infisical CLI with machine identity..."
     mkdir -p /root/.infisical
-    /usr/local/bin/infisical login --domain "${INFISICAL_DOMAIN:-https://secrets.dvlpid.my.id/api}" \
+    /usr/local/bin/infisical login --domain "$INFISICAL_DOMAIN" \
         --method=universal-auth \
         --client-id="$INFISICAL_CLIENT_ID" \
         --client-secret="$INFISICAL_CLIENT_SECRET" \
@@ -171,13 +171,13 @@ if [ -n "$INFISICAL_CLIENT_ID" ] && [ -n "$INFISICAL_CLIENT_SECRET" ] && [ -x "/
 
     # Auto-retrieve OIDC secrets from Infisical vault if configured
     if [ -f "/root/.infisical/cached_token" ]; then
-        [ -z "$OIDC_ENABLED" ] && export OIDC_ENABLED=$(/usr/local/bin/infisical secrets get AINA_OIDC_ENABLED --projectId "${INFISICAL_PROJECT_ID:-f13379e0-9661-4f8e-81ef-0e81d1502da1}" --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
-        [ -z "$OIDC_ISSUER_URL" ] && export OIDC_ISSUER_URL=$(/usr/local/bin/infisical secrets get AINA_OIDC_ISSUER_URL --projectId "${INFISICAL_PROJECT_ID:-f13379e0-9661-4f8e-81ef-0e81d1502da1}" --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
-        [ -z "$OIDC_CLIENT_ID" ] && export OIDC_CLIENT_ID=$(/usr/local/bin/infisical secrets get AINA_OIDC_CLIENT_ID --projectId "${INFISICAL_PROJECT_ID:-f13379e0-9661-4f8e-81ef-0e81d1502da1}" --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
-        [ -z "$OIDC_CLIENT_SECRET" ] && export OIDC_CLIENT_SECRET=$(/usr/local/bin/infisical secrets get AINA_OIDC_CLIENT_SECRET --projectId "${INFISICAL_PROJECT_ID:-f13379e0-9661-4f8e-81ef-0e81d1502da1}" --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
-        [ -z "$OIDC_REDIRECT_URI" ] && export OIDC_REDIRECT_URI=$(/usr/local/bin/infisical secrets get AINA_OIDC_REDIRECT_URI --projectId "${INFISICAL_PROJECT_ID:-f13379e0-9661-4f8e-81ef-0e81d1502da1}" --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
-        [ -z "$OIDC_PROVIDER_NAME" ] && export OIDC_PROVIDER_NAME=$(/usr/local/bin/infisical secrets get AINA_OIDC_PROVIDER_NAME --projectId "${INFISICAL_PROJECT_ID:-f13379e0-9661-4f8e-81ef-0e81d1502da1}" --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
-        [ -z "$OIDC_ADMIN_USERS" ] && export OIDC_ADMIN_USERS=$(/usr/local/bin/infisical secrets get AINA_OIDC_ADMIN_USERS --projectId "${INFISICAL_PROJECT_ID:-f13379e0-9661-4f8e-81ef-0e81d1502da1}" --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
+        [ -z "$OIDC_ENABLED" ] && export OIDC_ENABLED=$(/usr/local/bin/infisical secrets get AINA_OIDC_ENABLED --projectId "$INFISICAL_PROJECT_ID" --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
+        [ -z "$OIDC_ISSUER_URL" ] && export OIDC_ISSUER_URL=$(/usr/local/bin/infisical secrets get AINA_OIDC_ISSUER_URL --projectId "$INFISICAL_PROJECT_ID" --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
+        [ -z "$OIDC_CLIENT_ID" ] && export OIDC_CLIENT_ID=$(/usr/local/bin/infisical secrets get AINA_OIDC_CLIENT_ID --projectId "$INFISICAL_PROJECT_ID" --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
+        [ -z "$OIDC_CLIENT_SECRET" ] && export OIDC_CLIENT_SECRET=$(/usr/local/bin/infisical secrets get AINA_OIDC_CLIENT_SECRET --projectId "$INFISICAL_PROJECT_ID" --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
+        [ -z "$OIDC_REDIRECT_URI" ] && export OIDC_REDIRECT_URI=$(/usr/local/bin/infisical secrets get AINA_OIDC_REDIRECT_URI --projectId "$INFISICAL_PROJECT_ID" --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
+        [ -z "$OIDC_PROVIDER_NAME" ] && export OIDC_PROVIDER_NAME=$(/usr/local/bin/infisical secrets get AINA_OIDC_PROVIDER_NAME --projectId "$INFISICAL_PROJECT_ID" --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
+        [ -z "$OIDC_ADMIN_USERS" ] && export OIDC_ADMIN_USERS=$(/usr/local/bin/infisical secrets get AINA_OIDC_ADMIN_USERS --projectId "$INFISICAL_PROJECT_ID" --env "${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
     fi
 fi
 

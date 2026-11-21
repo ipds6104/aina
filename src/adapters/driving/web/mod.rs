@@ -1374,6 +1374,19 @@ mod tests {
         assert_eq!(locked_resp.status(), StatusCode::TOO_MANY_REQUESTS);
         assert!(locked_resp.headers().contains_key("retry-after"));
 
+        // Phase 18: OAuth exchange rejects path traversal session_id with 400 Bad Request
+        let bad_oauth = client
+            .post(format!("http://{}/api/auth/oauth/exchange", lock_addr))
+            .header("X-Admin-Key", "REAL_SECRET_999")
+            .json(&json!({
+                "session_id": "../../evil_escape",
+                "code": "4/0A_test"
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(bad_oauth.status(), StatusCode::BAD_REQUEST);
+
         let _ = tokio::fs::remove_dir_all(&temp_dir).await;
     }
 }

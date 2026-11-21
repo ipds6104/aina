@@ -24,6 +24,6 @@ pub use models::{
     DynamicModelDiscovery, DynamicModelEntry, ModelSource,
 };
 #[allow(unused_imports)]
-pub use oauth::{get_oauth_session_dir, sanitize_oauth_code};
+pub use oauth::{get_oauth_session_dir, is_safe_session_id, sanitize_oauth_code};
 #[allow(unused_imports)]
 pub use sanitizer::sanitize_agent_response;
