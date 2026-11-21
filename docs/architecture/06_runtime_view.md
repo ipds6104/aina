@@ -308,7 +308,7 @@ sequenceDiagram
 ```
 ---
 
-## 6.6 Skenario 6: Skalabilitas Konkurensi Kepadatan Tinggi (*High-Density Bounded Semaphore & Token Lease*)
+## 6.10 Skenario 10: Skalabilitas Konkurensi Kepadatan Tinggi (*High-Density Bounded Semaphore & Token Lease*)
 
 Skenario ini menggambarkan bagaimana Aina menangani lonjakan beban pesan ketika 50 hingga 100 pengguna berinteraksi serentak:
 
@@ -340,7 +340,7 @@ sequenceDiagram
 
 ---
 
-## 6.7 Skenario 7: Siklus Hidup Identitas 3-Tingkat & Pertahanan Anti-Impersonasi Profiler
+## 6.11 Skenario 11: Siklus Hidup Identitas 3-Tingkat & Pertahanan Anti-Impersonasi Profiler
 
 Skenario ini menunjukkan mitigasi terhadap pihak asing yang mencoba merekayasa identitas:
 
@@ -368,7 +368,7 @@ sequenceDiagram
 
 ---
 
-## 6.8 Skenario 8: Alur Autentikasi Single Sign-On (OpenID Connect PKCE Flow)
+## 6.12 Skenario 12: Alur Autentikasi Single Sign-On (OpenID Connect PKCE Flow)
 
 Skenario ini menunjukkan bagaimana pengguna web dasbor masuk secara aman menggunakan akun instansi (rIDM) tanpa kata sandi manual:
 

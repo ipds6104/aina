@@ -63,14 +63,14 @@ Tabel berikut memetakan seluruh komponen dari Bab 5 (*Building Block View*) ke k
 
 | Komponen Blok Pembangun | Kontainer / Node Eksekusi | Lingkungan Runtime & Jalur Eksekusi |
 |:---|:---|:---|
-| WebhookServer | `aina-app` | Axum HTTP server pada port `:3000` di dalam kontainer utama. |
+| WebhookServer | `aina-app` | Axum HTTP server pada port `:8090` (override via `PORT`/`SERVER_PORT`) di dalam kontainer utama; mendukung `ConnectInfo` & opt-in `AINA_TRUST_PROXY_HEADERS` di belakang reverse proxy Coolify. |
 | CliDispatcher | `aina-app` | Biner CLI `/usr/local/bin/aina` untuk eksekusi perintah terminal ad-hoc. |
 | ProcessIncomingMessageUseCase | `aina-app` | Runtime asinkron Tokio task pool di dalam proses daemon utama. |
 | PersonaEngine | `aina-app` | Modul domain Rust di dalam memori proses utama. |
 | SqliteSessionStore | `aina-app` | Connection pool `rusqlite` mengakses berkas `/app/data/aina.db` di volume persisten. |
 | AntigravityCliAdapter | `aina-app` | Subprocess runner yang memanggil biner Google Antigravity CLI (`/usr/local/bin/agy`). |
 | WhatsmeowHttpAdapter | `aina-app` | HTTP client asinkron yang berkomunikasi dengan kontainer `whatsapp-bot:8080`. |
-| SecretBroker | `aina-app` | Skrip Python `skills/infisical/scripts/secret_tool.py` yang dieksekusi secara Just-in-Time. |
+| SecretBroker | `aina-app` | Skrip Python `skills/infisical/scripts/secret_tool.py` (*Env-Var First* / `.secrets.env` lokal secara bawaan; biner vault cloud bersifat 100% opsional dan tidak wajib terpasang di image upstream). |
 | SkillRegistry | `aina-app` | Modul Rust `metacognition` dan utilitas `skill_scaffolder.py` yang memindai `/app/data/custom-skills`. |
 | ActivityReconciler | `aina-app` | Modul domain Rust yang dieksekusi saat booting dan via CLI `aina activity`. |
 | ActivityReflectionEngine | `aina-app` | Skrip Python `skills/activity-reflection/scripts/reflect.py` untuk evaluasi otonom harian. |

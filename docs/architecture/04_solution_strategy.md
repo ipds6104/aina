@@ -152,7 +152,7 @@ Untuk menjamin keamanan kelas enterprise di lingkungan instansi pemerintah (BPS)
    - Pengguna lain dilarang membaca atau mengekstrak isi berkas tanpa izin eksplisit dari pemilik berkas, ditegakkan oleh gerbang *Zero-Disclosure* dan pencatatan audit rantai hash SHA-256.
 ---
 
-## 4.7 Siklus Hidup Identitas 3-Tingkat (*Zero Trust Identity Lifecycle*)
+## 4.11 Siklus Hidup Identitas 3-Tingkat (*Zero Trust Identity Lifecycle*)
 
 Untuk mencegah rekayasa sosial di mana pihak luar mengaku sebagai admin atau atasan satker:
 1. **Status Identitas 3-Tingkat**:
@@ -166,7 +166,7 @@ Untuk mencegah rekayasa sosial di mana pihak luar mengaku sebagai admin atau ata
 
 ---
 
-## 4.8 Skalabilitas Konkurensi Kepadatan Tinggi (*High-Density Bounded Semaphore & Token Lease*)
+## 4.12 Skalabilitas Konkurensi Kepadatan Tinggi (*High-Density Bounded Semaphore & Token Lease*)
 
 Menghadapi skenario 100 pengguna chat serentak:
 1. **Bounded Semaphore Tokio**: Membatasi agen serentak maksimal 8 proses (`AINA_MAX_CONCURRENT_AGENTS`). Pesan ke-9 dan seterusnya mengantre secara tertib di memori tanpa memakan alokasi RAM proses biner baru.
@@ -174,9 +174,19 @@ Menghadapi skenario 100 pengguna chat serentak:
 
 ---
 
-## 4.9 Autentikasi Agnostik Berstandar Industri (OpenID Connect SSO)
+## 4.13 Autentikasi Agnostik Berstandar Industri (OpenID Connect SSO)
 
 Untuk memfasilitasi akses dasbor web bagi pegawai dan admin instansi tanpa mengorbankan sifat agnostik kerangka kerja Aina:
 1. **Pemisahan Konfigurasi Lingkungan dari Inti Kode**: Seluruh rincian penyedia identitas (URL issuer, client ID, client secret, redirect URI) disuntikkan via environment variable, tanpa ada hardcode domain atau entitas institusi di kode sumber.
 2. **Standar OIDC Authorization Code Flow & PKCE**: Memanfaatkan standar industri RFC 6749 dan RFC 7636 untuk pertukaran kredensial secara aman.
 3. **Stateless Signed Session Token**: Sesi web ditandatangani menggunakan HMAC-SHA256 tanpa membebani basis data dan dapat diverifikasi secara mandiri.
+
+---
+
+## 4.14 Strategi Pengerasan Ingress, Minimal Dependency, & Pertahanan Berlapis (*Planned — Fase 17–20*)
+
+Untuk mengamankan permukaan masuk web, webhook, jalur berkas, kuota WhatsApp, dan konteks ambien tanpa menambah crate wajib baru maupun vendor lock-in:
+1. **Fail-Closed & Hybrid Upstream Ingress Armor (Fase 17)**: Seluruh gerbang otorisasi web bersifat fail-closed dengan `constant_time_eq` dan header-only (dengan opt-in `AINA_EVENTS_ALLOW_QUERY_KEY` khusus webhook legacy). Endpoint `/webhook` menerapkan SSRF origin-lock dan sanitasi `msg.id` secara wajib, sementara shared secret `AINA_WEBHOOK_SECRET` bersifat opsional (fail-closed saat disetel).
+2. **Canonical Path Sandbox & 100% Env-Var First Secrets (Fase 18)**: Validasi ganda (`^[a-zA-Z0-9_-]{16,64}$` + canonical containment) di Rust dan Python, serta penghapusan total seluruh kredensial hardcoded (termasuk default Infisical di `secret_tool.py` dan XOR di skrip OAuth) dengan Vault eksternal tetap 100% opsional.
+3. **Dual-Layer Hexagonal WhatsApp Throttling (Fase 19)**: Pemisahan bersih sesuai `ADR-001` — edge burst guard & bounded queue di lapisan Driving Adapter (`web/`), dan pure domain `TokenBucket` di `core/domain/rate_limiter.rs` yang diorkestrasi `ProcessIncomingMessageUseCase` dengan kebijakan anti-ban (maks 1x notice sopan per window, lalu silent auto-drop + tombstone).
+4. **Nonce Prompt Boundary, Deterministic Target Binding, & Least-Privilege Env (Fase 20)**: Delimiter XML bernonce acak per tur + tag escaping untuk seluruh konteks untrusted, pengikatan target eksplisit pada `TurnCapability` untuk mutasi grup, dan pemutusan injeksi `WHATSMEOW_API_KEY` pada subprocess agen turn `Guest`.

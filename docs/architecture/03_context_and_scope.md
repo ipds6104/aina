@@ -57,12 +57,12 @@ Aina terhubung ke dunia luar melalui antarmuka teknis terstandarisasi. Tabel ber
 
 | ID Antarmuka | Nama Antarmuka | Protokol | Pihak Sumber | Pihak Tujuan | Deskripsi Singkat & Kegunaan |
 |:---|:---|:---|:---|:---|:---|
-| IF-01 | Webhook Ingress WhatsApp | HTTP POST (JSON) | Whatsmeow Gateway | Aina Webhook Server | Menerima pemberitahuan seketika saat ada pesan baru masuk dari WhatsApp (teks, media, mention). |
+| IF-01 | Webhook Ingress WhatsApp | HTTP POST (JSON) | Whatsmeow Gateway | Aina Webhook Server | Menerima pesan masuk WhatsApp (teks, media, mention); mendukung pengamanan opsional `AINA_WEBHOOK_SECRET`, SSRF origin-lock pada `download_url`, dan sanitasi `msg.id` (Target Fase 17). |
 | IF-02 | WhatsApp Egress Client | HTTP POST (JSON) | Aina Core | Whatsmeow Gateway | Mengirimkan pesan balasan, tanda centang/baca, dan indikator mengetik (*typing indicator*) ke WhatsApp. |
 | IF-03 | Antigravity Agent Engine Runner | Subprocess (stdin/stdout pipe) | Aina Core | Google Antigravity CLI (`agy`) | Menjalankan proses penalaran agen AI, pemilihan alat (*tool calls*), serta eksekusi kode terminal di sandbox. |
 | IF-04 | Penyimpanan Data SQLite | Rust Crate (`rusqlite`) | Aina Core | Database File (`aina.db`) | Menyimpan sesi obrolan, riwayat pesan, profil peran rekan kerja, dan tugas terjadwal secara lokal. |
-| IF-05 | Web Setup & Simulator UI | HTTP / REST API (HTML, JSON) | Web Browser Admin | Aina Web Server | Halaman web `/setup` untuk aktivasi akun Google via OAuth PKCE, memilih model AI, serta simulator chat real-time. |
-| IF-06 | Runtime Secret Broker | CLI Subprocess (`secret_tool`) | Aina Tools / Skills | Brankas Rahasia (Infisical / Vault) | Mengambil kunci API dan sandi secara aman tepat saat alat akan dijalankan tanpa menyimpannya di file teks. |
+| IF-05 | Web Setup & Simulator UI | HTTP / REST API (HTML, JSON) | Web Browser Admin | Aina Web Server | Halaman web `/setup` & dasbor admin (OIDC SSO opsional / Header `X-Admin-Key` fail-closed, tanpa rahasia di query URL untuk API admin, Target Fase 17). |
+| IF-06 | Runtime Secret Broker | Env / CLI Subprocess (`secret_tool`) | Aina Tools / Skills | Env Lokal / Brankas Opsional (Infisical / Vault / Doppler) | Menyuntikkan kredensial berbasis *Env-Var First* tanpa rahasia statis di Git; brankas eksternal bersifat 100% opsional & vendor-agnostic (Target Fase 18). |
 | IF-07 | External Cloud & Skill APIs | HTTPS / REST / Git | Aina Sandbox Skills | Layanan Cloud Eksternal | Mengunduh file dari Google Drive, mengekstrak tabel dokumen via VLM, serta mengunduh skill baru dari Git. |
 | IF-08 | Scheduled Tasks & Baseline Activity Reconciler | Internal Event Loop / CLI | Aina Core / CLI | Scheduler Daemon / Storage Persisten | Mengelola jadwal berulang, merekonsiliasi katalog baseline dengan override di `/app/data/activities`, dan mencatat riwayat eksekusi. |
 | IF-09 | Autonomous Reflection & Environment Grounding | HTTPS REST / CLI | Aina Reflection Skill | Layanan Cuaca Publik & Web Search | Mengambil data cuaca real-time Pontianak via Open-Meteo dan merumuskan kueri riset web terarah untuk adaptasi aktivitas bebas halusinasi. |

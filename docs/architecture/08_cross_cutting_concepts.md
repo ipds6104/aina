@@ -230,14 +230,6 @@ Untuk mencegah lonjakan proses (OOM killer) dan badai kuota upstream Google Clou
    - Alokasi akun memprioritaskan akun dengan `in_flight < 2` dan tidak sedang dalam *cooldown*, mencegah penguncian kuota upstream secara deterministik.
    - Sewa token dikelola dengan pola RAII Guard (`AccountLease`), otomatis melepaskan slot saat eksekusi selesai.
    - Telemetri status dapat dipantau langsung via `aina status --concurrency [--json]`.
----
-
-## 8.7 Manajemen Konkurensi Kepadatan Tinggi & Invarian Sewa Akun (*Token-Aware Lease Management*)
-
-Untuk mendukung interaksi masif hingga 100 pengguna simultan di satu server:
-1. **Bounded Semaphore Isolation**: Kapasitas eksekusi agen dibatasi oleh konfigurasi `AINA_MAX_CONCURRENT_AGENTS` (default 8). Hal ini mencegah lonjakan memori (RAM) yang tidak terkendali pada container.
-2. **Zero-429 Rate Limit Invariant**: Setiap akun di kolam Google Antigravity dibatasi maksimal 2 *in-flight requests* aktif secara bersamaan. Akun yang sedang berada dalam status jeda (*cooldown*) otomatis dilewati.
-3. **RAII Lease Drop**: Manajemen sewa token menggunakan pola RAII Rust (`AccountLease`), sehingga atomisitas hitungan beban terjamin surut kembali secara aman baik saat eksekusi berhasil maupun saat terjadi kegagalan jaringan.
 
 ---
 
@@ -266,3 +258,28 @@ Antarmuka web administratif dan simulator Aina (`/`, `/auth/login`, `/auth/error
 2. **Indikator Status Semantik & CSS Deterministic Badges**: Status sistem (misal status engine online, akun pool aktif/cooldown) dinyatakan menggunakan teks semantik tegas dan kelas CSS berwarna standar (`badge-success`, `badge-warning`).
 3. **Ikon Vektor Standar (SVG)**: Untuk ikon grafis esensial (seperti avatar pengguna SSO atau penanda peringatan error autentikasi), antarmuka menggunakan vektor SVG inline standar tanpa ketergantungan pustaka ikon runtime eksternal.
 4. **Tipografi Bersih Google Sans**: Hierarki visual mempertahankan keterbacaan tinggi dan kontras aksesibilitas WCAG AA tanpa distraksi visual non-standar.
+
+---
+
+## 8.17 Pengerasan Ingress Web/Webhook, Env-First Secrets, Throttling Heksagonal, & Isolasi Konteks Ambien (*Target Desain — Roadmap Fase 17–20*)
+
+Menyusul audit keamanan (Cloudflare Security Audit Harness & tinjauan lintas-arc42), arsitektur pengerasan Aina ditetapkan melalui **4 pilar terukur** dengan prinsip **nol crate Rust baru** dan **nol dependensi eksternal wajib** (lihat roadmap [`HARDENED_ENTERPRISE_SECURITY_AND_THREAT_SHIELD.md`](../roadmaps/HARDENED_ENTERPRISE_SECURITY_AND_THREAT_SHIELD.md)):
+
+1. **Pilar 1 — Fail-Closed Web & Hybrid Webhook Ingress Armor (Fase 17 / ADR-016)**:
+   - Seluruh gerbang otorisasi (`is_admin_authorized`, `is_api_authorized`, `is_events_authorized`, `auth_setup.rs`) bersifat **fail-closed** (`return false` bila kunci kosong) dengan evaluasi byte konstan waktu (`constant_time_eq`). Token setup otomatis memakai 128-bit CSPRNG, `whatsmeow_api_key` dipisahkan dari otorisasi admin web, dan sesi OIDC memakai secret ephemeral CSPRNG + flag `Secure` + verifikasi `OIDC_STATE_COOKIE`.
+   - Rahasia query URL (`?key=`) dihapus penuh pada seluruh API admin/auth/audit (dengan migrasi Web UI & skrip ke Header); `/api/v1/events` bersifat header-first dengan opt-in eksplisit `AINA_EVENTS_ALLOW_QUERY_KEY=true` untuk webhook legacy.
+   - Endpoint diagnostik (`/api/auth/accounts`, `/api/schedule/*`, `/api/persona/*`, `/api/metacognition/*`) dan `/setup` (saat OIDC aktif) dilindungi autentikasi; `/api/setup` & `/api/auth/verify` menerapkan IP lockout sadar reverse proxy.
+   - `POST /webhook` menerapkan SSRF origin-lock pada `download_url` dan sanitasi `msg.id` secara wajib, serta shared secret opsional `AINA_WEBHOOK_SECRET` (fail-closed bila disetel).
+
+2. **Pilar 2 — Canonical Path Sandboxing & 100% Env-Var First Secrets (Fase 18 / ADR-017)**:
+   - Parameter `session_id` OAuth divalidasi ganda di Rust (`oauth.rs`) dan Python (`oauth_helper.py`) dengan pola ketat `^[a-zA-Z0-9_-]{16,64}$` dan verifikasi canonical root containment sebelum tulis maupun `remove_dir_all`.
+   - Seluruh kredensial hardcoded (plaintext `INFISICAL_CLIENT_ID`/`INFISICAL_CLIENT_SECRET` di `secret_tool.py` dan XOR `_decode_key` di skrip OAuth) serta domain/path privat dihapus total; seluruh kredensial dibaca murni dari environment variable standar (*Env-Var First*) sementara Vault eksternal tetap 100% opsional (`ADR-005`).
+
+3. **Pilar 3 — Dual-Layer Hexagonal WhatsApp Ingress Throttling (Fase 19 / ADR-018)**:
+   - Mematuhi `ADR-001`: **Lapis 1** (*Edge Burst Guard* & bounded `mpsc` queue di `src/adapters/driving/web/`) menghentikan flood ekstrem sebelum unduh media/antrean memori; **Lapis 2** (*Pure Domain Token Bucket* di `src/core/domain/rate_limiter.rs` tanpa `tokio`/I/O) diorkestrasi di `ProcessIncomingMessageUseCase` pasca-resolusi `Authority` (`Guest`: 3 token, +1/20s, gap 5s; `Staff`/`Atasan`: 10 token, +1/6s; `Admin`: bypass).
+   - Kebijakan anti-ban WhatsApp: kirim maksimal **1x notifikasi cooldown sopan per window**, lalu **silent auto-drop + isolasi sementara (*tombstone*)** untuk burst lanjutan, dengan pencatatan insiden pada tabel `whatsapp_action_audits`.
+
+4. **Pilar 4 — Nonce XML Prompt Boundary, Deterministic Target Binding, & Least-Privilege Subprocess Env (Fase 20 / ADR-018)**:
+   - Seluruh konten untrusted (`ambient_history` 10 pesan grup, `ON-DEMAND RECALL`, `quoted_message`, `sender.name`) dibungkus tag XML bernonce acak per tur (`<untrusted_ambient_history nonce="...">` / `<untrusted_recalled_history nonce="...">`) lengkap dengan escaping tag penutup untuk mencegah XML breakout.
+   - `TurnCapability` membawa `explicit_targets` yang diekstrak deterministik dari pesan aktif Admin (`mentioned_jids`, JID/nomor di `msg.text`, `quoted_message.sender_jid`); mutasi `GrantUser`/`RevokeUser` di grup wajib cocok dengan target aktif (`target_not_in_active_turn_message`).
+   - `AntigravityCliAdapter` menghentikan penyuntikan `WHATSMEOW_API_KEY` dan `WHATSMEOW_COMPANION_KEY` ke subprocess `agy` pada turn `Authority::Guest` (serta `WHATSMEOW_COMPANION_KEY` hanya untuk `Authority::Admin`).

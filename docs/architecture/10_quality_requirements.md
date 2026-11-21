@@ -16,14 +16,18 @@ Hubungan antara sasaran mutu utama dan skenario pengujian dipetakan dalam pohon 
 
 - Kualitas Sistem Aina
   ├── Ketersediaan & Keandalan
-  │   └── **QS-01**: Rotasi kuota otomatis saat batas harian 429 tercapai (#reliability)
+  │   ├── **QS-01**: Rotasi kuota otomatis saat batas harian 429 tercapai (#reliability)
+  │   ├── **QS-12**: Ketahanan Konkurensi 100 Obrolan Serentak & Zero-429 (#reliability, #efficiency)
+  │   └── **QS-15**: Pertahanan Kuota & Anti-Ban WhatsApp pada Banjir DM Tamu *(Aspirational — Fase 19)* (#reliability, #security)
   ├── Privasi & Keamanan
   │   ├── **QS-02**: Nol kebocoran pesan pribadi dan penyuntikan kunci JIT (#security)
   │   ├── **QS-08**: Integritas kriptografis rantai audit tool SHA-256 (#security)
   │   ├── **QS-09**: Pertahanan Zero Implicit Trust saat nomor WA bocor (#security)
-  │   └── **QS-10**: Hak penghapusan mandiri subjek data sesuai UU PDP (#security, #usability)
-│   ├── **QS-11**: Pertahanan Anti-Impersonasi & Integritas Identitas 3-Tingkat (#security)
-│   └── **QS-12**: Ketahanan Konkurensi 100 Obrolan Serentak & Zero-429 (#reliability, #efficiency)
+  │   ├── **QS-10**: Hak penghapusan mandiri subjek data sesuai UU PDP (#security, #usability)
+  │   ├── **QS-11**: Pertahanan Anti-Impersonasi & Integritas Identitas 3-Tingkat (#security)
+  │   ├── **QS-13**: Otorisasi Web Fail-Closed, Header-Only Admin API, & Webhook SSRF/Path Lock *(Aspirational — Fase 17)* (#security)
+  │   ├── **QS-14**: Canonical Path Containment & Zero Hardcoded Secrets Env-First *(Aspirational — Fase 18)* (#security, #maintainability)
+  │   └── **QS-16**: Isolasi Nonce XML, Deterministic Target Binding, & Least-Privilege Subprocess Env *(Aspirational — Fase 20)* (#security)
   ├── Kemudahan Perawatan & Modul
   │   ├── **QS-03**: Pemasangan skill Git kustom tanpa menyentuh kode inti (#maintainability)
   │   └── **QS-06**: Ketahanan modifikasi jadwal saat redeploy kontainer (#maintainability)
@@ -128,22 +132,6 @@ Hubungan antara sasaran mutu utama dan skenario pengujian dipetakan dalam pohon 
 
 ---
 
-## 10.3 Matriks Ringkasan Skenario Mutu
-
-| ID Skenario | Sasaran Mutu | Target Ukuran | Kondisi Terverifikasi Saat Ini |
-|:---|:---|:---|:---|
-| **QS-01** | #reliability | Waktu failover < 2 detik, 0 kegagalan pesan | Lulus (Terverifikasi di unit test `account_pool.rs`) |
-| **QS-02** | #security | 100% pesan pribadi sensor diabaikan | Lulus (Terverifikasi di `process_message/context_preparer.rs`) |
-| **QS-03** | #maintainability | Waktu pasang skill < 10 detik tanpa restart | Lulus (Terverifikasi di `skill_scaffolder.py`) |
-| **QS-04** | #efficiency | Waktu pencarian FTS5 < 5 milidetik | Lulus (Terverifikasi di `sqlite_store/session.rs`) |
-| **QS-05** | #usability | 0 tabel rusak di WhatsApp, klarifikasi terarah | Lulus (Terverifikasi di `domain/persona.rs`) |
-| **QS-06** | #maintainability | 100% jadwal kustom bertahan pasca redeploy | Lulus (Terverifikasi di `activity.rs` & volume persistensi) |
-| **QS-07** | #adaptability | Deteksi kebosanan $\ge 0.5$, 0% halusinasi cuaca | Lulus (Terverifikasi di `reflect.py` & Open-Meteo API) |
-| **QS-08** | #security | 100% deteksi manipulasi log rantai hash SHA-256 | Lulus (Terverifikasi di `sqlite_store/mod.rs` & NIST AU-10) |
-| **QS-09** | #security | 0% kebocoran data internal ke nomor asing | Lulus (Terverifikasi di `context_preparer.rs` Zero Trust) |
-| **QS-10** | #security, #usability | 100% penghapusan profil mandiri sesuai UU PDP | Lulus (Terverifikasi di `builtin_commands.rs` test) |
----
-
 ### QS-11: Pertahanan Anti-Impersonasi & Integritas Identitas 3-Tingkat
 - **Kategori Mutu**: #security
 - **Skenario Pengujian**:
@@ -159,3 +147,62 @@ Hubungan antara sasaran mutu utama dan skenario pengujian dipetakan dalam pohon 
   100 pesan webhook diterima secara serentak dalam rentang waktu 5 detik.
 - **Ukuran Keberhasilan**:
   Maksimal 8 agen aktif simultan, beban per akun Google <= 2 in-flight, 0% insiden server OOM, dan 0% error HTTP 429. Seluruh 100 pesan terlayani secara tertib.
+
+---
+
+### QS-13: Otorisasi Web Fail-Closed, Header-Only Admin API, & Webhook SSRF/Path Lock *(Aspirational — Fase 17)*
+- **Kategori Mutu**: #security
+- **Kondisi Awal**: Deployment baru berjalan tanpa `ADMIN_KEY` (atau `ADMIN_KEY=""`) serta eksposur endpoint web & `/webhook`.
+- **Pemicu**: Pihak tidak terautentikasi mengakses `/api/setup`, `/api/simulate`, `/api/audit/*`, `/api/schedule/*`, mengirim `?key=...`, melakukan brute force `/api/auth/verify`, atau mengirim `download_url` eksternal & `id: "../../evil"` ke `/webhook`.
+- **Respon Sistem**: Seluruh endpoint admin/diagnostik menolak dengan HTTP 401 (fail-closed + `constant_time_eq`), query `?key=` ditolak di admin API, percobaan ke-6 `/api/auth/verify` diblokir HTTP 429, dan `/webhook` memblokir SSRF serta menyanitasi `msg.id`.
+- **Ukuran Keberhasilan**: 0% akses admin/diagnostik tanpa header/sesi OIDC sah, 0% request keluar ke host SSRF, dan 0% penulisan media di luar `workspace/media/`.
+
+---
+
+### QS-14: Canonical Path Containment & Zero Hardcoded Secrets Env-First *(Aspirational — Fase 18)*
+- **Kategori Mutu**: #security, #maintainability
+- **Kondisi Awal**: Repositori upstream dijalankan di lingkungan lokal/Docker tanpa layanan Vault eksternal wajib.
+- **Pemicu**: Payload `POST /api/auth/oauth/exchange` mengirim `session_id: "../../evil"`, atau pemindaian statis memeriksa `scripts/` dan `skills/infisical/scripts/secret_tool.py`.
+- **Respon Sistem**: Validasi ganda Rust & Python (`^[a-zA-Z0-9_-]{16,64}$` + canonical check) langsung mengembalikan HTTP 400 tanpa menulis/menghapus file; seluruh kredensial OAuth & Vault dibaca murni dari env var standar tanpa hardcoded plaintext maupun XOR.
+- **Ukuran Keberhasilan**: 0% path escape pada `oauth_sessions`, 0 hardcoded credentials/domain privat di source Git, dan 0 dependensi Vault wajib.
+
+---
+
+### QS-15: Pertahanan Kuota & Anti-Ban WhatsApp pada Banjir DM Tamu *(Aspirational — Fase 19)*
+- **Kategori Mutu**: #reliability, #security
+- **Kondisi Awal**: Nomor asing berstatus `Authority::Guest` mengirim banjir 50 pesan DM (termasuk media) dalam 10 detik.
+- **Pemicu**: Webhook menerima burst masif dari JID tamu yang sama sementara Admin juga aktif berinteraksi.
+- **Respon Sistem**: Edge burst guard menahan flood ekstrem sebelum unduh media/antrean; pure domain `TokenBucket` mengizinkan maks 3 pesan, mengirim maks 1x balasan cooldown sopan per window, lalu melakukan silent auto-drop + tombstone sementara, dicatat di `whatsapp_action_audits`; Admin tetap dilayani penuh.
+- **Ukuran Keberhasilan**: 0% kebocoran kuota `AccountPool` (429) akibat spam tamu, maks 1 balasan cooldown keluar per window (anti-ban WA), dan 0 impor `tokio`/I/O di `src/core/domain/rate_limiter.rs`.
+
+---
+
+### QS-16: Isolasi Nonce XML, Deterministic Target Binding, & Least-Privilege Subprocess Env *(Aspirational — Fase 20)*
+- **Kategori Mutu**: #security
+- **Kondisi Awal**: Tamu di grup mengirim payload indirect prompt injection (termasuk usaha XML breakout `</untrusted_ambient_history>`) untuk memicu `aina policy grant-user <attacker_jid>`, lalu Admin memanggil `@Aina` dengan pertanyaan netral.
+- **Pemicu**: `ContextPreparer` merakit prompt dan menerbitkan `TurnCapability`; agen dieksekusi di `AntigravityCliAdapter`.
+- **Respon Sistem**: Seluruh konteks untrusted (`ambient`, `recall`, `quote`, `sender.name`) terbungkus nonce XML acak + ter-escape; `capability::evaluate` menolak `GrantUser`/`RevokeUser` di grup untuk target yang tidak ada di `explicit_targets` pesan aktif Admin; subprocess `agy` pada turn `Guest` berjalan tanpa env `WHATSMEOW_API_KEY`/`WHATSMEOW_COMPANION_KEY`.
+- **Ukuran Keberhasilan**: 100% penolakan deterministik eskalasi akses dari konteks ambien grup dan 0% paparan kredensial gateway pada proses anak turn `Guest`.
+
+---
+
+## 10.3 Matriks Ringkasan Skenario Mutu
+
+| ID Skenario | Sasaran Mutu | Target Ukuran | Kondisi Terverifikasi Saat Ini |
+|:---|:---|:---|:---|
+| **QS-01** | #reliability | Waktu failover < 2 detik, 0 kegagalan pesan | Lulus (Terverifikasi di unit test `account_pool.rs`) |
+| **QS-02** | #security | 100% pesan pribadi sensor diabaikan | Lulus (Terverifikasi di `process_message/context_preparer.rs`) |
+| **QS-03** | #maintainability | Waktu pasang skill < 10 detik tanpa restart | Lulus (Terverifikasi di `skill_scaffolder.py`) |
+| **QS-04** | #efficiency | Waktu pencarian FTS5 < 5 milidetik | Lulus (Terverifikasi di `sqlite_store/session.rs`) |
+| **QS-05** | #usability | 0 tabel rusak di WhatsApp, klarifikasi terarah | Lulus (Terverifikasi di `domain/persona.rs`) |
+| **QS-06** | #maintainability | 100% jadwal kustom bertahan pasca redeploy | Lulus (Terverifikasi di `activity.rs` & volume persistensi) |
+| **QS-07** | #adaptability | Deteksi kebosanan $\ge 0.5$, 0% halusinasi cuaca | Lulus (Terverifikasi di `reflect.py` & Open-Meteo API) |
+| **QS-08** | #security | 100% deteksi manipulasi log rantai hash SHA-256 | Lulus (Terverifikasi di `sqlite_store/mod.rs` & NIST AU-10) |
+| **QS-09** | #security | 0% kebocoran data internal ke nomor asing | Lulus (Terverifikasi di `context_preparer.rs` Zero Trust) |
+| **QS-10** | #security, #usability | 100% penghapusan profil mandiri sesuai UU PDP | Lulus (Terverifikasi di `builtin_commands.rs` test) |
+| **QS-11** | #security | 100% klaim impersonasi terkunci `UNCONFIRMED` | Lulus (Terverifikasi di `profiler.rs` & `user.rs` test) |
+| **QS-12** | #reliability, #efficiency | Maks 8 agen simultan, <= 2 in-flight/akun, 0% 429 | Lulus (Terverifikasi di `account_pool.rs` & `adapter.rs`) |
+| **QS-13** | #security | 0% fail-open/SSRF/query-key admin, lockout 429 aktif | Aspirational (Target Fase 17 — terlacak di RISK-15 & DEBT-07) |
+| **QS-14** | #security, #maintainability | 0% path traversal OAuth, 0 hardcoded secret di Git | Aspirational (Target Fase 18 — terlacak di RISK-16 & DEBT-05) |
+| **QS-15** | #reliability, #security | 0% bleed kuota pool, maks 1x notice lalu silent drop | Aspirational (Target Fase 19 — terlacak di RISK-17 & DEBT-06) |
+| **QS-16** | #security | 100% blokir mutasi target ambien & 0% key di turn Guest | Aspirational (Target Fase 20 — terlacak di RISK-18 & DEBT-08) |

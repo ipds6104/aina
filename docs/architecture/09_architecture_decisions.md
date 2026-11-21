@@ -204,3 +204,49 @@ Bab ini mencatat keputusan-keputusan arsitektur penting (*Architecture Decision 
 - **Konsekuensi Positif**:
   Tampilan visual sangat rapi, profesional, konsisten di seluruh browser dan platform tanpa ketergantungan paket font emoji OS, serta mematuhi standar higienitas antarmuka perusahaan.
 - **Risiko yang Muncul**: Tidak ada.
+
+---
+
+### ADR-016: Fail-Closed Web Auth, Hybrid Webhook Armor, & Header-First API (Fase 17)
+
+- **Status**: Diusulkan / Menunggu Implementasi (*Proposed — Planned Fase 17*)
+- **Konteks**:
+  Audit keamanan mendeteksi bahwa `is_admin_authorized`, `is_api_authorized`, dan beberapa handler `auth_setup.rs` bersifat fail-open saat `setup_code` kosong, memakai perbandingan string non-constant-time (`==`), menerima rahasia via query URL (`?key=`), membiarkan endpoint diagnostik (`/api/auth/accounts`, `/api/schedule/*`, `/api/persona/*`, `/api/metacognition/*`) tanpa auth, menggunakan fallback secret OIDC lemah, serta membiarkan `POST /webhook` rentan SSRF (`download_url`) dan path traversal (`msg.id`). Sebagai repo upstream minimalis, pengamanan harus tanpa crate Rust baru dan tidak memutus setup Whatsmeow internal.
+- **Keputusan**:
+  1. Menegakkan *Fail-Closed* + `constant_time_eq` pada seluruh fungsi otorisasi web (`auth.rs`, `auth_setup.rs`), CSPRNG setup token 128-bit (`main.rs`), pemisahan `whatsmeow_api_key` dari admin API, dan pengerasan sesi OIDC (ephemeral CSPRNG fallback secret, flag `Secure`, verifikasi `OIDC_STATE_COOKIE`).
+  2. Menghapus penuh `?key=` pada semua admin/auth/audit API (disertai migrasi Web UI & `login_account.py` ke Header `X-Admin-Key`), sementara `/api/v1/events` bersifat header-first dengan opt-in eksplisit `AINA_EVENTS_ALLOW_QUERY_KEY=true` untuk webhook legacy.
+  3. Menutup endpoint diagnostik & `/setup` (saat OIDC aktif) di balik autentikasi, serta menambahkan IP lockout sadar reverse proxy (`ConnectInfo` + opt-in `AINA_TRUST_PROXY_HEADERS`) pada `/api/setup` dan `/api/auth/verify`.
+  4. Mengamankan `POST /webhook` secara hybrid kompatibel upstream: wajib SSRF origin-lock pada `download_url` dan sanitasi `msg.id`, sedangkan autentikasi header `AINA_WEBHOOK_SECRET` bersifat opsional (fail-closed saat disetel).
+- **Konsekuensi Positif**:
+  Menutup seluruh vektor bypass autentikasi web, SSRF/kebocoran API key, dan kebocoran kunci di log proxy tanpa memutus kompatibilitas upstream maupun menambah crate eksternal.
+- **Risiko yang Muncul**: RISK-15
+
+---
+
+### ADR-017: Canonical Path Sandboxing & 100% Env-Var First Zero Hardcoded Secrets (Fase 18)
+
+- **Status**: Diusulkan / Menunggu Implementasi (*Proposed — Planned Fase 18*)
+- **Konteks**:
+  Parameter `session_id` pada `oauth.rs` dan `oauth_helper.py` digabungkan langsung ke jalur direktori (bahkan dipanggil dengan `remove_dir_all`) tanpa sanitasi maupun canonical check. Selain itu, ditemukan kredensial plaintext `INFISICAL_CLIENT_ID`/`INFISICAL_CLIENT_SECRET` hardcoded di `skills/infisical/scripts/secret_tool.py` serta byte-array OAuth XOR (`_decode_key`) dan domain privat di `scripts/login_account.py` & `oauth_helper.py`. Image Docker upstream juga tidak memasang biner `infisical` secara wajib.
+- **Keputusan**:
+  1. Menegakkan validasi ganda di Rust (`oauth.rs` mengembalikan `Result<PathBuf>`) dan Python (`oauth_helper.py`): whitelist `^[a-zA-Z0-9_-]{16,64}$` dan verifikasi canonical containment (`starts_with` / `commonpath`) sebelum penulisan maupun penghapusan direktori.
+  2. Menghapus 100% kredensial statis dan domain/path privat dari `secret_tool.py`, `oauth_helper.py`, `login_account.py`, dan `oauth.rs`.
+  3. Mengadopsi pendekatan *100% Env-Var First* (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` via `os.environ` & `Command::env`) tanpa mengimpor modul internal Infisical; brankas eksternal (Infisical/Vault/Doppler) tetap 100% opsional melalui kontrak `IF-06` (`ADR-005`).
+- **Konsekuensi Positif**:
+  Menutup celah path traversal & penghapusan direktori arbitrer, menghilangkan seluruh secret hardcoded dari repositori Git, dan menjaga image upstream 100% netral tanpa dependensi vault wajib.
+- **Risiko yang Muncul**: RISK-16
+
+---
+
+### ADR-018: Dual-Layer Hexagonal WhatsApp Throttling, Nonce Prompt Boundary, & Least-Privilege Turn (Fase 19–20)
+
+- **Status**: Diusulkan / Menunggu Implementasi (*Proposed — Planned Fase 19–20*)
+- **Konteks**:
+  Banjir pesan DM WhatsApp dari nomor tak dikenal dapat memicu download media/antrean tak terbatas di `webhook.rs` & `queue.rs` serta menguras `AccountPool` (429 cooldown). Di sisi lain, penempatan state rate limiter di `core/domain/gatekeeper.rs` akan melanggar `ADR-001` (Hexagonal murni) karena `Gatekeeper` stateless dan belum mengenal `Authority`, sedangkan membalas setiap pesan spam berisiko menyebabkan ban WhatsApp. Pada jalur prompt grup, riwayat ambien, *On-Demand Recall*, `quoted_message`, dan `sender.name` disisipkan tanpa nonce anti-breakout, `TurnCapability` di grup belum membatasi target mutasi user ke pesan aktif Admin, dan `adapter.rs` menyuntikkan `WHATSMEOW_API_KEY` ke subprocess agen bahkan pada turn `Guest`.
+- **Keputusan**:
+  1. **Dual-Layer Hexagonal Throttling (Fase 19)**: Edge burst guard & bounded `mpsc` queue di `src/adapters/driving/web/` (sebelum download media), ditambah pure domain `TokenBucket` di `src/core/domain/rate_limiter.rs` (nol `tokio`/I/O/crate baru) yang diorkestrasi di `ProcessIncomingMessageUseCase` setelah resolve `Authority`. Saat Guest melewati batas: kirim maks 1x notifikasi sopan per window, lalu silent auto-drop + isolasi sementara (*tombstone*), dicatat ke `whatsapp_action_audits`.
+  2. **Nonce Prompt Boundary & Deterministic Target Binding (Fase 20)**: Bungkus seluruh data untrusted (`ambient_history`, `ON-DEMAND RECALL`, `quoted_message`, `sender.name`) dalam tag XML bernonce acak per tur (`<untrusted_ambient_history nonce="...">` & `<untrusted_recalled_history nonce="...">`) dengan escaping tag penutup; ikat `TurnCapability.explicit_targets` secara deterministik dari pesan aktif Admin agar `GrantUser`/`RevokeUser` di grup hanya sah bagi target yang secara eksplisit di-mention/disebut/di-reply di pesan aktif.
+  3. **Least-Privilege Subprocess Env (Fase 20)**: Hentikan penyuntikan `WHATSMEOW_API_KEY` & `WHATSMEOW_COMPANION_KEY` ke subprocess `agy` pada turn `Authority::Guest` (dan `WHATSMEOW_COMPANION_KEY` hanya untuk `Authority::Admin`).
+- **Konsekuensi Positif**:
+  Mencegah DoS kuota/disk/RAM dan risiko ban WhatsApp sembari menjaga kemurnian domain `ADR-001`, serta membentengi wewenang Admin dan kredensial gateway secara deterministik terhadap *indirect prompt injection*.
+- **Risiko yang Muncul**: RISK-17, RISK-18
