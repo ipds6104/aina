@@ -1,4 +1,5 @@
 pub mod activity;
+pub mod agy;
 pub mod archive;
 pub mod asset;
 pub mod audit;
@@ -15,6 +16,7 @@ pub mod whatsapp;
 pub mod workspace;
 
 pub use activity::*;
+pub use agy::*;
 pub use archive::*;
 pub use asset::*;
 pub use audit::*;

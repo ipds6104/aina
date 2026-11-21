@@ -256,6 +256,11 @@ impl AntigravityCliAdapter {
                 cmd.arg("--effort").arg(eff);
             }
 
+            // Phase 21: Prevent unverified mid-turn self-update mutations in production unless explicitly opted in.
+            if super::updater::is_auto_update_disabled_by_policy() {
+                cmd.env("AGY_CLI_DISABLE_AUTO_UPDATE", "1");
+            }
+
             // Phase 20: Least-Privilege Subprocess Environment Injection (ADR-018).
             // Always remove gateway secrets first to prevent accidental inheritance from parent daemon env.
             cmd.env_remove("WHATSMEOW_API_KEY");

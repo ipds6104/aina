@@ -205,7 +205,44 @@ if [ ! -x "/usr/bin/google-chrome" ] && [ -x "/usr/bin/chromium" ]; then
     ln -s /usr/bin/chromium /usr/bin/google-chrome 2>/dev/null || true
 fi
 
+# Persistent Anti-Downgrade Antigravity CLI (`agy`) Bridge (Phase 21)
+# Keeps canary-upgraded `agy` in persistent `/app/data/bin/agy` across Coolify redeployments,
+# promotes image binary only if strictly newer semver, and unifies symlinks (0 split-brain).
+mkdir -p /app/data/bin /root/.local/bin
+IMAGE_AGY_BIN="/root/.local/bin/agy"
+PERSIST_AGY_BIN="/app/data/bin/agy"
+if [ -f "$IMAGE_AGY_BIN" ] && [ ! -L "$IMAGE_AGY_BIN" ]; then
+    if [ ! -x "$PERSIST_AGY_BIN" ]; then
+        echo "Seeding persistent agy binary into $PERSIST_AGY_BIN..."
+        cp "$IMAGE_AGY_BIN" "${PERSIST_AGY_BIN}.tmp" && chmod +x "${PERSIST_AGY_BIN}.tmp" && mv -f "${PERSIST_AGY_BIN}.tmp" "$PERSIST_AGY_BIN"
+    else
+        IMG_VER=$(AGY_CLI_DISABLE_AUTO_UPDATE=1 "$IMAGE_AGY_BIN" --version 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)
+        PER_VER=$(AGY_CLI_DISABLE_AUTO_UPDATE=1 "$PERSIST_AGY_BIN" --version 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)
+        if [ -n "$IMG_VER" ] && [ -n "$PER_VER" ] && [ "$IMG_VER" != "$PER_VER" ]; then
+            NEWER=$(printf '%s\n%s\n' "$IMG_VER" "$PER_VER" | sort -V | tail -n 1)
+            if [ "$NEWER" = "$IMG_VER" ]; then
+                echo "Promoting newer image agy binary ($PER_VER -> $IMG_VER) into $PERSIST_AGY_BIN..."
+                cp "$PERSIST_AGY_BIN" "${PERSIST_AGY_BIN}.prev" 2>/dev/null || true
+                cp "$IMAGE_AGY_BIN" "${PERSIST_AGY_BIN}.tmp" && chmod +x "${PERSIST_AGY_BIN}.tmp" && mv -f "${PERSIST_AGY_BIN}.tmp" "$PERSIST_AGY_BIN"
+            else
+                echo "Preserving newer persistent agy binary ($PER_VER over image $IMG_VER; anti-downgrade active)."
+            fi
+        fi
+    fi
+    ln -sfn "$PERSIST_AGY_BIN" /root/.local/bin/agy
+    ln -sfn "$PERSIST_AGY_BIN" /usr/local/bin/agy
+elif [ -x "$PERSIST_AGY_BIN" ]; then
+    ln -sfn "$PERSIST_AGY_BIN" /root/.local/bin/agy
+    ln -sfn "$PERSIST_AGY_BIN" /usr/local/bin/agy
+fi
+
+# Prevent silent mid-turn self-update mutations in production unless operator explicitly opts in
+case "${AINA_AGY_ALLOW_AUTO_UPDATE:-false}" in
+    true|1|yes|TRUE|YES) ;;
+    *) export AGY_CLI_DISABLE_AUTO_UPDATE=1 ;;
+esac
+
 # Make sure agy is in PATH
-export PATH="/root/.local/bin:/usr/local/bin:$PATH"
+export PATH="/app/data/bin:/root/.local/bin:/usr/local/bin:$PATH"
 
 exec "$@"

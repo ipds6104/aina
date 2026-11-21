@@ -30,10 +30,10 @@ impl SqliteSessionStore {
         }
 
         let conn = Connection::open(path_ref)?;
-        // Agent-spawned CLIs (`aina policy ...`) open a second connection while
-        // the daemon may be writing. A busy timeout turns an instant
-        // SQLITE_BUSY into a bounded wait instead of a spurious failure.
-        conn.busy_timeout(std::time::Duration::from_secs(5))?;
+        // Agent-spawned CLIs (`aina policy ...`) and rolling blue/green containers
+        // open concurrent connections on the shared WAL database. A 15s busy timeout
+        // prevents transient SQLITE_BUSY errors during zero-downtime swaps.
+        conn.busy_timeout(std::time::Duration::from_secs(15))?;
         schema::init_schema(&conn)?;
 
         info!("SQLite database initialized at {:?}", path_ref);

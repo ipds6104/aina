@@ -1,11 +1,11 @@
 use rusqlite::Connection;
 
 pub fn init_schema(conn: &Connection) -> anyhow::Result<()> {
-    // Resilience against power cuts & high concurrency: Enable Write-Ahead Logging (WAL)
+    // Resilience against power cuts & concurrent blue/green swaps: WAL + 15s busy timeout
     conn.execute_batch(
         "PRAGMA journal_mode = WAL;
          PRAGMA synchronous = NORMAL;
-         PRAGMA busy_timeout = 5000;"
+         PRAGMA busy_timeout = 15000;"
     )?;
 
     // Initialize tables

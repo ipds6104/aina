@@ -152,7 +152,7 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    // 4. Start Scheduler if enabled (Driving Adapter)
+    // 4. Start Scheduler & Antigravity CLI Version Watchdog (Driving Adapter)
     if config.scheduler.enabled {
         let runner = SchedulerRunner::new(
             Arc::clone(&scheduled_tick_usecase),
@@ -160,6 +160,11 @@ async fn main() -> anyhow::Result<()> {
         );
         runner.start();
     }
+    adapters::driving::scheduler::start_agy_update_watchdog(
+        std::path::PathBuf::from(&config.agent.binary_path),
+        Arc::clone(&whatsapp) as _,
+        Arc::clone(&persona_engine),
+    );
 
     // 5. Setup Code / Admin Key for First-Time Setup Security (128-bit CSPRNG fallback; never empty)
     let setup_code = std::env::var("ADMIN_KEY")
@@ -257,7 +262,7 @@ async fn main() -> anyhow::Result<()> {
         oidc_config: config.oidc.clone(),
         oidc_states: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
     });
-    let app = create_router(state);
+    let app = create_router(Arc::clone(&state));
 
     let bind_addr: SocketAddr = format!("{}:{}", config.server.host, config.server.port).parse()?;
     info!("Aina Webhook server listening on http://{}", bind_addr);
@@ -269,6 +274,28 @@ async fn main() -> anyhow::Result<()> {
     )
     .with_graceful_shutdown(shutdown_signal())
     .await?;
+
+    // Zero-downtime graceful drain: wait up to 45s for in-flight WhatsApp AI turns to finish
+    // delivering replies after SIGTERM (pairs with Coolify stop_grace_period=60s).
+    let drain_deadline = std::time::Instant::now() + std::time::Duration::from_secs(45);
+    loop {
+        let remaining = state.active_tasks.lock().await.len();
+        if remaining == 0 {
+            break;
+        }
+        if std::time::Instant::now() >= drain_deadline {
+            tracing::warn!(
+                "Graceful shutdown drain deadline reached with {} active task(s) still running; exiting.",
+                remaining
+            );
+            break;
+        }
+        info!(
+            "Graceful shutdown: waiting for {} in-flight agent task(s) to finish...",
+            remaining
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
 
     info!("Aina daemon shut down gracefully.");
     Ok(())

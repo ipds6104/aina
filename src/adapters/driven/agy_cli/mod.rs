@@ -10,6 +10,7 @@ pub mod adapter;
 pub mod models;
 pub mod oauth;
 pub mod sanitizer;
+pub mod updater;
 
 #[allow(unused_imports)]
 pub use account_pool::{
@@ -27,3 +28,5 @@ pub use models::{
 pub use oauth::{get_oauth_session_dir, is_safe_session_id, sanitize_oauth_code};
 #[allow(unused_imports)]
 pub use sanitizer::sanitize_agent_response;
+#[allow(unused_imports)]
+pub use updater::{is_auto_canary_update_enabled, is_auto_update_disabled_by_policy, AgyUpdater};

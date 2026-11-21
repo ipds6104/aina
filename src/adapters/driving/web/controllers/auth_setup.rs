@@ -4,14 +4,16 @@ use crate::adapters::driving::web::auth::{
 use crate::adapters::driving::web::state::WebhookServerState;
 use crate::adapters::driving::web::ui::chrono_now_secs;
 use axum::{
-    extract::{ConnectInfo, Extension, State},
+    extract::{ConnectInfo, Extension, Query, State},
     http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
@@ -50,6 +52,17 @@ struct ApiStatusResponse {
     pub version: String,
     pub git_commit: String,
     pub build_time: String,
+    pub agy_cli: crate::core::domain::AgyCliPublicSummary,
+}
+
+fn resolve_agy_bin_for_web() -> PathBuf {
+    std::env::var("AGENT_BINARY_PATH")
+        .or_else(|_| std::env::var("AGY_BINARY_PATH"))
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/usr/local/bin/agy"))
 }
 
 pub async fn api_status_handler(
@@ -58,6 +71,10 @@ pub async fn api_status_handler(
     let auth = state.agent_engine.is_authenticated().await;
     let live_model = state.agent_engine.get_model().await;
     let companion_active = state.companion_jid.is_some();
+    let agy_bin = resolve_agy_bin_for_web();
+    let agy_report =
+        crate::adapters::driven::agy_cli::AgyUpdater::get_health_report_cached(&agy_bin, false)
+            .await;
     Json(ApiStatusResponse {
         authenticated: auth,
         bot_name: state.bot_name.clone(),
@@ -73,7 +90,33 @@ pub async fn api_status_handler(
         version: crate::core::domain::version::CURRENT_VERSION.to_string(),
         git_commit: crate::core::domain::version::CURRENT_COMMIT.to_string(),
         build_time: crate::core::domain::version::BUILD_TIMESTAMP.to_string(),
+        agy_cli: agy_report.to_public_summary(),
     })
+}
+
+pub async fn api_agy_status_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    if !is_api_authorized(&headers, &state) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "success": false, "error": ADMIN_UNAUTHORIZED_MSG })),
+        )
+            .into_response();
+    }
+    let force_refresh = query
+        .get("refresh")
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "true" | "1" | "yes"))
+        .unwrap_or(false);
+    let agy_bin = resolve_agy_bin_for_web();
+    let report = crate::adapters::driven::agy_cli::AgyUpdater::get_health_report_cached(
+        &agy_bin,
+        force_refresh,
+    )
+    .await;
+    (StatusCode::OK, Json(json!({ "success": true, "agy_cli": report }))).into_response()
 }
 
 pub async fn api_version_handler() -> impl IntoResponse {

@@ -199,6 +199,18 @@ PENGGUNAAN:
                               Options:
                                 --json                  Output format JSON terstruktur
 
+    agy [status|check|update|rollback] Observabilitas versi & Canary-Verified Updater Antigravity CLI (`agy`)
+                              Subcommands:
+                                status                  Tampilkan versi `agy` terpasang, manifest resmi, & status proteksi
+                                check                   Cek manifest rilis resmi secara langsung + changelog terbaru
+                                update                  Download + verifikasi SHA-512 + Canary flag/JSON + atomic swap
+                                rollback                Kembalikan biner `agy` ke versi sebelumnya (`agy.prev`)
+                              Options:
+                                --dry-run               Simulasi pembaruan tanpa mengubah biner
+                                --force                 Paksa pembaruan meski versi sama
+                                --skip-llm-canary       Lewati dry-run LLM live (hanya verifikasi SHA-512 + flag CLI)
+                                --json                  Output format JSON terstruktur
+
     skill [list|init|install|test|validate|delete|sync] Manajemen, Scaffolding & Git Installer Custom Skills
                               Subcommands:
                                 list                    Daftar seluruh custom skill yang terpasang
@@ -279,6 +291,7 @@ PENGGUNAAN:
             }
             "version" | "-v" | "--version" => commands::handle_version(&args[2..]).await,
             "update" => commands::handle_update(&args[2..]).await,
+            "agy" => commands::handle_agy(&args[2..]).await,
             "archive" => commands::handle_archive(&args[2..]),
             "kb" => commands::handle_kb(&args[2..]),
             "asset" | "assets" => commands::handle_asset(&args[2..]),

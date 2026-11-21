@@ -1,4 +1,5 @@
 pub mod activity;
+pub mod agy_updater;
 pub mod archive;
 pub mod audit;
 pub mod capability;
@@ -20,6 +21,13 @@ pub mod version;
 pub mod workspace;
 
 pub use activity::*;
+#[allow(unused_imports)]
+pub use agy_updater::{
+    constant_time_hex_eq, detect_manifest_platform, evaluate_version_status,
+    extract_cli_changelog_excerpt, validate_agy_help_contract, validate_canary_json_response,
+    AgyCliHealthReport, AgyCliPublicSummary, AgyManifest, AgyUpdateResult, SemVer,
+    UpdatePolicyDecision, REQUIRED_AGY_CLI_FLAGS,
+};
 pub use archive::{ArchiveEngine, ArchiveSearchFilter};
 pub use audit::*;
 #[allow(unused_imports)]

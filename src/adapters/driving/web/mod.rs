@@ -29,6 +29,7 @@ pub fn create_router(state: Arc<WebhookServerState>) -> Router {
         .route("/setup", get(setup_page_handler))
         .route("/health", get(health_handler))
         .route("/api/status", get(api_status_handler))
+        .route("/api/agy/status", get(api_agy_status_handler))
         .route("/api/version", get(api_version_handler))
         .route("/api/models", get(api_get_models_handler))
         .route("/api/model", post(api_set_model_handler))
@@ -977,6 +978,10 @@ mod tests {
         );
         assert_eq!(
             client.get(format!("http://{}/api/metacognition/diagnostics", aina_addr)).send().await.unwrap().status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            client.get(format!("http://{}/api/agy/status", aina_addr)).send().await.unwrap().status(),
             StatusCode::UNAUTHORIZED
         );
 
