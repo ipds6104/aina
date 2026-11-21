@@ -1665,6 +1665,70 @@
     .grid-2-7-5,.grid-2-6-6,.grid-2-8-4,.grid-2-4-8{grid-template-columns:1fr}
     .grid-12{grid-template-columns:repeat(6,1fr)}
   }
+
+  /* ============ Swiss WhatsApp Evidence Framing (isolated new classes) ============ */
+  .wa-stage{
+    position:relative;
+    display:flex;align-items:center;justify-content:center;
+    background:url('./images/swiss-orange-backdrop.webp') center/cover no-repeat;
+    border-top:2px solid var(--accent);
+    padding:1.8vh 1.6vw;
+    min-height:0;overflow:hidden;
+  }
+  .wa-stage.is-neutral{
+    border-top:1px solid var(--ink);
+  }
+  .wa-stage img{
+    max-width:100%;max-height:100%;
+    width:auto;height:100%;
+    object-fit:contain;
+    display:block;
+    border:1px solid rgba(10,10,10,.22);
+    background:#ffffff;
+    cursor:zoom-in;
+  }
+  .wa-gallery-3{
+    display:grid;grid-template-columns:repeat(3,1fr);
+    gap:1.8vw;flex:1;min-height:0;align-items:stretch;
+  }
+  .wa-card{
+    display:grid;grid-template-rows:1fr auto;
+    gap:1.1vh;min-height:0;min-width:0;
+  }
+  .wa-cap{
+    display:flex;flex-direction:column;gap:.35vh;
+    border-top:1px solid var(--border-subtle);
+    padding-top:.9vh;
+  }
+  .wa-cap-head{
+    display:flex;justify-content:space-between;align-items:baseline;gap:.6vw;
+  }
+  .wa-cap-ttl{
+    font-family:var(--sans),var(--sans-zh);font-weight:500;
+    font-size:max(15px,1.02vw);line-height:1.25;color:var(--text-primary);
+  }
+  .wa-cap-desc{
+    font-family:var(--sans),var(--sans-zh);font-weight:400;
+    font-size:max(14px,.86vw);line-height:1.42;color:var(--text-secondary);
+  }
+  /* Click-to-zoom lightbox for inspecting chat bubbles live on projector */
+  #wa-lightbox{
+    position:fixed;inset:0;z-index:9999;
+    background:rgba(10,10,10,.92);
+    display:none;align-items:center;justify-content:center;
+    padding:3vh 4vw;cursor:zoom-out;
+  }
+  #wa-lightbox.is-open{display:flex}
+  #wa-lightbox img{
+    max-width:92vw;max-height:94vh;width:auto;height:auto;
+    object-fit:contain;border:1px solid rgba(255,255,255,.25);background:#fff;
+  }
+  #wa-lightbox-cap{
+    position:fixed;bottom:2.2vh;left:50%;transform:translateX(-50%);
+    font-family:var(--mono);font-size:13px;letter-spacing:.12em;text-transform:uppercase;
+    color:rgba(255,255,255,.8);background:rgba(10,10,10,.75);padding:.5vh 1.2vw;
+  }
+
 </style>
 </head>
 <body class="canvas-mode">
@@ -1715,13 +1779,13 @@
     <canvas class="ascii-bg" aria-hidden="true"></canvas>
     <div class="chrome-min">
       <div class="l">BPS KABUPATEN MEMPAWAH · INOVASI AI AGENTIK</div>
-      <div class="r">SWISS · 2026 · 01 / 15</div>
+      <div class="r">SWISS · 2026 · 01 / 16</div>
     </div>
     <div style="flex:1;padding:0;display:grid;grid-template-rows:auto 1fr auto;gap:2.6vh">
       <div data-anim="kicker" class="t-meta" style="color:rgba(var(--accent-on-rgb),.82);letter-spacing:.22em">AI CO-WORKER &amp; COMPANY BRAIN · PRODUKSI NYATA 24/7</div>
       <h1 data-anim="title" style="align-self:center;font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(9.4vw,16vh);line-height:.94;letter-spacing:-.03em;color:var(--accent-on)">Aina (<span style="font-weight:400">あいな</span>)<br/>Rekan Kerja <span style="font-style:italic;font-weight:300">AI</span><br/>BPS Mempawah.</h1>
       <div data-anim="bottom" style="display:grid;grid-template-rows:auto auto;gap:1.4vh;border-top:1px solid rgba(var(--accent-on-rgb),.26);padding-top:1.8vh">
-        <div data-anim="lead" class="lead" style="max-width:58ch;color:rgba(var(--accent-on-rgb),.92);font-weight:300">Bagaimana 167 orang di BPS Kabupaten Mempawah bekerja bersama AI lewat WhatsApp setiap hari—tanpa aplikasi tambahan dan tanpa biaya lisensi vendor.</div>
+        <div data-anim="lead" class="lead" style="max-width:58ch;color:rgba(var(--accent-on-rgb),.92);font-weight:300">Bagaimana 167 orang di BPS Kabupaten Mempawah bekerja bersama AI langsung di grup dan chat WhatsApp—tanpa aplikasi tambahan dan tanpa biaya lisensi vendor.</div>
         <div style="display:flex;justify-content:space-between;align-items:end">
           <div class="t-meta" style="color:rgba(var(--accent-on-rgb),.78)">IHZA FIKRI ZAKI KARUNIA, S.TR.STAT. · BPS KABUPATEN MEMPAWAH</div>
           <div class="t-meta" style="color:rgba(var(--accent-on-rgb),.78)">KALIMANTAN BARAT · 2026</div>
@@ -1732,13 +1796,199 @@
 </section>
 
 <!-- ============================================================
-     SLIDE 02 · S20 · STACKED KPI LEDGER (71 Hari Operasi Nyata)
+     SLIDE 02 · S08 · HARI PERTAMA AINA JOIN GRUP THE REAL OF IPDS 6104
+     ============================================================ -->
+<section class="slide light" data-layout="S08" data-animate="duo-mirror" data-slide-id="first-day-ipds">
+  <div class="canvas-card nav-safe-bottom" style="padding-bottom:8vh">
+    <div class="chrome-min tight">
+      <div class="l">01 · CERITA NYATA DI WHATSAPP · HARI PERTAMA BERGABUNG</div>
+      <div class="r">02 / 16</div>
+    </div>
+    <div style="flex:1;padding:0;display:grid;grid-template-rows:auto 1fr;gap:2.2vh;min-height:0">
+      <div data-anim="line" style="display:flex;flex-direction:column;gap:.8vh">
+        <div class="t-meta">GRUP WHATSAPP: THE REAL OF IPDS 6104 · TANGKAPAN LAYAR ASLI</div>
+        <h2 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(4.4vw,7.8vh);line-height:.98;letter-spacing:-.035em">Hari Pertama Aina Masuk Grup Kerja BPS</h2>
+      </div>
+
+      <div class="duo-compare" style="margin-top:0;grid-template-columns:1.02fr 1px .98fr;gap:0 2.8vw;min-height:0">
+        <div class="col" style="justify-content:space-between;min-height:0">
+          <div>
+            <div class="col-tag" style="margin-bottom:1.4vh"><span class="num">DAY 01</span> TANPA APLIKASI BARU</div>
+            <div class="col-ttl" style="font-size:min(2.9vw,5.2vh);line-height:1.06;margin-bottom:1.6vh">Diperkenalkan Layaknya Pegawai Baru di Grup Tim</div>
+            <p class="col-desc" style="max-width:100%">Alih-alih melatih pegawai memakai portal AI terpisah, Aina langsung dimasukkan ke grup koordinasi harian yang sudah aktif dipakai seluruh tim.</p>
+          </div>
+          <ul class="col-list" style="margin-top:0">
+            <li><strong>Konteks Seketika:</strong> Langsung mengenali peran rekan tim yang sedang Latsar CPNS di Jakarta hingga Ketua Tim Distribusi.</li>
+            <li><strong>Bahasa Kantor Natural:</strong> Menyapa sopan tanpa kaku seperti robot, sehingga staf tidak canggung mendelegasikan tugas.</li>
+            <li><strong>Transparan Berbasis AI:</strong> Memperkenalkan diri jujur sebagai asisten berbasis Google Gemini yang siap olah data &amp; otomasi.</li>
+          </ul>
+          <div class="t-meta" style="color:var(--accent-ink)">KLIK GAMBAR DI KANAN UNTUK ZOOM LAYAR PENUH</div>
+        </div>
+        <span class="vrule"></span>
+        <div class="col accent" style="padding:0;min-height:0">
+          <div class="wa-stage" style="height:100%">
+            <img src="images/02-first-join-ipds.jpg" data-image-slot="s08-wa-portrait" data-zoom-caption="HARI PERTAMA AINA DI GRUP THE REAL OF IPDS 6104" alt="Tangkapan layar asli WhatsApp hari pertama Aina bergabung di grup The Real of IPDS 6104">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     SLIDE 03 · S16 · REAL WHATSAPP #1 (Monitoring SBR + Gizi + Sakernas)
+     ============================================================ -->
+<section class="slide light" data-layout="S16" data-animate="field-notes" data-slide-id="wa-showcase-data">
+  <div class="canvas-card nav-safe-bottom" style="padding-bottom:8vh">
+    <div class="chrome-min tight">
+      <div class="l">01 · CERITA NYATA DI WHATSAPP · MONITORING &amp; RISET DATA</div>
+      <div class="r">03 / 16</div>
+    </div>
+    <div style="flex:1;padding:0;display:grid;grid-template-rows:auto 1fr;gap:2.2vh;min-height:0">
+      <div data-anim="line" style="display:flex;flex-direction:column;gap:.8vh">
+        <div class="t-meta">BUKTI TANGKAPAN LAYAR ASLI · KLIK GAMBAR UNTUK PERBESAR</div>
+        <h2 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(4.4vw,7.8vh);line-height:.98;letter-spacing:-.035em">Dari Monitoring SBR 07:09 hingga Sheet 7 Tab</h2>
+      </div>
+
+      <div data-anim="up" class="wa-gallery-3">
+        <div class="wa-card">
+          <div class="wa-stage">
+            <img src="images/03-sbr-monitoring-wa.jpg" data-image-slot="s16-wa-panel" data-zoom-caption="MONITORING OTOMATIS GRUP 6104 MATCHING SBR 2026 (07:09 WIB)" alt="Screenshot WhatsApp laporan monitoring otomatis SBR SE2026 di grup 6104 Matching SBR">
+          </div>
+          <div class="wa-cap">
+            <div class="wa-cap-head"><span class="t-cat accent">01 · GRUP SBR</span><span class="t-meta">07:09 WIB</span></div>
+            <div class="wa-cap-ttl">Monitoring SBR Otomatis di Grup WA</div>
+            <div class="wa-cap-desc">Potret tabel HiDPI + capaian 77,1% (945/1.226 kasus) + link live—langsung disambut tim "Laju teman2".</div>
+          </div>
+        </div>
+
+        <div class="wa-card">
+          <div class="wa-stage is-neutral">
+            <img src="images/03-gizi-sheet-wa.jpg" data-image-slot="s16-wa-panel" data-zoom-caption="RISET DATA GIZI &amp; STUNTING KAB. MEMPAWAH KE GOOGLE SHEET (4 MENIT)" alt="Screenshot WhatsApp permintaan data gizi anak dan kesehatan ibu menjadi Google Sheet dalam 4 menit">
+          </div>
+          <div class="wa-cap">
+            <div class="wa-cap-head"><span class="t-cat">02 · RISET DATA</span><span class="t-meta">09:05 → 09:09</span></div>
+            <div class="wa-cap-ttl">Data Gizi &amp; Stunting → Sheet (4 Menit)</div>
+            <div class="wa-cap-desc">Memadukan SP2020, Susenas, DDA, SSGI &amp; Dinkes menjadi Google Sheet interaktif + ringkasan angka.</div>
+          </div>
+        </div>
+
+        <div class="wa-card">
+          <div class="wa-stage is-neutral">
+            <img src="images/03-sakernas-7tab-wa.jpg" data-image-slot="s16-wa-panel" data-zoom-caption="9 INDIKATOR SAKERNAS 2022–2026 MENJADI GOOGLE SPREADSHEET 7 TAB" alt="Screenshot WhatsApp 9 indikator ketenagakerjaan Sakernas 2022-2026 dengan heartbeat progress dan output 7 tab">
+          </div>
+          <div class="wa-cap">
+            <div class="wa-cap-head"><span class="t-cat">03 · SAKERNAS</span><span class="t-meta">7 TAB · 2022–2026</span></div>
+            <div class="wa-cap-ttl">9 Indikator Ketenagakerjaan + Heartbeat</div>
+            <div class="wa-cap-desc">Tugas panjang memantau 9 indikator 5 tahun memberi laporan progres tiap 3 menit lalu rilis 7 tab Sheet.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     SLIDE 04 · S16 · REAL WHATSAPP #2 (Laporan IMK + Inda Typst -> PDF)
+     ============================================================ -->
+<section class="slide light" data-layout="S16" data-animate="field-notes" data-slide-id="wa-showcase-docs">
+  <div class="canvas-card nav-safe-bottom" style="padding-bottom:8vh">
+    <div class="chrome-min tight">
+      <div class="l">01 · CERITA NYATA DI WHATSAPP · PRODUKSI LAPORAN RESMI</div>
+      <div class="r">04 / 16</div>
+    </div>
+    <div style="flex:1;padding:0;display:grid;grid-template-rows:auto 1fr;gap:2.2vh;min-height:0">
+      <div data-anim="line" style="display:flex;flex-direction:column;gap:.8vh">
+        <div class="t-meta">DARI CHAT WHATSAPP + FOTO KE DOKUMEN RESMI BERKOP BPS</div>
+        <h2 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(4.4vw,7.8vh);line-height:.98;letter-spacing:-.035em">Laporan IMK &amp; PDF Typst dalam 7 Menit</h2>
+      </div>
+
+      <div data-anim="up" class="wa-gallery-3">
+        <div class="wa-card">
+          <div class="wa-stage is-neutral">
+            <img src="images/04-imk-tabayyun-wa.jpg" data-image-slot="s16-wa-panel" data-zoom-caption="TABAYYUN &amp; PENYUSUNAN LAPORAN PELATIHAN IMK 2026 (.DOCX + PDF UNDANGAN)" alt="Screenshot WhatsApp pembuatan laporan pelatihan IMK 2026 dengan klarifikasi Tabayyun">
+          </div>
+          <div class="wa-cap">
+            <div class="wa-cap-head"><span class="t-cat">01 · TIM PRODUKSI</span><span class="t-meta">TABAYYUN → DOCX</span></div>
+            <div class="wa-cap-ttl">Laporan Pelatihan IMK 2026</div>
+            <div class="wa-cap-desc">Aina minta detail tanggal/Inda dulu (Tabayyun), lalu dari contoh .docx + PDF undangan langsung kirim hasil.</div>
+          </div>
+        </div>
+
+        <div class="wa-card">
+          <div class="wa-stage is-neutral">
+            <img src="images/04-inda-typst-wa.jpg" data-image-slot="s16-wa-panel" data-zoom-caption="PROMPT WHATSAPP LAPORAN INDA WILKERSTAT SE2026 VIA TYPST (09:08 → 09:15)" alt="Screenshot WhatsApp instruksi pembuatan Laporan Inda Wilkerstat SE2026 via Typst PDF dalam 7 menit">
+          </div>
+          <div class="wa-cap">
+            <div class="wa-cap-head"><span class="t-cat">02 · CHAT → TYPST</span><span class="t-meta">09:08 → 09:15</span></div>
+            <div class="wa-cap-ttl">Laporan Inda Wilkerstat (7 Menit)</div>
+            <div class="wa-cap-desc">Kirim undangan + foto hari ke-1 &amp; ke-2 di WA → keluar PDF 6 halaman lengkap Surat Pengantar + 5 Lampiran.</div>
+          </div>
+        </div>
+
+        <div class="wa-card">
+          <div class="wa-stage">
+            <img src="images/04-inda-typst-pdf.jpg" data-image-slot="s16-wa-panel" data-zoom-caption="HASIL ASLI PDF TYPST: KOP BPS MEMPAWAH, LOGO SE2026, Q&amp;A &amp; 3 FOTO DOKUMENTASI" alt="Tampilan asli halaman 5 dan 6 PDF Laporan Inda Wilkerstat SE2026 yang dikompilasi Aina dengan Typst">
+          </div>
+          <div class="wa-cap">
+            <div class="wa-cap-head"><span class="t-cat accent">03 · OUTPUT PDF</span><span class="t-meta">718 KB · 6 HAL</span></div>
+            <div class="wa-cap-ttl">Hasil PDF Resmi Berkop BPS &amp; Foto</div>
+            <div class="wa-cap-desc">Tata letak kop BPS Mempawah, logo SE2026, notulensi Q&amp;A, dan grid 3 foto dokumentasi tersusun rapi.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     SLIDE 05 · S08 · REAL WHATSAPP #3 (Interaksi Natural ke Mitra SPKRT)
+     ============================================================ -->
+<section class="slide light" data-layout="S08" data-animate="duo-mirror" data-slide-id="wa-showcase-mitra">
+  <div class="canvas-card nav-safe-bottom" style="padding-bottom:8vh">
+    <div class="chrome-min tight">
+      <div class="l">01 · CERITA NYATA DI WHATSAPP · KOMUNIKASI MITRA LAPANGAN</div>
+      <div class="r">05 / 16</div>
+    </div>
+    <div style="flex:1;padding:0;display:grid;grid-template-rows:auto 1fr;gap:2.2vh;min-height:0">
+      <div data-anim="line" style="display:flex;flex-direction:column;gap:.8vh">
+        <div class="t-meta">PENGUMUMAN KELULUSAN &amp; UNDANGAN PELATIHAN SPKRT 2027</div>
+        <h2 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(4.4vw,7.8vh);line-height:.98;letter-spacing:-.035em">Komunikasi Natural ke Mitra Terpilih</h2>
+      </div>
+
+      <div class="duo-compare" style="margin-top:0;grid-template-columns:1.02fr 1px .98fr;gap:0 2.8vw;min-height:0">
+        <div class="col" style="justify-content:space-between;min-height:0">
+          <div>
+            <div class="col-tag" style="margin-bottom:1.4vh"><span class="num">MITRA</span> KOORDINASI HUMANIS</div>
+            <div class="col-ttl" style="font-size:min(2.9vw,5.2vh);line-height:1.06;margin-bottom:1.6vh">Sopan, Akurat, dan Responsif Mengawal Kehadiran</div>
+            <p class="col-desc" style="max-width:100%">Selain melayani pegawai organik, Aina membantu Tim IPDS menyampaikan hasil seleksi uji ketik numpad dan mengundang mitra terpilih secara personal.</p>
+          </div>
+          <ul class="col-list" style="margin-top:0">
+            <li><strong>Informasi Presisi:</strong> Menyampaikan jadwal hari, jam, lokasi Ruang Rapat BPS Mempawah, serta tautan grup koordinasi resmi.</li>
+            <li><strong>Balasan Dua Arah:</strong> Ketika mitra membalas konfirmasi, Aina menjawab hangat dan kontekstual (<em>"sampai ketemu hari Rabu nanti yaa"</em>).</li>
+            <li><strong>Diterima Seperti Rekan Kerja:</strong> Respons mitra (<em>"Baik mbak..."</em>) membuktikan pendekatan komunikasi yang akrab mempercepat koordinasi.</li>
+          </ul>
+          <div class="t-meta" style="color:var(--accent-ink)">SEKARANG MARI KITA LIHAT SKALA PEMAKAIANNYA SELAMA 71 HARI →</div>
+        </div>
+        <span class="vrule"></span>
+        <div class="col accent" style="padding:0;min-height:0">
+          <div class="wa-stage" style="height:100%">
+            <img src="images/05-mitra-spkrt-wa.jpg" data-image-slot="s08-wa-portrait" data-zoom-caption="KOMUNIKASI AINA MENGUNDANG MITRA TERPILIH PENGOLAHAN SPKRT 2027" alt="Screenshot WhatsApp Aina menghubungi mitra terpilih pelatihan pengolahan SPKRT 2027 secara ramah">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     SLIDE 06 · S20 · STACKED KPI LEDGER (Statistik 71 Hari Operasi)
      ============================================================ -->
 <section class="slide light" data-layout="S20" data-animate="stacked-ledger" data-slide-id="telemetry-hook">
   <div class="canvas-card nav-safe-bottom" style="padding-bottom:8vh">
     <div class="chrome-min tight">
-      <div class="l">01 · BUKTI PEMAKAIAN NYATA · 11 SEP – 21 NOV 2026 (71 HARI)</div>
-      <div class="r">02 / 15</div>
+      <div class="l">02 · SKALA OPERASI RIIL · 11 SEP – 21 NOV 2026 (71 HARI)</div>
+      <div class="r">06 / 16</div>
     </div>
     <div data-anim="ledger" style="flex:1;display:flex;flex-direction:column;justify-content:space-between;min-height:0">
       <div class="ledger-row" style="display:grid;grid-template-columns:28vw 1fr auto;align-items:center;gap:2.4vw;padding:1.8vh 0;border-top:2px solid var(--ink);border-bottom:1px solid var(--border-subtle)">
@@ -1772,7 +2022,7 @@
         <div class="ledger-num" style="font-family:var(--sans);font-weight:200;font-size:min(7.8vw,12.6vh);line-height:.92;letter-spacing:-.04em;color:var(--ink);font-feature-settings:'tnum'">1.042</div>
         <div class="ledger-label">
           <div class="t-h-prod">Eksekusi Tool &amp; 26 Custom Skills</div>
-          <div class="t-body-sm" style="margin-top:.4vh">Bukan sekadar menjawab teks—Aina mengeksekusi Python, Google Suite, Dokter V, DuckDB, &amp; Chromium teraudit.</div>
+          <div class="t-body-sm" style="margin-top:.4vh">Bukan sekadar menjawab teks—Aina mengeksekusi Python, Google Suite, Dokter V, Typst, DuckDB, &amp; Chromium.</div>
         </div>
         <div class="ledger-icon" style="color:var(--ink)"><i data-lucide="cpu" style="width:2.6vw;height:2.6vw;stroke-width:1.4"></i></div>
       </div>
@@ -1781,13 +2031,13 @@
 </section>
 
 <!-- ============================================================
-     SLIDE 03 · S07 · HORIZONTAL BAR CHART (Topik Chat Nyata di Prod)
+     SLIDE 07 · S07 · HORIZONTAL BAR CHART (Topik Chat Nyata di Prod)
      ============================================================ -->
 <section class="slide light" data-layout="S07" data-animate="bar-grow" data-slide-id="usage-by-topic">
   <div class="canvas-card nav-safe-bottom" style="padding-bottom:8vh">
     <div class="chrome-min tight">
-      <div class="l">01 · BUKTI PEMAKAIAN NYATA · AUDIT TELEMETRI AINA.DB</div>
-      <div class="r">03 / 15</div>
+      <div class="l">02 · SKALA OPERASI RIIL · AUDIT TELEMETRI AINA.DB</div>
+      <div class="r">07 / 16</div>
     </div>
     <div style="flex:1;padding:0;display:grid;grid-template-rows:auto auto 1fr auto;gap:2.4vh;min-height:0">
       <div data-anim="line" style="display:flex;flex-direction:column;gap:1vh">
@@ -1840,55 +2090,55 @@
 </section>
 
 <!-- ============================================================
-     SLIDE 04 · S04 · SIX CELLS (Use Case Riil #1: Tim Teknis)
+     SLIDE 08 · S04 · SIX CELLS (Ragam Kasus Lintas Tim Lainnya)
      ============================================================ -->
-<section class="slide light" data-layout="S04" data-animate="grid-reveal" data-slide-id="real-usecases-technical">
+<section class="slide light" data-layout="S04" data-animate="grid-reveal" data-slide-id="real-usecases-more">
   <div class="canvas-card nav-safe-bottom" style="padding-bottom:8vh">
     <div class="chrome-min tight">
-      <div class="l">01 · BUKTI PEMAKAIAN NYATA · TIM TEKNIS BPS MEMPAWAH</div>
-      <div class="r">04 / 15</div>
+      <div class="l">02 · SKALA OPERASI RIIL · RAGAM TUGAS LINTAS 6 TIM KERJA</div>
+      <div class="r">08 / 16</div>
     </div>
     <div style="flex:1;padding:0;display:grid;grid-template-rows:auto 1fr;gap:2.6vh;min-height:0">
       <div data-anim="line" style="display:flex;flex-direction:column;gap:1vh">
-        <div class="t-meta">KASUS NYATA DI WHATSAPP (ANONIM PENUH) · 01 / 02</div>
-        <h2 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(4.6vw,8.2vh);line-height:.98;letter-spacing:-.035em">Dipakai Langsung oleh 4 Tim Teknis</h2>
+        <div class="t-meta">CONTOH NYATA LAINNYA DI PRODUKSI (ANONIM PENUH)</div>
+        <h2 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(4.6vw,8.2vh);line-height:.98;letter-spacing:-.035em">Dipakai Menyeluruh dari Neraca hingga Helpdesk IT</h2>
       </div>
       <div class="sub-grid-3-2" style="margin-top:0">
         <div class="sub-card accent">
-          <span class="nb-corner">01 · 1.813 MSG</span>
+          <span class="nb-corner">01 · TIM IPDS</span>
+          <i data-lucide="highlighter"></i>
+          <div class="ttl">Stabilo Hijau → Google Form</div>
+          <div class="desc">Staf kirim tautan Google Sheet soal—Aina membaca sel warna stabilo hijau lalu otomatis menerbitkan Google Form pretest.</div>
+        </div>
+        <div class="sub-card">
+          <span class="nb-corner">02 · 1.813 MSG</span>
           <i data-lucide="table-2"></i>
           <div class="ttl">Tim Distribusi · Sync Nominatif</div>
-          <div class="desc">Sinkronisasi otomatis kolom jumlah dokumen di Google Sheet Nominatif PPL &amp; PML dari sheet Rekap Subsektor Eligible serta pantauan hybrid FASIH.</div>
+          <div class="desc">Sinkronisasi otomatis kolom dokumen Sheet Nominatif PPL/PML dari Rekap Subsektor Eligible plus pantauan hybrid FASIH.</div>
         </div>
         <div class="sub-card">
-          <span class="nb-corner">02 · NERACA</span>
+          <span class="nb-corner">03 · TIM NERACA</span>
           <i data-lucide="compass"></i>
-          <div class="ttl">Analisis SWOT &amp; Jarak PPL</div>
-          <div class="desc">Menyusun 10 nominasi petugas PPL wilayah tugas memakai analisis SWOT sekaligus memperhitungkan jarak rumah asal ke RT/Dusun &amp; status rangkap SPKRT.</div>
+          <div class="ttl">SWOT PPL &amp; Rebasing PDRB</div>
+          <div class="desc">Nominasi 10 petugas PPL dengan SWOT + jarak rumah ke RT/Dusun, rebasing komponen PKP/PMTB, dan imputasi inventori.</div>
         </div>
         <div class="sub-card">
-          <span class="nb-corner">03 · NERACA</span>
-          <i data-lucide="trending-up"></i>
-          <div class="ttl">Rebasing PDRB &amp; Inventori</div>
-          <div class="desc">Membaca lembar kerja PKP &amp; PMTB di Google Drive, imputasi inventori berbasis nilai produksi plus inflasi, hingga konversi PDF menjadi .pptx presisi.</div>
+          <span class="nb-corner">04 · AUDIT SBR</span>
+          <i data-lucide="shield-alert"></i>
+          <div class="ttl">Deteksi Bug NIK 3,57E+20</div>
+          <div class="desc">Menangkap korup scientific notation di tab NIK Duplikat &gt;3 Usaha, memulihkan dari arsip, serta kroscek undangan vs Dokter V.</div>
         </div>
         <div class="sub-card">
-          <span class="nb-corner">04 · SOSIAL</span>
-          <i data-lucide="presentation"></i>
-          <div class="ttl">Co-Author Paparan Pimpinan</div>
-          <div class="desc">Menyusun slide kegiatan lintas instansi (benang merah data pengangguran), menarik seri data 2022–2026, serta mencari pedoman Statistik Kesra.</div>
+          <span class="nb-corner">05 · BAGIAN UMUM</span>
+          <i data-lucide="monitor-wrench"></i>
+          <div class="ttl">IT Helpdesk Foto Layar Biru</div>
+          <div class="desc">Staf kirim foto layar Windows Recovery laptop kantor—dipandu pemulihan tahap demi tahap di WA; plus cek daftar cuti pegawai.</div>
         </div>
         <div class="sub-card">
-          <span class="nb-corner">05 · PRODUKSI</span>
-          <i data-lucide="file-text"></i>
-          <div class="ttl">Laporan Pelatihan &amp; Cover</div>
-          <div class="desc">Menerima undangan PDF &amp; draf .docx untuk menyusun Laporan Penyelenggaraan Pelatihan IMK 2026 lengkap dengan desain cover berredaksi satker.</div>
-        </div>
-        <div class="sub-card">
-          <span class="nb-corner">06 · LINTAS TIM</span>
-          <i data-lucide="file-check-2"></i>
-          <div class="ttl">Konversi &amp; Tagging Dokumen</div>
-          <div class="desc">Konversi PDF kronologis ke .docx tanpa merusak tata letak, koreksi tagging lokasi/tanggal dokumentasi, serta pelacakan pencairan Dokter V.</div>
+          <span class="nb-corner">06 · LAPANGAN</span>
+          <i data-lucide="graduation-cap"></i>
+          <div class="ttl">Helpdesk FASIH &amp; Tutor Ujian</div>
+          <div class="desc">Pendampingan PML SE2026 error sync/approve FASIH Mobile, panduan upload Wilkerstat GS, hingga latihan soal SOP dari PDF.</div>
         </div>
       </div>
     </div>
@@ -1896,81 +2146,13 @@
 </section>
 
 <!-- ============================================================
-     SLIDE 05 · S16 · MULTI-CARD BRIEF (Use Case Riil #2: IPDS, Umum, Lapangan)
-     ============================================================ -->
-<section class="slide light" data-layout="S16" data-animate="field-notes" data-slide-id="real-usecases-ops">
-  <div class="canvas-card nav-safe-bottom" style="padding-bottom:8vh">
-    <div class="chrome-min tight">
-      <div class="l">01 · BUKTI PEMAKAIAN NYATA · IPDS, UMUM &amp; LAPANGAN</div>
-      <div class="r">05 / 15</div>
-    </div>
-    <div style="flex:1;padding:0;display:grid;grid-template-rows:auto 1fr;gap:3.2vh;min-height:0">
-      <div data-anim="line" style="display:flex;flex-direction:column;gap:1vh">
-        <div class="t-meta">KASUS NYATA DI WHATSAPP (ANONIM PENUH) · 02 / 02</div>
-        <h2 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(4.6vw,8.2vh);line-height:.98;letter-spacing:-.035em">Dari Stabilo Hijau ke Google Form, hingga Helpdesk Layar Biru</h2>
-      </div>
-
-      <div data-anim="up" style="display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(2,1fr);gap:1.6vh 1.6vw;min-height:0">
-        <article class="card-accent" style="padding:2.4vh 1.8vw;display:flex;flex-direction:column;justify-content:space-between">
-          <div>
-            <div class="t-meta" style="margin-bottom:1.2vh">01 · TIM IPDS · GOOGLE FORMS</div>
-            <div style="font-family:var(--sans),var(--sans-zh);font-weight:500;font-size:max(18px,1.45vw);line-height:1.25;letter-spacing:-.015em">Baca warna stabilo hijau di Sheet, langsung terbit Google Form pretest.</div>
-          </div>
-          <div class="t-meta" style="opacity:.85;border-top:1px solid rgba(var(--accent-on-rgb),.3);padding-top:1vh">GFORM OTOMATIS · ZERO COPY-PASTE</div>
-        </article>
-
-        <article class="card-fill" style="padding:2.4vh 1.8vw;display:flex;flex-direction:column;justify-content:space-between">
-          <div>
-            <div class="t-meta" style="margin-bottom:1.2vh">02 · IPDS × DOKTER V</div>
-            <div style="font-family:var(--sans),var(--sans-zh);font-weight:400;font-size:max(17px,1.3vw);line-height:1.35">Kroscek otomatis daftar nama undangan pelatihan pengolahan SPKRT 2027 melawan database mitra aktif 2026 di Dokter V.</div>
-          </div>
-          <div class="t-meta" style="border-top:1px solid var(--grey-2);padding-top:1vh">VALIDASI MITRA · HITUNGAN DETIK</div>
-        </article>
-
-        <article class="card-fill" style="padding:2.4vh 1.8vw;display:flex;flex-direction:column;justify-content:space-between">
-          <div>
-            <div class="t-meta" style="margin-bottom:1.2vh">03 · AUDIT ANOMALI SBR</div>
-            <div style="font-family:var(--sans),var(--sans-zh);font-weight:400;font-size:max(17px,1.3vw);line-height:1.35">Mendeteksi korup scientific notation NIK (3,57E+20) pada tab NIK Duplikat &gt;3 Usaha lalu memulihkan dari arsip lama.</div>
-          </div>
-          <div class="t-meta" style="border-top:1px solid var(--grey-2);padding-top:1vh">DATA CLEANING · 40.907 USAHA</div>
-        </article>
-
-        <article class="card-fill" style="padding:2.4vh 1.8vw;display:flex;flex-direction:column;justify-content:space-between">
-          <div>
-            <div class="t-meta" style="margin-bottom:1.2vh">04 · BAGIAN UMUM · IT HELPDESK</div>
-            <div style="font-family:var(--sans),var(--sans-zh);font-weight:400;font-size:max(17px,1.3vw);line-height:1.35">Staf mengirim foto layar biru Windows Recovery laptop kantor—Aina memandu langkah pemulihan tahap demi tahap di WA.</div>
-          </div>
-          <div class="t-meta" style="border-top:1px solid var(--grey-2);padding-top:1vh">VISION TRIAGE · CEK CUTI PEGAWAI</div>
-        </article>
-
-        <article class="card-fill" style="padding:2.4vh 1.8vw;display:flex;flex-direction:column;justify-content:space-between">
-          <div>
-            <div class="t-meta" style="margin-bottom:1.2vh">05 · PML SE2026 &amp; LAPANGAN</div>
-            <div style="font-family:var(--sans),var(--sans-zh);font-weight:400;font-size:max(17px,1.3vw);line-height:1.35">Pendampingan error sync/approve FASIH Mobile, tanya-jawab upload Wilkerstat GS, hingga tutor latihan ujian SOP dari PDF.</div>
-          </div>
-          <div class="t-meta" style="border-top:1px solid var(--grey-2);padding-top:1vh">HELPDESK 24/7 · TANPA ANTRE</div>
-        </article>
-
-        <article class="card-fill" style="padding:2.4vh 1.8vw;display:flex;flex-direction:column;justify-content:space-between">
-          <div>
-            <div class="t-meta" style="margin-bottom:1.2vh">06 · LINTAS SATKER &amp; ADOPSI ORGANIK</div>
-            <div style="font-family:var(--sans),var(--sans-zh);font-weight:400;font-size:max(17px,1.3vw);line-height:1.35">Rekan BPS Provinsi langsung menanyakan progres SBR &amp; SPKRT ke Aina; interaksi hangat membuat 167 orang memakai tanpa paksaan.</div>
-          </div>
-          <div class="t-meta" style="border-top:1px solid var(--grey-2);padding-top:1vh">ADOPSI ALAMI · ZERO SURAT EDARAN</div>
-        </article>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ============================================================
-     SLIDE 06 · S15 · MATRIX + HERO STAT (12 Rutinitas Otonom & Skills)
+     SLIDE 09 · S15 · MATRIX + HERO STAT (12 Rutinitas Otonom)
      ============================================================ -->
 <section class="slide light" data-layout="S15" data-animate="matrix-fill" data-slide-id="autonomous-schedules">
   <div class="canvas-card nav-safe-bottom" style="padding-bottom:8vh">
     <div class="chrome-min tight">
-      <div class="l">01 · BUKTI PEMAKAIAN NYATA · PENJADWAL OTONOM 24/7</div>
-      <div class="r">06 / 15</div>
+      <div class="l">02 · SKALA OPERASI RIIL · PENJADWAL OTONOM 24/7</div>
+      <div class="r">09 / 16</div>
     </div>
     <div style="flex:1;padding:0;display:grid;grid-template-rows:auto 1fr auto;gap:3vh;min-height:0">
       <div data-anim="line" style="display:flex;flex-direction:column;gap:1vh">
@@ -2046,19 +2228,19 @@
 </section>
 
 <!-- ============================================================
-     SLIDE 07 · S19 · FOUR CARDS (4 Bottleneck Satker yang Terjawab)
+     SLIDE 10 · S19 · FOUR CARDS (4 Bottleneck Satker yang Terjawab)
      ============================================================ -->
 <section class="slide light" data-layout="S19" data-animate="four-cards" data-slide-id="field-bottlenecks">
   <div class="canvas-card nav-safe-bottom" style="padding-bottom:8vh">
     <div class="chrome-min tight">
-      <div class="l">02 · AKAR MASALAH · MENGAPA ADOPSINYA BEGITU CEPAT</div>
-      <div class="r">07 / 15</div>
+      <div class="l">03 · MENGAPA BERHASIL · 4 BOTTLENECK SATKER TERJAWAB</div>
+      <div class="r">10 / 16</div>
     </div>
     <div style="flex:1;padding:0;display:grid;grid-template-rows:auto 1fr;gap:4.4vh;min-height:0">
       <div data-anim="line" style="display:flex;flex-direction:column;gap:1.4vh">
         <div style="width:80px;height:3px;background:var(--accent)"></div>
         <div>
-          <div class="t-meta" style="margin-bottom:.8vh">4 BOTTLENECK KLASIK SATKER BPS DAERAH</div>
+          <div class="t-meta" style="margin-bottom:.8vh">BENANG MERAH REALITAS SATKER BPS DAERAH</div>
           <h2 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(4.8vw,8.4vh);line-height:.98;letter-spacing:-.035em">Beban Sensus Bertambah,<br/>Jumlah Pegawai Organik Statis</h2>
         </div>
       </div>
@@ -2090,13 +2272,13 @@
 </section>
 
 <!-- ============================================================
-     SLIDE 08 · S08 · DUO COMPARE (Chatbot Biasa vs Company Brain)
+     SLIDE 11 · S08 · DUO COMPARE (Chatbot Biasa vs Company Brain)
      ============================================================ -->
 <section class="slide light" data-layout="S08" data-animate="duo-mirror" data-slide-id="company-brain-vs-chatbot">
   <div class="canvas-card nav-safe-bottom" style="padding-bottom:8vh">
     <div class="chrome-min tight">
-      <div class="l">02 · PARADIGMA SOLUSI · ENTERPRISE CONTEXT LAYER</div>
-      <div class="r">08 / 15</div>
+      <div class="l">03 · MENGAPA BERHASIL · ENTERPRISE CONTEXT LAYER</div>
+      <div class="r">11 / 16</div>
     </div>
     <div style="flex:1;padding:0;display:grid;grid-template-rows:auto 1fr auto;gap:2.6vh;min-height:0">
       <div data-anim="line" style="display:flex;flex-direction:column;gap:1vh">
@@ -2112,7 +2294,7 @@
           <ul class="col-list">
             <li>Hanya mengandalkan pengetahuan umum internet</li>
             <li>Rawan berhalusinasi saat ditanya angka pagu atau jadwal dinas</li>
-            <li>Hanya membalas teks—tidak mampu mengubah Sheet atau cetak dokumen</li>
+            <li>Hanya membalas teks—tidak mampu membuat Sheet atau kompilasi PDF</li>
             <li>Lupa keputusan tim dari minggu sebelumnya</li>
           </ul>
         </div>
@@ -2124,8 +2306,8 @@
           <ul class="col-list">
             <li><strong>Strict Grounding:</strong> membaca berkas POK SAKTI, SOP, &amp; kalender resmi langsung</li>
             <li><strong>Tabayyun:</strong> menolak menebak angka; meminta konfirmasi bila data belum lengkap</li>
-            <li><strong>Eksekusi Nyata:</strong> baca/tulis Google Suite, Dokter V, DuckDB, PDF, &amp; Chromium</li>
-            <li><strong>Audit Git:</strong> setiap perubahan pengetahuan terekam dalam riwayat commit</li>
+            <li><strong>Eksekusi Nyata:</strong> baca/tulis Google Suite, Dokter V, Typst PDF, DuckDB &amp; Chromium</li>
+            <li><strong>Audit Git:</strong> setiap pembaruan pengetahuan terekam dalam riwayat commit</li>
           </ul>
         </div>
       </div>
@@ -2136,13 +2318,13 @@
 </section>
 
 <!-- ============================================================
-     SLIDE 09 · S14 · LOOP DIAGRAM (Self-Evolving Skill & Tabayyun)
+     SLIDE 12 · S14 · LOOP DIAGRAM (Self-Evolving Skill & Tabayyun)
      ============================================================ -->
 <section class="slide light" data-layout="S14" data-animate="loop-form" data-slide-id="self-evolving-loop">
   <div class="canvas-card nav-safe-bottom" style="padding-bottom:8vh">
     <div class="chrome-min tight">
-      <div class="l">02 · PARADIGMA SOLUSI · SIKLUS BELAJAR &amp; STRICT GROUNDING</div>
-      <div class="r">09 / 15</div>
+      <div class="l">03 · MENGAPA BERHASIL · SIKLUS BELAJAR &amp; STRICT GROUNDING</div>
+      <div class="r">12 / 16</div>
     </div>
     <div style="flex:1;padding:0;display:grid;grid-template-rows:auto 1fr;gap:3vh;min-height:0">
       <div data-anim="line" style="display:flex;flex-direction:column;gap:1vh">
@@ -2207,78 +2389,13 @@
 </section>
 
 <!-- ============================================================
-     SLIDE 10 · S11 · HORIZONTAL TIMELINE (Flagship SBR SE2026 -> WA)
-     ============================================================ -->
-<section class="slide light" data-layout="S11" data-animate="timeline-walk" data-slide-id="flagship-sbr-pipeline">
-  <div class="canvas-card nav-safe-bottom" style="padding-bottom:8vh">
-    <div class="chrome-min tight">
-      <div class="l">03 · FLAGSHIP USE CASE · PRELIST SBR SE2026 &amp; BKSDM</div>
-      <div class="r">10 / 15</div>
-    </div>
-    <div style="flex:1;padding:0;display:grid;grid-template-rows:auto 1fr auto;gap:2.4vh;min-height:0">
-      <div data-anim="line" style="display:flex;flex-direction:column;gap:1vh">
-        <div class="t-meta">DARI SPREADSHEET BERAT MENJADI VISUAL WHATSAPP TAJAM · 40.907 USAHA</div>
-        <h2 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(4.6vw,8.2vh);line-height:.98;letter-spacing:-.035em">Monitoring Visual: 45 Menit → &lt; 10 Detik</h2>
-      </div>
-
-      <div class="timeline-h">
-        <div class="tl-row">
-          <div class="th-node up">
-            <div class="label">
-              <div class="yr">STEP 01</div>
-              <div class="name">Input Lapangan</div>
-              <div class="desc">Petugas di 9 kecamatan mengisi progres &amp; 6 tab anomali SBR / BKSDM.</div>
-            </div>
-            <span class="dot"></span>
-          </div>
-          <div class="th-node down">
-            <span class="dot"></span>
-            <div class="label">
-              <div class="yr">STEP 02</div>
-              <div class="name">Live Formula Engine</div>
-              <div class="desc">Tab Rekap Monitoring menghitung capaian &amp; anomali secara real-time.</div>
-            </div>
-          </div>
-          <div class="th-node up accent">
-            <div class="label">
-              <div class="yr">STEP 03 · HIDPI</div>
-              <div class="name">Chromium Retina 2×</div>
-              <div class="desc">Server memotret matriks tabel resolusi tinggi—tajam di layar ponsel tanpa blur.</div>
-            </div>
-            <span class="dot"></span>
-          </div>
-          <div class="th-node down">
-            <span class="dot"></span>
-            <div class="label">
-              <div class="yr">STEP 04 · 07:00 WIB</div>
-              <div class="name">Distribusi Grup WA</div>
-              <div class="desc">Gambar dashboard &amp; ringkasan anomali terkirim otomatis ke grup pengawas.</div>
-            </div>
-          </div>
-          <div class="th-node up">
-            <div class="label">
-              <div class="yr">STEP 05</div>
-              <div class="name">Percepatan Mandiri</div>
-              <div class="desc">Transparansi harian memicu wilayah tertinggal mengebut target tanpa ditegur manual.</div>
-            </div>
-            <span class="dot"></span>
-          </div>
-        </div>
-      </div>
-
-      <div class="t-meta" style="color:var(--text-helper)">TERUJI DI PRODUKSI: 40.907 DIREKTORI USAHA PRELIST SBR SE2026 (9 KECAMATAN · 6 TAB ANOMALI) &amp; PEMADANAN PEJABAT BKSDM MEMPAWAH.</div>
-    </div>
-  </div>
-</section>
-
-<!-- ============================================================
-     SLIDE 11 · S13 · THREE FORCES (Administrasi Mitra & POK)
+     SLIDE 13 · S13 · THREE FORCES (Administrasi Mitra & POK)
      ============================================================ -->
 <section class="slide light" data-layout="S13" data-animate="three-forces" data-slide-id="dokter-v-pok">
   <div class="canvas-card nav-safe-bottom" style="padding-bottom:8vh">
     <div class="chrome-min tight">
-      <div class="l">03 · FLAGSHIP USE CASE · BAGIAN UMUM &amp; TIM FUNGSI</div>
-      <div class="r">11 / 15</div>
+      <div class="l">04 · OTOMASI INTI · BAGIAN UMUM &amp; TIM FUNGSI</div>
+      <div class="r">13 / 16</div>
     </div>
     <div style="flex:1;padding:0;display:grid;grid-template-rows:auto 1fr;gap:2.6vh;min-height:0">
       <div data-anim="line" style="display:flex;flex-direction:column;gap:.8vh">
@@ -2322,13 +2439,13 @@
 </section>
 
 <!-- ============================================================
-     SLIDE 12 · S05 · THREE LAYERS (Arsitektur 3 Lapisan arc42)
+     SLIDE 14 · S05 · THREE LAYERS (Arsitektur 3 Lapisan arc42)
      ============================================================ -->
 <section class="slide light" data-layout="S05" data-animate="stack-build" data-slide-id="architecture-layers">
   <div class="canvas-card nav-safe-bottom" style="padding-bottom:8vh">
     <div class="chrome-min tight">
-      <div class="l">04 · ARSITEKTUR SISTEM · STANDAR ARC42 HEXAGONAL</div>
-      <div class="r">12 / 15</div>
+      <div class="l">05 · ARSITEKTUR SISTEM · STANDAR ARC42 HEXAGONAL</div>
+      <div class="r">14 / 16</div>
     </div>
     <div style="flex:1;padding:0;display:grid;grid-template-rows:auto 1fr auto;gap:2.2vh;min-height:0">
       <div data-anim="line" style="display:flex;flex-direction:column;gap:1vh">
@@ -2357,7 +2474,7 @@
           <div class="layer-nb">LAYER 03 · AGENTIC SANDBOX</div>
           <i data-lucide="terminal"></i>
           <div class="layer-ttl">Antigravity CLI &amp; Ekosistem Tool</div>
-          <div class="layer-desc">Google Antigravity CLI (<code style="font-family:var(--mono)">agy</code>) dengan Canary Auto-Update, DuckDB untuk data mikro jutaan baris, Patchright HiDPI, Dokter V, &amp; Google Suite.</div>
+          <div class="layer-desc">Google Antigravity CLI (<code style="font-family:var(--mono)">agy</code>) dengan Canary Auto-Update, Typst PDF, DuckDB jutaan baris, Patchright HiDPI, Dokter V, &amp; Google Suite.</div>
           <div class="layer-tag">26 CUSTOM SKILLS · 1.042 TOOL RUNS</div>
         </div>
       </div>
@@ -2368,13 +2485,13 @@
 </section>
 
 <!-- ============================================================
-     SLIDE 13 · S18 · WHY NOW (Keamanan Zero-Trust Terbukti di Prod)
+     SLIDE 15 · S18 · WHY NOW (Keamanan Zero-Trust Terbukti di Prod)
      ============================================================ -->
 <section class="slide light" data-layout="S18" data-animate="why-now" data-slide-id="zero-trust-security">
   <div class="canvas-card nav-safe-bottom" style="padding-bottom:8vh">
     <div class="chrome-min tight">
-      <div class="l">04 · TATA KELOLA &amp; KEAMANAN · ZERO-TRUST TERVERIFIKASI</div>
-      <div class="r">13 / 15</div>
+      <div class="l">05 · TATA KELOLA &amp; KEAMANAN · ZERO-TRUST TERVERIFIKASI</div>
+      <div class="r">15 / 16</div>
     </div>
     <div style="flex:1;padding:0;display:grid;grid-template-rows:auto 1fr;gap:3.6vh;min-height:0">
       <div data-anim="line" style="display:flex;flex-direction:column;gap:1vh">
@@ -2415,66 +2532,7 @@
 </section>
 
 <!-- ============================================================
-     SLIDE 14 · S06 · KPI TOWER (Dampak Terukur & Skala Nyata)
-     ============================================================ -->
-<section class="slide light" data-layout="S06" data-animate="measure-up" data-slide-id="measurable-impact">
-  <div class="canvas-card nav-safe-bottom" style="padding-bottom:8vh">
-    <div class="chrome-min tight">
-      <div class="l">05 · DAMPAK TERUKUR · HASIL 71 HARI OPERASI DI SATKER</div>
-      <div class="r">14 / 15</div>
-    </div>
-    <div style="flex:1;padding:0;display:grid;grid-template-rows:auto 1fr;gap:2.6vh;min-height:0">
-      <div data-anim="line" style="display:grid;grid-template-columns:1.15fr .85fr;gap:3vw;align-items:end">
-        <div style="display:flex;flex-direction:column;gap:.8vh">
-          <div class="t-meta">BUKAN PROTOTIPE LAB · TERUJI DI BEBAN KERJA STATISTIK NYATA</div>
-          <h2 style="font-family:var(--sans),var(--sans-zh);font-weight:200;font-size:min(4.4vw,7.8vh);line-height:.98;letter-spacing:-.035em">Mengembalikan Waktu Staf ke Kualitas Statistik</h2>
-        </div>
-        <div class="t-body-sm" style="padding-bottom:.4vh">Rekap harian turun dari 45–60 menit menjadi &lt; 10 detik otomatis; penyusunan berkas mitra &amp; nominatif dari hitungan hari menjadi menit—staf fokus pada analisis &amp; pembinaan lapangan.</div>
-      </div>
-
-      <div class="bar-towers">
-        <div class="bar-tower">
-          <div class="cap"><i data-lucide="blocks"></i></div>
-          <div class="body-block h-1">
-            <div class="lbl">EKOSISTEM SKILL</div>
-            <div class="nb">43<span class="unit">skills</span></div>
-            <div class="sub">26 custom skills + 17 built-in tumbuh dari kasus nyata kantor.</div>
-          </div>
-        </div>
-
-        <div class="bar-tower">
-          <div class="cap"><i data-lucide="users"></i></div>
-          <div class="body-block h-2">
-            <div class="lbl">ADOPSI ORGANIK</div>
-            <div class="nb">167<span class="unit">orang</span></div>
-            <div class="sub">Lintas 6 tim kerja, PML lapangan, magang, hingga BPS Provinsi.</div>
-          </div>
-        </div>
-
-        <div class="bar-tower">
-          <div class="cap"><i data-lucide="activity"></i></div>
-          <div class="body-block h-3">
-            <div class="lbl">VOLUME 71 HARI</div>
-            <div class="nb">12,7<span class="unit">K msg</span></div>
-            <div class="sub">569 jadwal otonom &amp; 1.042 aksi tool berjalan 24/7.</div>
-          </div>
-        </div>
-
-        <div class="bar-tower">
-          <div class="cap"><i data-lucide="database"></i></div>
-          <div class="body-block h-4 b-accent">
-            <div class="lbl">CAKUPAN SBR SE2026</div>
-            <div class="nb">40.907<span class="unit">usaha</span></div>
-            <div class="sub">Dikawal visual harian 9 kecamatan &amp; 6 tab anomali otomatis.</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ============================================================
-     SLIDE 15 · CLOSING · SWISS-CLOSING-ASCII (Replikasi se-Kalbar)
+     SLIDE 16 · CLOSING · SWISS-CLOSING-ASCII (Replikasi se-Kalbar)
      ============================================================ -->
 <section class="slide split" data-layout="SWISS-CLOSING-ASCII" data-animate="split-statement" data-slide-id="closing">
   <div class="canvas-card">
@@ -2482,11 +2540,11 @@
       <div class="half b-accent" style="padding:5.6vh 3.6vw 8vh;justify-content:space-between;position:relative;overflow:hidden">
         <canvas class="ascii-bg" aria-hidden="true"></canvas>
         <div class="chrome-min" style="margin-bottom:0;position:relative;z-index:1">
-          <div class="l">15 / 15</div>
+          <div class="l">16 / 16</div>
           <div class="r">REPLIKASI SE-KALBAR</div>
         </div>
         <div data-anim="manifesto" style="display:flex;flex-direction:column;gap:2vh;position:relative;z-index:1">
-          <div class="t-meta" style="color:rgba(var(--accent-on-rgb),.82);letter-spacing:.22em;margin-bottom:1vh">MANIFESTO TRANSFORMASI DAERAH</div>
+          <div class="t-meta" style="color:rgba(var(--accent-on-rgb),.82);letter-spacing:.22em;margin-bottom:1vh">40.907 USAHA SBR · 167 PENGGUNA · 43 SKILLS</div>
           <h2 style="font-family:var(--sans),var(--sans-zh);font-size:min(6.4vw,11.2vh);line-height:.96;letter-spacing:-.03em;font-weight:200;color:var(--accent-on)">Rawat <span style="font-style:italic;font-weight:300">pengetahuan</span>.<br/>Bukan beli<br/>aplikasi mahal.</h2>
           <div style="font-family:var(--sans),var(--sans-zh);font-size:max(15px,1.05vw);line-height:1.55;color:rgba(var(--accent-on-rgb),.88);font-weight:300;max-width:38ch;margin-top:.8vh">Satker BPS daerah mampu memimpin transformasi AI secara mandiri, terbuka, dan berdaulat.</div>
         </div>
@@ -2520,8 +2578,8 @@
           <div style="display:grid;grid-template-columns:auto 1fr;gap:min(2vw,3.556vh) 2vw;align-items:start;padding:2.4vh 0;border-top:1px solid var(--border-subtle);border-bottom:2px solid var(--accent)">
             <div style="font-family:var(--sans);font-weight:200;font-size:min(4.2vw,7.4vh);line-height:.9;color:var(--accent-ink)">03</div>
             <div>
-              <h3 style="font-family:var(--sans),var(--sans-zh);font-weight:500;font-size:max(min(18px,2.5vh),min(1.65vw,2.9vh));line-height:1.2;letter-spacing:-.015em;color:var(--accent-ink);margin-bottom:.8vh">Mulai dari 1 Kasus Nyata &amp; Tumbuh Organik</h3>
-              <p style="font-family:var(--sans),var(--sans-zh);font-size:max(min(16px,2.222vh),.94vw);line-height:1.55;color:var(--text-secondary);font-weight:400">Scan QR WhatsApp dinas, kawal satu kegiatan prioritas (misal SBR atau administrasi mitra), lalu biarkan tim merasakan manfaatnya.</p>
+              <h3 style="font-family:var(--sans),var(--sans-zh);font-weight:500;font-size:max(min(18px,2.5vh),min(1.65vw,2.9vh));line-height:1.2;letter-spacing:-.015em;color:var(--accent-ink);margin-bottom:.8vh">Mulai dari 1 Grup Kerja &amp; Tumbuh Organik</h3>
+              <p style="font-family:var(--sans),var(--sans-zh);font-size:max(min(16px,2.222vh),.94vw);line-height:1.55;color:var(--text-secondary);font-weight:400">Scan QR WhatsApp dinas, kenalkan Aina di satu grup tim kerja, lalu biarkan pegawai merasakan manfaatnya sendiri.</p>
             </div>
           </div>
         </div>
@@ -2543,211 +2601,224 @@ const SPEAKER_NOTES = [
     "id": "cover",
     "title": "Aina (あいな) — Rekan Kerja AI BPS Mempawah",
     "section": "Pembuka",
-    "minutes": 0.8,
-    "purpose": "Membuka dengan realita pemakaian harian, bukan teori AI abstrak",
+    "minutes": 0.7,
+    "purpose": "Membuka dengan pengalaman nyata pemakaian harian lewat WhatsApp",
     "talk": [
       "Sapa Kepala Satker, Ketua Tim, dan rekan-rekan BPS se-Kalimantan Barat.",
-      "Tekankan sejak kalimat pertama: hari ini bukan presentasi konsep di atas kertas, melainkan laporan praktik kerja nyata di BPS Kabupaten Mempawah.",
-      "Aina bekerja langsung di WhatsApp yang sudah dipakai pegawai setiap hari—tanpa aplikasi baru dan tanpa biaya lisensi vendor."
+      "Sampaikan bahwa sebelum bicara angka statistik atau arsitektur, kita akan langsung melihat tangkapan layar WhatsApp asli bagaimana Aina bekerja di BPS Mempawah.",
+      "Kuncinya sederhana: tidak perlu menginstal aplikasi baru—Aina hadir tepat di grup dan chat WhatsApp harian pegawai."
     ],
-    "transition": "Sebelum membahas arsitektur atau teori, mari kita lihat dulu angka dan wujud pemakaian riilnya di kantor kami.",
-    "cue": "Pastikan layar proyektor tersinkron; jeda 2 detik sebelum masuk ke angka produksi."
+    "transition": "Mari kita mulai dari hari pertama saat Aina pertama kali saya kenalkan ke grup kerja tim IPDS.",
+    "cue": "Pastikan layar proyektor tersinkron; jeda 2 detik sebelum berpindah ke Slide 2."
+  },
+  {
+    "id": "first-day-ipds",
+    "title": "Hari Pertama Aina Join Grup The Real of IPDS 6104",
+    "section": "Cerita Nyata WA",
+    "minutes": 1.6,
+    "purpose": "Membangun kedekatan emosional dengan memperlihatkan momen perdana Aina bergabung di grup kantor",
+    "talk": [
+      "Ini tangkapan layar asli momen hari pertama Aina saya masukkan ke grup The Real of IPDS 6104.",
+      "Begitu diperkenalkan siapa yang sedang Latsar CPNS di Jakarta dan siapa Ketua Tim Distribusi, Aina langsung menyapa natural dan mengingat konteks peran tiap rekan.",
+      "Di bagian bawah, Aina juga transparan mengenalkan dirinya sebagai asisten AI berbasis Google Gemini—bukan menyamar jadi manusia, tapi tetap ramah diajak kerja sama."
+    ],
+    "transition": "Dari perkenalan hari pertama itu, seperti apa hasilnya ketika pegawai mulai benar-benar menitipkan pekerjaan data ke Aina?",
+    "cue": "Jika audiens di belakang ingin membaca detail, klik screenshot di kanan untuk zoom layar penuh."
+  },
+  {
+    "id": "wa-showcase-data",
+    "title": "Nyata di WhatsApp: Monitoring SBR & Riset Data",
+    "section": "Cerita Nyata WA",
+    "minutes": 2.0,
+    "purpose": "Memperlihatkan 3 bukti visual asli Aina menghasilkan dashboard monitoring & Google Sheet siap pakai",
+    "talk": [
+      "Kiri: setiap pukul 07:09 di grup 6104 Matching SBR 2026, Aina otomatis mengirim potret tabel Rekap Monitoring yang tajam beserta progres 77,1% (945/1.226 kasus)—lihat langsung dibalas rekan tim 'Laju teman2'.",
+      "Tengah: staf meminta data gizi anak & kesehatan ibu Kabupaten Mempawah pukul 09:05; hanya 4 menit kemudian (09:09) Aina memadukan SP2020, Susenas, SSGI, dan Dinkes menjadi Google Sheet interaktif.",
+      "Kanan: untuk tugas besar 9 indikator Sakernas 2022–2026, Aina memberi kabar progres tiap 3 menit agar staf tenang, lalu menyerahkan Google Spreadsheet 7 tab terstruktur siap unduh."
+    ],
+    "transition": "Selain tabel dan spreadsheet, Aina juga dipakai menyusun laporan resmi Word dan PDF berkop BPS.",
+    "cue": "Klik salah satu screenshot bila ingin memperbesar tabel SBR atau link Sheet 7 tab."
+  },
+  {
+    "id": "wa-showcase-docs",
+    "title": "Dari Chat WhatsApp ke Laporan Resmi BPS",
+    "section": "Cerita Nyata WA",
+    "minutes": 2.0,
+    "purpose": "Membuktikan prinsip Tabayyun dan kemampuan kompilasi PDF Typst standar Pusdiklat BPS",
+    "talk": [
+      "Kiri: saat Ketua Tim Produksi meminta draf Laporan Pelatihan IMK 2026, Aina tidak langsung menebak—ia melakukan Tabayyun menanyakan tanggal, tempat, dan Inda, lalu setelah diberi contoh .docx dan PDF undangan langsung mengirim laporan jadi.",
+      "Tengah: saya sendiri menguji dengan mengirim undangan dan foto pelatihan Inda Wilkerstat SE2026 pukul 09:08—tujuh menit kemudian pukul 09:15 terbit file PDF 6 halaman lengkap 5 lampiran wajib.",
+      "Kanan: ini tampilan halaman 5–6 hasil kompilasi Typst aslinya—kop BPS Kabupaten Mempawah, logo SE2026, notulensi Q&A, dan tata letak 3 foto dokumentasi tersusun rapi tanpa diedit manual."
+    ],
+    "transition": "Bukan hanya dengan pegawai organik—bagaimana ketika Aina berinteraksi langsung dengan mitra lapangan?",
+    "cue": "Klik screenshot kanan (PDF Typst) untuk memperlihatkan ketajaman kop BPS & layout foto dokumentasi."
+  },
+  {
+    "id": "wa-showcase-mitra",
+    "title": "Komunikasi Hangat ke Mitra Lapangan SPKRT 2027",
+    "section": "Cerita Nyata WA",
+    "minutes": 1.4,
+    "purpose": "Menunjukkan sisi humanis Aina dalam membantu Tim IPDS mengundang & mengawal mitra terpilih",
+    "talk": [
+      "Di sini Aina membantu Tim IPDS menghubungi mitra yang lolos uji kecepatan ketik numpad untuk Pelatihan Pengolahan SPKRT 2027.",
+      "Informasi tanggal, jam, tempat di Ruang Rapat BPS Mempawah, dan tautan grup koordinasi tersampaikan lengkap tanpa salah jadwal.",
+      "Perhatikan respons dua arah di bawahnya: saat mitra membalas konfirmasi, Aina menjawab hangat hingga dibalas 'Baik mbak... 🤗'—tidak terasa seperti pesan blast kaku."
+    ],
+    "transition": "Setelah melihat bukti tangkapan layar nyatanya, sekarang mari kita lihat seberapa besar skala pemakaiannya dalam 71 hari terakhir.",
+    "cue": "Tutup dengan nada ringan pada balasan 'Baik mbak' untuk mencairkan suasana ruangan."
   },
   {
     "id": "telemetry-hook",
-    "title": "71 Hari Operasi Nyata di BPS Mempawah",
-    "section": "Bukti Nyata",
-    "minutes": 1.5,
-    "purpose": "Membangun kredibilitas instan lewat telemetri riil database produksi",
+    "title": "Statistik Produksi 71 Hari BPS Mempawah",
+    "section": "Skala Operasi",
+    "minutes": 1.4,
+    "purpose": "Menguatkan bukti visual tadi dengan angka riil dari database produksi aina.db",
     "talk": [
-      "Seluruh angka di layar diambil langsung dari database produksi Aina selama 71 hari berjalan nonstop (11 September – 21 November 2026).",
-      "Tercatat 12.762 pesan di 90 ruang percakapan (34 grup koordinasi dan 56 DM personal) dengan 167 pengguna unik lintas 6 tim kerja.",
-      "Yang paling penting adalah baris ketiga dan keempat: 569 jadwal berjalan otomatis dan 1.042 aksi tool dieksekusi—artinya Aina benar-benar bekerja, bukan sekadar ngobrol."
+      "Seluruh angka ini ditarik langsung dari database produksi Aina selama 71 hari beroperasi 24/7 (11 September – 21 November 2026).",
+      "Total 12.762 pesan tercatat di 90 ruang percakapan (34 grup dan 56 DM) dengan 167 pengguna organik lintas seluruh fungsi—tanpa surat edaran paksaan.",
+      "569 jadwal berjalan otomatis dan 1.042 aksi tool dieksekusi: artinya Aina benar-benar mengerjakan pekerjaan riil, bukan sekadar membalas obrolan."
     ],
-    "transition": "Lalu sebenarnya apa saja yang paling sering ditanyakan dan didelegasikan pegawai kepada Aina?",
-    "cue": "Sorot angka 167 pengguna organik dan 1.042 eksekusi tool."
+    "transition": "Dari 12.762 pesan itu, topik dinas apa saja yang paling mendominasi?",
+    "cue": "Sorot hubungan langsung antara screenshot sebelumnya dengan 1.042 eksekusi tool."
   },
   {
     "id": "usage-by-topic",
     "title": "Distribusi Topik Percakapan Produksi",
-    "section": "Bukti Nyata",
-    "minutes": 1.5,
-    "purpose": "Menunjukkan peta kebutuhan nyata pegawai BPS berdasarkan frekuensi pesan riil",
+    "section": "Skala Operasi",
+    "minutes": 1.3,
+    "purpose": "Memetakan domain pekerjaan BPS yang paling terbantu berdasarkan frekuensi pesan riil",
     "talk": [
-      "Grafik ini merangkum kata kunci dominan dari 12.762 pesan produksi di BPS Mempawah.",
-      "Teratas adalah urusan POK, pagu anggaran, dan KAK (1.599 pesan), diikuti integrasi Google Sheet/Form/Docs (1.255) serta alokasi petugas PPL/PML (1.152).",
-      "Artinya AI paling terasa manfaatnya bukan saat menjawab pertanyaan umum, melainkan ketika menyentuh dokumen kerja harian satker."
+      "Tiga besar topik di produksi adalah POK/Anggaran/KAK (1.599 pesan), Google Suite (1.255), serta alokasi petugas PPL/PML (1.152).",
+      "Diikuti pengolahan PDF/TTD/dokumen (929), pengawalan SBR SE2026 (863), penjadwalan/ARC (860), dan administrasi Dokter V (793).",
+      "Polanya jelas: AI paling bernilai saat langsung terhubung ke dokumen kerja dan spreadsheet resmi satker."
     ],
-    "transition": "Mari kita bedah contoh konkretnya—dimulai dari empat tim teknis di BPS Mempawah.",
-    "cue": "Tunjuk tiga batang teratas (POK, Google Suite, Alokasi Petugas)."
+    "transition": "Selain yang tampil di screenshot tadi, berikut enam contoh pemakaian nyata lain dari lintas tim kerja.",
+    "cue": "Tunjuk tiga batang teratas pada grafik."
   },
   {
-    "id": "real-usecases-technical",
-    "title": "Kasus Nyata #1 — Empat Tim Teknis",
-    "section": "Bukti Nyata",
-    "minutes": 2.0,
-    "purpose": "Memperlihatkan bahwa setiap bidang teknis (bukan hanya IPDS) aktif memakai Aina",
+    "id": "real-usecases-more",
+    "title": "Ragam Kasus Nyata Lintas 6 Tim Kerja",
+    "section": "Skala Operasi",
+    "minutes": 1.6,
+    "purpose": "Memperlihatkan jangkauan pemakaian di seluruh tim (IPDS, Distribusi, Neraca, Umum, hingga PML)",
     "talk": [
-      "Tim Distribusi menjadi pengguna non-IPDS teraktif (1.813 pesan): menyinkronkan jumlah dokumen petugas antar Google Sheet Nominatif PPL/PML secara otomatis.",
-      "Tim Neraca memakai Aina untuk analisis SWOT plus jarak rumah asal ke wilayah tugas saat memilih 10 kandidat PPL, serta membantu rebasing PDRB dan imputasi inventori.",
-      "Tim Sosial mengajak Aina menjadi co-author paparan pimpinan lintas instansi; Tim Produksi mengirim undangan PDF dan draf .docx untuk disusun menjadi laporan pelatihan IMK lengkap dengan cover."
+      "Staf IPDS cukup mengirim link Sheet soal, lalu Aina membaca sel yang diberi warna stabilo hijau untuk menerbitkan Google Form pretest otomatis.",
+      "Tim Distribusi menyinkronkan kolom dokumen Sheet Nominatif PPL/PML; Tim Neraca memakai Aina untuk SWOT 10 kandidat PPL berdasarkan jarak rumah ke RT/Dusun serta rebasing PDRB.",
+      "Di Bagian Umum, staf yang laptopnya kena layar biru Windows Recovery mengirim foto layar untuk dipandu perbaikan di WA; di lapangan, PML terbantu soal error FASIH Mobile hingga latihan ujian SOP."
     ],
-    "transition": "Tidak berhenti di tim teknis—bagaimana dengan IPDS, Bagian Umum, dan petugas lapangan?",
-    "cue": "Tekankan bahwa seluruh contoh adalah kejadian riil yang sudah dianonimkan."
-  },
-  {
-    "id": "real-usecases-ops",
-    "title": "Kasus Nyata #2 — IPDS, Umum & Lapangan",
-    "section": "Bukti Nyata",
-    "minutes": 2.0,
-    "purpose": "Menunjukkan contoh tak terduga yang langsung terasa manfaatnya di operasional harian",
-    "talk": [
-      "Contoh favorit staf IPDS: cukup kirim tautan Google Sheet soal, Aina membaca sel mana yang diberi warna stabilo hijau lalu langsung menerbitkan Google Form pretest.",
-      "Aina juga membandingkan daftar nama di surat undangan pelatihan SPKRT 2027 terhadap database mitra aktif di Dokter V, serta menangkap bug scientific notation NIK (3,57E+20) pada sheet SBR.",
-      "Di Bagian Umum, staf yang laptopnya terkena layar biru Windows Recovery cukup memfoto layar dan dipandu di WA; sementara PML lapangan bertanya soal error FASIH Mobile hingga latihan ujian SOP.",
-      "Bahkan rekan BPS Provinsi Kalbar pernah langsung chat Aina menanyakan progres SBR Mempawah—bukti antarmuka WhatsApp menghilangkan hambatan adopsi."
-    ],
-    "transition": "Selain merespons chat, Aina juga punya rutinitas yang berjalan sendiri tanpa perlu disuruh.",
-    "cue": "Beri jeda singkat setelah cerita stabilo hijau dan layar biru—biasanya memicu reaksi audiens."
+    "transition": "Tidak hanya merespons saat ditanya, Aina juga menjalankan 12 rutinitas dinas secara mandiri di latar belakang.",
+    "cue": "Beri penekanan singkat pada contoh stabilo hijau dan foto layar biru."
   },
   {
     "id": "autonomous-schedules",
-    "title": "12 Rutinitas Otonom Tanpa Disuruh",
-    "section": "Bukti Nyata",
-    "minutes": 1.5,
-    "purpose": "Membuktikan sifat proaktif AI Co-Worker (bukan menunggu ditanya)",
+    "title": "12 Rutinitas Dinas Berjalan Mandiri",
+    "section": "Skala Operasi",
+    "minutes": 1.3,
+    "purpose": "Membuktikan sifat proaktif penjadwalan deterministik di background server",
     "talk": [
-      "Ini 12 rutinitas riil yang aktif terjadwal di server: mulai dari monitoring SBR tiap 07:00, briefing deadline pagi 06:30, sampai evaluasi sore 18:30.",
-      "Untuk Bagian Umum, ada pengingat presensi akhir bulan tepat pada H-1 dan hari kerja terakhir, plus pengingat gaji peserta magang Batch 1 dan Batch 2 tiap tanggal 9 dan 20.",
-      "Seluruh jadwal tersimpan persisten di SQLite—total sudah 569 eksekusi otonom berjalan mandiri di server tanpa bergantung alarm ponsel pegawai."
+      "Dua belas rutinitas ini benar-benar aktif berjalan di server: monitoring SBR tiap 07:00, briefing deadline pagi 06:30, dan evaluasi sore 18:30.",
+      "Untuk Bagian Umum ada pengingat presensi hari kerja terakhir bulan (H-1 dan Hari-H) serta jadwal pembayaran gaji magang Batch 1 dan Batch 2 setiap tanggal 9 dan 20.",
+      "Total 569 eksekusi otonom telah berjalan dari 74 jadwal persisten tanpa bergantung alarm ponsel pegawai."
     ],
-    "transition": "Setelah melihat seluruh wujud pemakaiannya, mari kita tarik benang merah: masalah mendasar apa yang sebenarnya terjawab?",
-    "cue": "Arahkan perhatian ke angka 569 runs di bagian bawah."
+    "transition": "Setelah melihat seluruh bukti nyatanya, mengapa sistem ini begitu cepat diterima oleh 167 orang di satker kami?",
+    "cue": "Arahkan perhatian ke angka 569 runs di bawah."
   },
   {
     "id": "field-bottlenecks",
     "title": "4 Bottleneck Klasik Satker BPS Daerah",
-    "section": "Akar Masalah",
-    "minutes": 1.2,
-    "purpose": "Menghubungkan contoh nyata tadi dengan realitas bersama seluruh satker se-Kalbar",
+    "section": "Konsep Inti",
+    "minutes": 1.1,
+    "purpose": "Menghubungkan adopsi organik Aina dengan empat hambatan nyata yang dirasakan seluruh satker se-Kalbar",
     "talk": [
-      "Setiap satker daerah menghadapi dilema serupa: rentetan sensus dan survei makin padat sementara jumlah pegawai organik relatif statis.",
-      "Keempat bottleneck ini—klerikal mitra, friksi monitoring lapangan, fragmentasi POK/SOP saat mutasi, dan pengolahan data mikro berat—adalah pekerjaan mekanis yang menyedot waktu statistisi.",
-      "Itulah mengapa adopsi Aina berjalan organik: ia langsung mengambil beban kerja yang paling melelahkan sehari-hari."
+      "Di daerah, beban sensus dan survei terus meningkat sementara jumlah pegawai organik relatif tetap.",
+      "Empat bottleneck ini—klerikal mitra, friksi monitoring lapangan, fragmentasi POK/SOP saat mutasi, dan pengolahan data mikro berat—menyita waktu terbaik statistisi kita.",
+      "Aina diterima cepat karena langsung mengambil beban mekanis yang paling melelahkan sehari-hari."
     ],
-    "transition": "Pertanyaannya: mengapa Aina bisa menyelesaikan tugas-tugas tadi sementara chatbot AI publik biasa sering meleset?",
-    "cue": "Bicarakan dengan nada empatik sebagai sesama insan satker daerah."
+    "transition": "Lalu mengapa Aina bisa akurat menangani data kantor sementara chatbot AI publik biasa sering mengarang jawaban?",
+    "cue": "Sampaikan secara ringkas sebagai refleksi bersama pimpinan satker."
   },
   {
     "id": "company-brain-vs-chatbot",
-    "title": "Chatbot Biasa vs Company Brain",
+    "title": "Bukan Chatbot FAQ, Melainkan Company Brain",
     "section": "Konsep Inti",
-    "minutes": 1.5,
-    "purpose": "Menjelaskan pembeda strategis terbesar: Enterprise Context Layer berbasis Git",
+    "minutes": 1.4,
+    "purpose": "Menjelaskan pembeda utama: repositori pengetahuan resmi berbasis Git (knowledge-base)",
     "talk": [
-      "Model AI publik secanggih apa pun tidak tahu revisi POK terbaru atau daftar mitra aktif di kabupaten kita, sehingga cenderung menebak.",
-      "Kunci di BPS Mempawah adalah membangun Company Brain: repositori pengetahuan resmi berbasis Git yang menyimpan POK SAKTI, SOP, kalender dinas, dan alur kerja satker.",
-      "Aina terikat aturan Strict Grounding dan prinsip Tabayyun: angka anggaran wajib dibaca dari berkas asli, dan bila belum ada di dokumen resmi, Aina harus jujur menyatakan belum tersedia."
+      "Chatbot publik tidak mengetahui revisi POK terbaru, kalender kegiatan lokal, maupun daftar mitra aktif kabupaten kita.",
+      "Di BPS Mempawah, kuncinya adalah Company Brain: repositori Git terstruktur yang menyimpan POK SAKTI, SOP, kalender, dan alur kerja sebagai satu-satunya sumber kebenaran.",
+      "Aina terikat aturan Strict Grounding dan Tabayyun: membaca berkas asli secara langsung dan jujur menolak menebak jika informasi belum tersedia."
     ],
-    "transition": "Lebih menarik lagi, Company Brain ini tidak statis—ia tumbuh otomatis setiap kali tim memecahkan masalah baru.",
-    "cue": "Gunakan garis pemisah tengah untuk menegaskan perbedaan sisi kiri dan kanan."
+    "transition": "Lebih jauh lagi, Company Brain ini terus tumbuh otomatis dari setiap masalah baru yang dipecahkan staf.",
+    "cue": "Bandingkan kolom kiri dan kolom kanan secara tegas."
   },
   {
     "id": "self-evolving-loop",
     "title": "Siklus Self-Evolving Skill & Tabayyun",
     "section": "Konsep Inti",
-    "minutes": 1.5,
-    "purpose": "Menunjukkan bagaimana 1 diskusi staf berubah menjadi aset pengetahuan permanen kantor",
+    "minutes": 1.4,
+    "purpose": "Menjelaskan bagaimana pengetahuan kerja dibekukan menjadi custom skill agar kebal mutasi pegawai",
     "talk": [
-      "Ini kejadian nyata minggu ini di produksi: staf berdiskusi dengan Aina soal risiko menggabungkan tarikan FASIH per 15 menit dengan input manual mitra.",
-      "Setelah logika join dan batasan terverifikasi bersama, staf meminta Aina membekukan pelajaran itu menjadi custom skill baru agar berlaku untuk semua survei ke depan.",
-      "Dari situlah ekosistem 26 custom skills BPS Mempawah bertumbuh—memori kerja tidak lagi hilang saat pegawai berganti tim atau mutasi."
+      "Kejadian nyata minggu ini: staf berdiskusi dengan Aina soal menggabungkan tarikan FASIH 15 menit dengan input manual mitra tanpa bentrok subsektor.",
+      "Setelah logika dan batasannya disepakati, staf meminta pola tersebut dibekukan menjadi custom skill—lahirlah hybrid-monitoring-guard.",
+      "Dengan cara ini, 26 custom skills BPS Mempawah menjadi aset permanen institusi yang tetap hidup meski pegawai berganti tim atau mutasi."
     ],
-    "transition": "Mari kita lihat dua alur unggulan yang dampaknya paling cepat terasa: monitoring lapangan SBR dan administrasi mitra Dokter V.",
-    "cue": "Ikuti alur searah jarum jam 01 → 04 pada diagram kanan."
-  },
-  {
-    "id": "flagship-sbr-pipeline",
-    "title": "Flagship: Live Sheet SBR SE2026 → Visual WA",
-    "section": "Flagship Use Case",
-    "minutes": 1.5,
-    "purpose": "Membedah secara ringkas alur pemantauan 40.907 usaha SBR SE2026 & BKSDM",
-    "talk": [
-      "Petugas di 9 kecamatan cukup memperbarui progres di Google Sheet yang sudah dilengkapi formula rekap otomatis dan 6 tab anomali.",
-      "Setiap pukul 07:00 WIB, server menjalankan Chromium headless berskala Retina 2x untuk memotret tabel rekap secara tajam—anti blur di ponsel.",
-      "Gambar dashboard langsung masuk ke grup koordinasi WhatsApp. Pimpinan tidak perlu membuka spreadsheet berat, dan wilayah yang tertinggal terpacu mengejar target secara alami."
-    ],
-    "transition": "Dari pengawalan lapangan, kita bergeser ke lini administrasi mitra dan anggaran di Bagian Umum.",
-    "cue": "Tekankan perubahan waktu kerja: 45–60 menit rekap manual menjadi di bawah 10 detik otomatis."
+    "transition": "Salah satu penerapan paling sibuk dari Company Brain dan custom skills ini adalah administrasi mitra dan anggaran.",
+    "cue": "Ikuti arah panah 01 → 04 pada diagram loop di kanan."
   },
   {
     "id": "dokter-v-pok",
-    "title": "Otomasi Administrasi Mitra (Dokter V) & POK",
-    "section": "Flagship Use Case",
-    "minutes": 1.3,
-    "purpose": "Menunjukkan manfaat langsung bagi Kasubbag Umum, bendahara, dan ketua tim kegiatan",
+    "title": "Administrasi Mitra (Dokter V) & POK SAKTI",
+    "section": "Otomasi Inti",
+    "minutes": 1.2,
+    "purpose": "Menyoroti manfaat konkret bagi Kasubbag Umum, bendahara, dan ketua tim kegiatan",
     "talk": [
-      "Gabungan pesan terkait POK (1.599) dan Dokter V/SPK/BAST (793) adalah beban diskusi terbesar di produksi.",
-      "Aina memvalidasi kesesuaian nama peserta pelatihan dengan database mitra aktif di Dokter V, menyinkronkan realisasi dokumen ke sheet nominatif, hingga membantu menyiapkan SPK dan BAST bebas salah ketik NIK.",
-      "Bahkan staf bisa menitip notifikasi: kabari otomatis jika pengajuan honor atas nama tertentu sudah cair."
+      "Gabungan 1.599 pesan POK/KAK dan 793 pesan Dokter V membuktikan betapa besarnya kebutuhan otomasi administrasi mitra dan anggaran.",
+      "Aina membandingkan daftar nama undangan pelatihan terhadap database mitra aktif di Dokter V, menyinkronkan realisasi dokumen ke Sheet Nominatif, hingga membantu draf SPK/BAST bebas salah ketik NIK.",
+      "Staf juga dapat menitipkan pengingat pencairan honor otomatis sesuai pengajuan masing-masing."
     ],
-    "transition": "Sekarang mari kita buka sedikit dapur teknologinya secara ringkas untuk rekan-rekan IPDS dan pimpinan.",
-    "cue": "Hubungkan kembali ke angka 2.392 pesan pada header slide."
+    "transition": "Untuk rekan-rekan IPDS dan pimpinan yang bertanya bagaimana dapur teknologinya bekerja, mari kita lihat arsitekturnya secara ringkas.",
+    "cue": "Tekankan efisiensi waktu dari hitungan hari menjadi menit."
   },
   {
     "id": "architecture-layers",
-    "title": "Dapur Teknologi 3 Lapisan (arc42)",
+    "title": "Arsitektur 3 Lapisan Terstandarisasi (arc42)",
     "section": "Arsitektur & Keamanan",
-    "minutes": 1.5,
-    "purpose": "Menjelaskan arsitektur teknis secara rapi, ringan, dan siap diaudit tim IPDS",
+    "minutes": 1.4,
+    "purpose": "Menunjukkan kesederhanaan infrastruktur (cukup 1 ThinkStation lokal) dengan disiplin arsitektur enterprise",
     "talk": [
-      "Sistem dibagi menjadi 3 lapisan terisolasi mengikuti standar arc42 dan Hexagonal Architecture.",
-      "Lapisan terluar menangani WhatsApp dan kontrol akses; lapisan inti ditulis dengan Rust agar sangat ringan di Lenovo ThinkStation P320, memakai SQLite WAL kebal mati lampu dan Infisical JIT untuk rahasia.",
-      "Lapisan ketiga adalah Google Antigravity CLI (agy) sebagai mesin penalaran agentik yang menjalankan DuckDB, Chromium, Dokter V, dan Google Suite secara terisolasi."
+      "Seluruh sistem berjalan 24/7 di satu unit Lenovo ThinkStation P320 lokal—tanpa menyewa server cloud mahal.",
+      "Lapisan 1 mengelola gerbang WhatsApp dan kontrol akses; Lapisan 2 ditulis dengan Rust agar sangat ringan, memakai SQLite WAL kebal mati lampu, Infisical JIT, dan deploy zero-downtime.",
+      "Lapisan 3 adalah Google Antigravity CLI (agy) yang mengeksekusi Typst, DuckDB untuk data jutaan baris, Chromium HiDPI, Dokter V, dan Google Suite secara terisolasi."
     ],
-    "transition": "Pertanyaan paling kritis di instansi pemerintah selalu soal keamanan dan kedaulatan data—berikut bukti penerapannya.",
-    "cue": "Tekankan hardware sederhana: cukup 1 unit Lenovo ThinkStation lokal, bukan cloud mahal."
+    "transition": "Terakhir sebelum penutup, bagaimana jaminan keamanan dan tata kelolanya untuk data statistik negara?",
+    "cue": "Tegaskan keterpisahan lapisan: ganti model AI tidak merusak inti keamanan."
   },
   {
     "id": "zero-trust-security",
     "title": "Keamanan Zero-Trust Terbukti di Lapangan",
     "section": "Arsitektur & Keamanan",
-    "minutes": 1.5,
-    "purpose": "Menjawab keraguan keamanan informasi secara jujur, akurat, dan berbasis bukti",
+    "minutes": 1.4,
+    "purpose": "Menjawab aspek keamanan informasi secara jujur, akurat, dan didukung bukti log produksi",
     "talk": [
-      "Kami menjaga kejujuran arsitektur: penalaran LLM tetap memanfaatkan API Antigravity, namun orkestrasi, database lokal SQLite/DuckDB, file dinas, dan vault kredensial 100% dikendalikan on-premise dengan 0 rahasia hardcoded di kode.",
-      "Proteksi Zero-Trust data_guard sudah teruji nyata: tercatat 12 tamu dan 1 percobaan probing eksternal yang mencoba menggali arsitektur internal berhasil ditahan dari akses data dinas.",
-      "Seluruh 9.683 aksi WhatsApp tercatat di log audit, dan pembaruan CLI agy melalui gerbang SHA-512 plus Canary Gate dengan rollback atomik."
+      "Kami transparan: penalaran LLM tetap memanggil API Antigravity, namun orkestrasi, database lokal SQLite/DuckDB, berkas dinas, dan vault rahasia Infisical JIT 100% dikelola on-premise dengan 0 password di kode.",
+      "Zero-Trust data_guard sudah teruji nyata: tercatat 12 tamu dan 1 percobaan probing eksternal yang mencoba menggali sistem internal berhasil diisolasi dari data dinas.",
+      "Seluruh 9.683 aksi WhatsApp tercatat di log audit, dan pembaruan CLI agy wajib lolos SHA-512 serta Canary Gate dengan rollback atomik."
     ],
-    "transition": "Secara keseluruhan, apa dampak nyata setelah 71 hari berjalan di BPS Mempawah?",
-    "cue": "Sorot kolom ketiga (9.683 aksi teraudit) sebagai jaminan akuntabilitas."
-  },
-  {
-    "id": "measurable-impact",
-    "title": "Dampak Terukur & Pengembalian Waktu Kerja",
-    "section": "Dampak & Penutup",
-    "minutes": 1.2,
-    "purpose": "Merangkum skala pencapaian riil tanpa angka klaim artifisial",
-    "talk": [
-      "Keempat pilar angka ini semuanya riil dari operasi harian: 43 skill aktif, 167 pengguna organik, 12,7 ribu pesan dalam 71 hari, dan 40.907 usaha SBR terkawal harian.",
-      "Rekap monitoring yang dulu menyita 45–60 menit per hari kini selesai kurang dari 10 detik otomatis di server.",
-      "Hasil akhirnya bukan menggantikan pegawai, melainkan mengembalikan waktu staf fungsional kepada substansi: kualitas data, analisis statistik, dan pembinaan responden."
-    ],
-    "transition": "Jika Bapak dan Ibu ingin mencoba di satker masing-masing, seluruh fondasinya sudah kami buka untuk direplikasi.",
-    "cue": "Beri tempo sedikit melambat agar angka 40.907 dan 167 meresap."
+    "transition": "Bila Bapak dan Ibu tertarik mengadopsi di satker masing-masing, seluruh kode sumbernya sudah kami buka.",
+    "cue": "Sorot angka 0 secrets in code dan 13 tamu terisolasi."
   },
   {
     "id": "closing",
     "title": "Cetak Biru Replikasi BPS se-Kalbar",
-    "section": "Dampak & Penutup",
+    "section": "Penutup",
     "minutes": 1.0,
-    "purpose": "Menutup dengan pernyataan kuat dan 3 langkah konkret adopsi pasca acara",
+    "purpose": "Menutup dengan rangkuman dampak (40.907 usaha SBR, 167 pengguna, 43 skills) dan 3 langkah adopsi konkret",
     "talk": [
-      "Seluruh kode sumber Aina terbuka di github.com/ipds6104/aina tanpa biaya lisensi vendor—core stack dapat dipasang dengan Docker di server satker kurang dari satu jam.",
-      "Langkah kuncinya adalah merawat Company Brain satker sendiri secara bertahap: mulai dari POK, SOP, dan kalender kegiatan lokal.",
-      "Jangan menunggu sempurna semua bidang; pilih satu kegiatan prioritas seperti pengawalan SBR atau administrasi mitra, biarkan tim merasakan manfaatnya sendiri."
+      "Kode sumber Aina terbuka penuh di github.com/ipds6104/aina tanpa biaya lisensi vendor—core stack dapat dipasang dengan Docker di server satker kurang dari satu jam.",
+      "Kunci keberhasilannya adalah mulai merawat Company Brain satker sendiri secara bertahap: POK, SOP, dan kalender dinas.",
+      "Tidak perlu menunggu sempurna untuk seluruh bidang; mulai dari satu grup kerja seperti yang tadi kita lihat di Slide 2, lalu biarkan tim merasakan manfaatnya sendiri."
     ],
-    "transition": "Terima kasih atas perhatian Bapak, Ibu, dan rekan-rekan se-Kalimantan Barat; kami buka sesi diskusi dan kolaborasi.",
+    "transition": "Terima kasih atas perhatian Bapak, Ibu, dan rekan-rekan BPS se-Kalbar; kami buka sesi diskusi dan tanya jawab.",
     "cue": "Jeda 2 detik setelah kalimat manifesto, lalu tutup dengan terima kasih."
   }
 ];
@@ -4452,6 +4523,40 @@ if(motion){
 
   playSlide(window.__currentSlideIndex || 0);
 }
+</script>
+
+
+<div id="wa-lightbox" role="dialog" aria-modal="true" aria-label="Perbesar tangkapan layar WhatsApp">
+  <img id="wa-lightbox-img" src="" alt="">
+  <div id="wa-lightbox-cap">KLIK ATAU TEKAN ESC UNTUK MENUTUP</div>
+</div>
+<script>
+(function(){
+  const box = document.getElementById('wa-lightbox');
+  const img = document.getElementById('wa-lightbox-img');
+  const cap = document.getElementById('wa-lightbox-cap');
+  if(!box || !img) return;
+  document.addEventListener('click', (e)=>{
+    const shot = e.target.closest('.wa-stage img');
+    if(shot){
+      img.src = shot.src;
+      img.alt = shot.alt || '';
+      cap.textContent = (shot.dataset.zoomCaption || shot.alt || 'SCREENSHOT') + '  ·  KLIK / ESC TUTUP';
+      box.classList.add('is-open');
+      return;
+    }
+    if(box.classList.contains('is-open')){
+      box.classList.remove('is-open');
+    }
+  });
+  document.addEventListener('keydown', (e)=>{
+    if(e.key === 'Escape' && box.classList.contains('is-open')){
+      box.classList.remove('is-open');
+      e.stopImmediatePropagation();
+      e.preventDefault();
+    }
+  }, true);
+})();
 </script>
 
 </body>
