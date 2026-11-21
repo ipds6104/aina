@@ -314,10 +314,17 @@ pub fn init_schema(conn: &Connection) -> anyhow::Result<()> {
             chat_type TEXT NOT NULL,
             message_id TEXT NOT NULL,
             issued_at INTEGER NOT NULL,
-            expires_at INTEGER NOT NULL
+            expires_at INTEGER NOT NULL,
+            explicit_targets TEXT NOT NULL DEFAULT '[]'
         )",
         [],
     )?;
+
+    // Backward-compatible migration for existing SQLite databases (Phase 20)
+    let _ = conn.execute(
+        "ALTER TABLE turn_capabilities ADD COLUMN explicit_targets TEXT NOT NULL DEFAULT '[]'",
+        [],
+    );
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_turn_capabilities_expiry

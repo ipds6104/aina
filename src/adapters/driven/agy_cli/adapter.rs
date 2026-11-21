@@ -1,5 +1,6 @@
 //! Antigravity CLI Process Runner and AgentEnginePort adapter implementation.
 
+use crate::core::domain::capability::Authority;
 use crate::core::ports::{AgentEnginePort, AgentResponse};
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -170,6 +171,12 @@ impl AntigravityCliAdapter {
     pub async fn get_concurrency_telemetry(&self) -> crate::adapters::driven::agy_cli::account_pool::ConcurrencyTelemetry {
         self.pool_manager.get_concurrency_telemetry(self.max_concurrency).await
     }
+
+    #[cfg(test)]
+    pub fn with_test_pool(mut self, pool_manager: Arc<TokenPoolManager>) -> Self {
+        self.pool_manager = pool_manager;
+        self
+    }
 }
 
 impl AntigravityCliAdapter {
@@ -180,6 +187,7 @@ impl AntigravityCliAdapter {
         prompt: &str,
         model_override: Option<&str>,
         turn_token: Option<&str>,
+        authority: Authority,
     ) -> anyhow::Result<AgentResponse> {
         let active_model = match model_override {
             Some(m) if !m.trim().is_empty() => resolve_model_name(m)?,
@@ -248,14 +256,35 @@ impl AntigravityCliAdapter {
                 cmd.arg("--effort").arg(eff);
             }
 
-            // Injected environment variables for skills & tools
-            cmd.env("WHATSMEOW_BASE_URL", &self.whatsmeow_base_url);
-            cmd.env("WHATSMEOW_API_KEY", &self.whatsmeow_api_key);
-            if let Some(ref comp_url) = self.companion_base_url {
-                cmd.env("WHATSMEOW_COMPANION_URL", comp_url);
-            }
-            if let Some(ref comp_key) = self.companion_api_key {
-                cmd.env("WHATSMEOW_COMPANION_KEY", comp_key);
+            // Phase 20: Least-Privilege Subprocess Environment Injection (ADR-018).
+            // Always remove gateway secrets first to prevent accidental inheritance from parent daemon env.
+            cmd.env_remove("WHATSMEOW_API_KEY");
+            cmd.env_remove("WHATSMEOW_COMPANION_KEY");
+            cmd.env_remove("WHATSMEOW_COMPANION_URL");
+            cmd.env_remove("WHATSMEOW_COMPANION_API_KEY");
+            cmd.env_remove("AINA_TURN_TOKEN");
+
+            match authority {
+                Authority::Guest => {
+                    // Guest turns NEVER receive Whatsmeow API keys or Companion URLs.
+                    cmd.env_remove("WHATSMEOW_BASE_URL");
+                }
+                Authority::Staff | Authority::Atasan => {
+                    // Verified colleagues receive primary bot gateway access, NEVER Companion private keys.
+                    cmd.env("WHATSMEOW_BASE_URL", &self.whatsmeow_base_url);
+                    cmd.env("WHATSMEOW_API_KEY", &self.whatsmeow_api_key);
+                }
+                Authority::Admin => {
+                    // Root of Trust receives full configured gateway credentials.
+                    cmd.env("WHATSMEOW_BASE_URL", &self.whatsmeow_base_url);
+                    cmd.env("WHATSMEOW_API_KEY", &self.whatsmeow_api_key);
+                    if let Some(ref comp_url) = self.companion_base_url {
+                        cmd.env("WHATSMEOW_COMPANION_URL", comp_url);
+                    }
+                    if let Some(ref comp_key) = self.companion_api_key {
+                        cmd.env("WHATSMEOW_COMPANION_KEY", comp_key);
+                    }
+                }
             }
             // Scoped, short-lived authorization proof for agent-proposed policy
             // changes (`aina policy ...`). Absent token => guest-level actions only.
@@ -457,7 +486,9 @@ impl AgentEnginePort for AntigravityCliAdapter {
         prompt: &str,
         model_override: Option<&str>,
     ) -> anyhow::Result<AgentResponse> {
-        self.run_agent(conversation_id, prompt, model_override, None)
+        // Internal daemon callers (scheduled tasks / admin simulator) get primary bot access
+        // without exposing personal Companion credentials.
+        self.run_agent(conversation_id, prompt, model_override, None, Authority::Staff)
             .await
     }
 
@@ -467,13 +498,15 @@ impl AgentEnginePort for AntigravityCliAdapter {
         prompt: &str,
         capability: Option<&crate::core::domain::capability::TurnCapability>,
     ) -> anyhow::Result<AgentResponse> {
-        // The token is injected only into this child process environment, so a
-        // turn can never inherit (or escalate into) another turn's authority.
+        // The token and gateway env vars are scoped strictly to this turn's verified authority.
+        // Absent capability defaults fail-closed to Guest (zero gateway secrets).
+        let authority = capability.map(|c| c.authority).unwrap_or(Authority::Guest);
         self.run_agent(
             conversation_id,
             prompt,
             None,
             capability.map(|c| c.token.as_str()),
+            authority,
         )
         .await
     }
@@ -621,6 +654,97 @@ pub mod tests {
         let err_msg = res.unwrap_err().to_string();
         // The error must explicitly contain the account tag [Akun #1 (tes***@gmail.com)]
         assert!(err_msg.contains("[Akun #1 (tes***@gmail.com)]"), "Expected account attribution tag in error, got: {}", err_msg);
+    }
+
+    #[tokio::test]
+    async fn test_phase20_least_privilege_subprocess_env_isolation() {
+        use crate::core::domain::capability::{Authority, TurnCapability};
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = std::env::temp_dir().join(format!("aina_phase20_env_test_{}", rand::random::<u32>()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let script_path = dir.join("fake_agy_env.sh");
+        let script = r#"#!/bin/sh
+printf '{"conversation_id":"env_test","status":"DONE","response":"BASE=%s|API=%s|COMP_URL=%s|COMP_KEY=%s|TOK=%s"}\n' \
+  "${WHATSMEOW_BASE_URL:-NONE}" \
+  "${WHATSMEOW_API_KEY:-NONE}" \
+  "${WHATSMEOW_COMPANION_URL:-NONE}" \
+  "${WHATSMEOW_COMPANION_KEY:-NONE}" \
+  "${AINA_TURN_TOKEN:-NONE}"
+"#;
+        std::fs::write(&script_path, script).unwrap();
+        std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let pool = vec![AccountToken::new(
+            1,
+            "Test-Account".to_string(),
+            Some("test@example.com".to_string()),
+            "tok1".to_string(),
+        )];
+        let adapter = AntigravityCliAdapter::with_companion(
+            &script_path,
+            "gemini-2.5-flash",
+            &dir,
+            15,
+            "http://127.0.0.1:8080",
+            "PRIMARY_SECRET_XYZ",
+            Some("http://127.0.0.1:8081".to_string()),
+            Some("COMPANION_SECRET_ABC".to_string()),
+        )
+        .with_test_pool(Arc::new(TokenPoolManager::with_pool(pool)));
+
+        let now = 1_700_000_000;
+
+        // 1. Guest turn: ZERO Whatsmeow or Companion credentials exposed
+        let guest_cap = TurnCapability::mint("guest@s.whatsapp.net", Authority::Guest, "guest@s.whatsapp.net", "direct", "m1", now);
+        let guest_res = adapter
+            .execute_with_capability(None, "hello", Some(&guest_cap))
+            .await
+            .unwrap();
+        assert_eq!(
+            guest_res.response_text,
+            format!("BASE=NONE|API=NONE|COMP_URL=NONE|COMP_KEY=NONE|TOK={}", guest_cap.token)
+        );
+
+        // 2. Missing capability (None): fail-closed to Guest (ZERO credentials)
+        let none_res = adapter
+            .execute_with_capability(None, "hello", None)
+            .await
+            .unwrap();
+        assert_eq!(
+            none_res.response_text,
+            "BASE=NONE|API=NONE|COMP_URL=NONE|COMP_KEY=NONE|TOK=NONE"
+        );
+
+        // 3. Staff turn: primary gateway key ONLY, ZERO Companion credentials
+        let staff_cap = TurnCapability::mint("staff@s.whatsapp.net", Authority::Staff, "staff@s.whatsapp.net", "direct", "m2", now);
+        let staff_res = adapter
+            .execute_with_capability(None, "hello", Some(&staff_cap))
+            .await
+            .unwrap();
+        assert_eq!(
+            staff_res.response_text,
+            format!(
+                "BASE=http://127.0.0.1:8080|API=PRIMARY_SECRET_XYZ|COMP_URL=NONE|COMP_KEY=NONE|TOK={}",
+                staff_cap.token
+            )
+        );
+
+        // 4. Admin turn: full configured primary + companion credentials
+        let admin_cap = TurnCapability::mint("admin@s.whatsapp.net", Authority::Admin, "admin@s.whatsapp.net", "direct", "m3", now);
+        let admin_res = adapter
+            .execute_with_capability(None, "hello", Some(&admin_cap))
+            .await
+            .unwrap();
+        assert_eq!(
+            admin_res.response_text,
+            format!(
+                "BASE=http://127.0.0.1:8080|API=PRIMARY_SECRET_XYZ|COMP_URL=http://127.0.0.1:8081|COMP_KEY=COMPANION_SECRET_ABC|TOK={}",
+                admin_cap.token
+            )
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
 

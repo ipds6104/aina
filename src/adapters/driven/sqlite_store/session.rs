@@ -621,10 +621,12 @@ pub fn create_turn_capability(
     conn: &Connection,
     capability: &crate::core::domain::capability::TurnCapability,
 ) -> anyhow::Result<()> {
+    let explicit_targets_json =
+        serde_json::to_string(&capability.explicit_targets).unwrap_or_else(|_| "[]".to_string());
     conn.execute(
         "INSERT OR REPLACE INTO turn_capabilities
-            (token, principal_jid, authority, chat_jid, chat_type, message_id, issued_at, expires_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            (token, principal_jid, authority, chat_jid, chat_type, message_id, issued_at, expires_at, explicit_targets)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![
             capability.token,
             capability.principal_jid,
@@ -634,6 +636,7 @@ pub fn create_turn_capability(
             capability.message_id,
             capability.issued_at,
             capability.expires_at,
+            explicit_targets_json,
         ],
     )?;
     Ok(())
@@ -647,11 +650,16 @@ pub fn get_turn_capability(
         return Ok(None);
     }
     let mut stmt = conn.prepare(
-        "SELECT token, principal_jid, authority, chat_jid, chat_type, message_id, issued_at, expires_at
+        "SELECT token, principal_jid, authority, chat_jid, chat_type, message_id, issued_at, expires_at, explicit_targets
          FROM turn_capabilities WHERE token = ?1 LIMIT 1",
     )?;
     let mut rows = stmt.query(params![token])?;
     if let Some(row) = rows.next()? {
+        let targets_raw: Option<String> = row.get(8).ok();
+        let explicit_targets = targets_raw
+            .as_deref()
+            .and_then(|s| serde_json::from_str::<Vec<String>>(s).ok())
+            .unwrap_or_default();
         Ok(Some(crate::core::domain::capability::TurnCapability {
             token: row.get(0)?,
             principal_jid: row.get(1)?,
@@ -661,6 +669,7 @@ pub fn get_turn_capability(
             message_id: row.get(5)?,
             issued_at: row.get(6)?,
             expires_at: row.get(7)?,
+            explicit_targets,
         }))
     } else {
         Ok(None)

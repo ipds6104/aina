@@ -151,6 +151,7 @@ fn cmd_status(conn: &Connection, flags: &Flags) -> anyhow::Result<()> {
         "can_access_internal": cap.authority.can_access_internal(),
         "chat_jid": cap.chat_jid,
         "chat_type": cap.chat_type,
+        "explicit_targets": cap.explicit_targets,
         "expires_in_seconds": remaining,
         "expired": cap.is_expired(now),
         "chat_is_trusted_group": if cap.chat_type == "group" { Some(chat_trusted) } else { None },
@@ -394,6 +395,10 @@ fn emit_denied(
         ),
         "admin_is_not_delegable" => (
             "Otoritas `admin` adalah konfigurasi sistem dan tidak bisa diberikan lewat tool.",
+            false,
+        ),
+        "target_not_in_active_turn_message" => (
+            "Di dalam grup, Admin wajib me-mention (@nomor), me-reply pesan target, atau menuliskan nomor target secara langsung pada pesan aktif saat ini (atau jalankan delegasi dari DM pribadi Admin).",
             false,
         ),
         other => (other, false),
