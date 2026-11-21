@@ -1,6 +1,6 @@
 # 🛡️ Fase 17: Fail-Closed Web & Webhook Ingress Armor, Constant-Time Auth, and Query Secret Purge
 
-> **Status**: READY (Aligned with ADR-014, ADR-016, RISK-15, DEBT-07, QS-13)  
+> **Status**: COMPLETED (`abc60ce` — Aligned with ADR-014, ADR-016, RISK-15, DEBT-07, QS-13)  
 > **Komponen Target**:  
 > - `src/adapters/driving/web/auth.rs`  
 > - `src/adapters/driving/web/mod.rs` & `src/adapters/driving/web/state.rs`  

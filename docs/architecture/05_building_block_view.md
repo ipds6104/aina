@@ -1,8 +1,8 @@
 # 5. Struktur Blok Pembangun (Building Block View)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `c477616` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-17T19:05:39+07:00`
+> - **Verified Commit**: `17f951a` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-21T10:53:50+07:00`
 > - **Tracked Paths**: `src/core/domain/`, `src/adapters/`
 > - **Drift Status**: `verified`
 
@@ -77,7 +77,7 @@ Di dalam lapisan inti (`src/core/`), terdapat modul-modul penting yang saling te
 2. **`core::domain::SessionLifecycle`**: Logika penghitung giliran obrolan. Jika giliran mencapai batas maksimal, modul ini memicu perangkuman otomatis menjadi *lean resumed prompt*.
 3. **`core::domain::Activity` & `ActivityReconciler`**: Model domain untuk tugas terjadwal berbasis slug identitas parsial unik, kategori, sumber, dan rekonsiliasi idempoten pada saat startup.
 4. **`core::ports`**: Wadah trait abstrak (`AgentEngine`, `SessionStorePort`, `WhatsAppGateway`). Berkat trait ini, kode inti tidak terikat pada library eksternal mana pun.
-5. **`core::domain::capability`**: Engine penerbitan dan validasi hak akses berumur pendek (`TurnCapability`, TTL 10 menit) yang mengikat `principal_jid`, `authority`, `message_id`, serta *Deterministic Explicit Target Binding* untuk mutasi kebijakan grup (Target Fase 20) demi menegakkan prinsip *Least Privilege*.
+5. **`core::domain::capability`**: Engine penerbitan dan validasi hak akses berumur pendek (`TurnCapability`, TTL 10 menit) yang mengikat `principal_jid`, `authority`, `message_id`, serta *Deterministic Explicit Target Binding* untuk mutasi kebijakan grup (Fase 20) demi menegakkan prinsip *Least Privilege*.
 6. **`core::domain::audit`**: Engine audit trail tanpa sangkalan (*non-repudiation*) berbasis rantai hash SHA-256 (`agent_tool_executions`), mencatat setiap aksi tool lengkap dengan stempel waktu dan identitas pengirim asli (NIST AU-10 & ISO 42001).
-7. **`core::domain::persona`**: Engine perakitan profil semantik 4-dimensi (`communication_prefs`, `active_projects`, `durable_constraints`, `confidence_score`) dan etika interaksi santun bebas template CS kaku.
-8. **`core::domain::rate_limiter` *(Planned — Fase 19)***: Engine *Token Bucket* domain murni (nol `tokio`, nol wall-clock internal, menerima `now_epoch` & `Authority`) untuk pembatasan laju DM berbasis otoritas yang diorkestrasi oleh `ProcessIncomingMessageUseCase` secara patuh `ADR-001`.
+7. **`core::domain::persona`**: Engine perakitan profil semantik 4-dimensi (`communication_prefs`, `active_projects`, `durable_constraints`, `confidence_score`), sanitasi `pushName` & escaping XML untrusted, serta etika interaksi santun bebas template CS kaku.
+8. **`core::domain::rate_limiter`**: Engine *Token Bucket* domain murni (nol `tokio`, nol wall-clock internal, menerima `now_epoch` & `Authority`) untuk pembatasan laju DM berbasis otoritas yang diorkestrasi oleh `ProcessIncomingMessageUseCase` secara patuh `ADR-001` (Fase 19).

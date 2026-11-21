@@ -1,8 +1,8 @@
 # 8. Konsep Lintas Bidang (Cross-Cutting Concepts)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `c477616` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-17T19:05:39+07:00`
+> - **Verified Commit**: `17f951a` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-21T10:53:50+07:00`
 > - **Tracked Paths**: `src/core/domain/`, `src/core/ports/`, `src/adapters/driven/sqlite_store/`, `skills/`
 > - **Drift Status**: `verified`
 
@@ -62,6 +62,7 @@ pub struct TurnCapability {
     pub message_id: String,       // ID pesan WhatsApp unik
     pub issued_at: i64,          // Waktu terbit (epoch)
     pub expires_at: i64,         // Waktu kedaluwarsa (TTL 10 menit)
+    pub explicit_targets: Vec<String>, // Target JID/nomor eksplisit dari pesan aktif (Fase 20)
 }
 ```
 
@@ -261,9 +262,9 @@ Antarmuka web administratif dan simulator Aina (`/`, `/auth/login`, `/auth/error
 
 ---
 
-## 8.17 Pengerasan Ingress Web/Webhook, Env-First Secrets, Throttling Heksagonal, & Isolasi Konteks Ambien (*Target Desain — Roadmap Fase 17–20*)
+## 8.17 Pengerasan Ingress Web/Webhook, Env-First Secrets, Throttling Heksagonal, & Isolasi Konteks Ambien (*Fase 17–20 — Terimplementasi*)
 
-Menyusul audit keamanan (Cloudflare Security Audit Harness & tinjauan lintas-arc42), arsitektur pengerasan Aina ditetapkan melalui **4 pilar terukur** dengan prinsip **nol crate Rust baru** dan **nol dependensi eksternal wajib** (lihat roadmap [`HARDENED_ENTERPRISE_SECURITY_AND_THREAT_SHIELD.md`](../roadmaps/HARDENED_ENTERPRISE_SECURITY_AND_THREAT_SHIELD.md)):
+Menyusul audit keamanan (Cloudflare Security Audit Harness & tinjauan lintas-arc42), arsitektur pengerasan Aina telah diimplementasikan melalui **4 pilar terukur** dengan prinsip **nol crate Rust baru** dan **nol dependensi eksternal wajib** (lihat roadmap [`HARDENED_ENTERPRISE_SECURITY_AND_THREAT_SHIELD.md`](../roadmaps/HARDENED_ENTERPRISE_SECURITY_AND_THREAT_SHIELD.md)):
 
 1. **Pilar 1 — Fail-Closed Web & Hybrid Webhook Ingress Armor (Fase 17 / ADR-016)**:
    - Seluruh gerbang otorisasi (`is_admin_authorized`, `is_api_authorized`, `is_events_authorized`, `auth_setup.rs`) bersifat **fail-closed** (`return false` bila kunci kosong) dengan evaluasi byte konstan waktu (`constant_time_eq`). Token setup otomatis memakai 128-bit CSPRNG, `whatsmeow_api_key` dipisahkan dari otorisasi admin web, dan sesi OIDC memakai secret ephemeral CSPRNG + flag `Secure` + verifikasi `OIDC_STATE_COOKIE`.

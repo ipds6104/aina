@@ -1,6 +1,6 @@
 # 🛡️ Fase 20: Nonce Prompt Boundary Isolation, Deterministic Target Binding, & Least-Privilege Subprocess Env
 
-> **Status**: READY (Aligned with ADR-009, ADR-018, RISK-18, DEBT-08, QS-16)  
+> **Status**: COMPLETED (`17f951a` — Aligned with ADR-009, ADR-018, RISK-18, DEBT-08, QS-16)  
 > **Komponen Target**:  
 > - `src/core/usecases/process_message/context_preparer.rs`  
 > - `src/core/domain/capability.rs`  

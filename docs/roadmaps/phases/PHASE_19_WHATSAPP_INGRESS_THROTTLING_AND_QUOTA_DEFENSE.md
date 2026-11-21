@@ -1,6 +1,6 @@
 # 🚦 Fase 19: Dual-Layer Hexagonal WhatsApp Ingress Throttling & Pre-Auth Quota Defense
 
-> **Status**: READY (Aligned with ADR-001, ADR-013, ADR-018, RISK-17, DEBT-06, QS-15)  
+> **Status**: COMPLETED (`bf45a79` — Aligned with ADR-001, ADR-013, ADR-018, RISK-17, DEBT-06, QS-15)  
 > **Komponen Target**:  
 > - `src/core/domain/rate_limiter.rs` *(BARU — pure domain, nol `tokio`, nol I/O, nol crate baru)*  
 > - `src/core/domain/mod.rs`  

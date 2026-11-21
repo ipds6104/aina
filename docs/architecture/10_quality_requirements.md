@@ -1,8 +1,8 @@
 # 10. Persyaratan Mutu (Quality Requirements)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `c477616` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-17T19:05:39+07:00`
+> - **Verified Commit**: `17f951a` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-21T10:53:50+07:00`
 > - **Tracked Paths**: `src/core/domain/audit/`, `src/core/usecases/process_message/`, `src/adapters/driven/sqlite_store/`
 > - **Drift Status**: `verified`
 
@@ -18,16 +18,16 @@ Hubungan antara sasaran mutu utama dan skenario pengujian dipetakan dalam pohon 
   ├── Ketersediaan & Keandalan
   │   ├── **QS-01**: Rotasi kuota otomatis saat batas harian 429 tercapai (#reliability)
   │   ├── **QS-12**: Ketahanan Konkurensi 100 Obrolan Serentak & Zero-429 (#reliability, #efficiency)
-  │   └── **QS-15**: Pertahanan Kuota & Anti-Ban WhatsApp pada Banjir DM Tamu *(Aspirational — Fase 19)* (#reliability, #security)
+  │   └── **QS-15**: Pertahanan Kuota & Anti-Ban WhatsApp pada Banjir DM Tamu (#reliability, #security)
   ├── Privasi & Keamanan
   │   ├── **QS-02**: Nol kebocoran pesan pribadi dan penyuntikan kunci JIT (#security)
   │   ├── **QS-08**: Integritas kriptografis rantai audit tool SHA-256 (#security)
   │   ├── **QS-09**: Pertahanan Zero Implicit Trust saat nomor WA bocor (#security)
   │   ├── **QS-10**: Hak penghapusan mandiri subjek data sesuai UU PDP (#security, #usability)
   │   ├── **QS-11**: Pertahanan Anti-Impersonasi & Integritas Identitas 3-Tingkat (#security)
-  │   ├── **QS-13**: Otorisasi Web Fail-Closed, Header-Only Admin API, & Webhook SSRF/Path Lock *(Aspirational — Fase 17)* (#security)
-  │   ├── **QS-14**: Canonical Path Containment & Zero Hardcoded Secrets Env-First *(Aspirational — Fase 18)* (#security, #maintainability)
-  │   └── **QS-16**: Isolasi Nonce XML, Deterministic Target Binding, & Least-Privilege Subprocess Env *(Aspirational — Fase 20)* (#security)
+  │   ├── **QS-13**: Otorisasi Web Fail-Closed, Header-Only Admin API, & Webhook SSRF/Path Lock (#security)
+  │   ├── **QS-14**: Canonical Path Containment & Zero Hardcoded Secrets Env-First (#security, #maintainability)
+  │   └── **QS-16**: Isolasi Nonce XML, Deterministic Target Binding, & Least-Privilege Subprocess Env (#security)
   ├── Kemudahan Perawatan & Modul
   │   ├── **QS-03**: Pemasangan skill Git kustom tanpa menyentuh kode inti (#maintainability)
   │   └── **QS-06**: Ketahanan modifikasi jadwal saat redeploy kontainer (#maintainability)
@@ -150,39 +150,39 @@ Hubungan antara sasaran mutu utama dan skenario pengujian dipetakan dalam pohon 
 
 ---
 
-### QS-13: Otorisasi Web Fail-Closed, Header-Only Admin API, & Webhook SSRF/Path Lock *(Aspirational — Fase 17)*
+### QS-13: Otorisasi Web Fail-Closed, Header-Only Admin API, & Webhook SSRF/Path Lock
 - **Kategori Mutu**: #security
 - **Kondisi Awal**: Deployment baru berjalan tanpa `ADMIN_KEY` (atau `ADMIN_KEY=""`) serta eksposur endpoint web & `/webhook`.
 - **Pemicu**: Pihak tidak terautentikasi mengakses `/api/setup`, `/api/simulate`, `/api/audit/*`, `/api/schedule/*`, mengirim `?key=...`, melakukan brute force `/api/auth/verify`, atau mengirim `download_url` eksternal & `id: "../../evil"` ke `/webhook`.
-- **Respon Sistem**: Seluruh endpoint admin/diagnostik menolak dengan HTTP 401 (fail-closed + `constant_time_eq`), query `?key=` ditolak di admin API, percobaan ke-6 `/api/auth/verify` diblokir HTTP 429, dan `/webhook` memblokir SSRF serta menyanitasi `msg.id`.
-- **Ukuran Keberhasilan**: 0% akses admin/diagnostik tanpa header/sesi OIDC sah, 0% request keluar ke host SSRF, dan 0% penulisan media di luar `workspace/media/`.
+- **Respon Sistem**: Seluruh endpoint admin/diagnostik menolak dengan HTTP 401 (fail-closed + `constant_time_eq`), query `?key=` ditolak di admin API, percobaan ke-5 `/api/auth/verify` diblokir HTTP 429, dan `/webhook` memblokir SSRF serta menyanitasi `msg.id`.
+- **Ukuran Keberhasilan**: 0% akses admin/diagnostik tanpa header/sesi OIDC sah, 0% request keluar ke host SSRF, dan 0% penulisan media di luar `workspace/media/` (Terverifikasi di `test_phase17_fail_closed_lockout_ssrf_and_webhook_armor` & `webhook.rs`).
 
 ---
 
-### QS-14: Canonical Path Containment & Zero Hardcoded Secrets Env-First *(Aspirational — Fase 18)*
+### QS-14: Canonical Path Containment & Zero Hardcoded Secrets Env-First
 - **Kategori Mutu**: #security, #maintainability
 - **Kondisi Awal**: Repositori upstream dijalankan di lingkungan lokal/Docker tanpa layanan Vault eksternal wajib.
 - **Pemicu**: Payload `POST /api/auth/oauth/exchange` mengirim `session_id: "../../evil"`, atau pemindaian statis memeriksa `scripts/` dan `skills/infisical/scripts/secret_tool.py`.
 - **Respon Sistem**: Validasi ganda Rust & Python (`^[a-zA-Z0-9_-]{16,64}$` + canonical check) langsung mengembalikan HTTP 400 tanpa menulis/menghapus file; seluruh kredensial OAuth & Vault dibaca murni dari env var standar tanpa hardcoded plaintext maupun XOR.
-- **Ukuran Keberhasilan**: 0% path escape pada `oauth_sessions`, 0 hardcoded credentials/domain privat di source Git, dan 0 dependensi Vault wajib.
+- **Ukuran Keberhasilan**: 0% path escape pada `oauth_sessions`, 0 hardcoded credentials/domain privat di source Git, dan 0 dependensi Vault wajib (Terverifikasi di `oauth.rs`, `web/mod.rs`, `secret_tool.py`, & `oauth_helper.py`).
 
 ---
 
-### QS-15: Pertahanan Kuota & Anti-Ban WhatsApp pada Banjir DM Tamu *(Aspirational — Fase 19)*
+### QS-15: Pertahanan Kuota & Anti-Ban WhatsApp pada Banjir DM Tamu
 - **Kategori Mutu**: #reliability, #security
 - **Kondisi Awal**: Nomor asing berstatus `Authority::Guest` mengirim banjir 50 pesan DM (termasuk media) dalam 10 detik.
 - **Pemicu**: Webhook menerima burst masif dari JID tamu yang sama sementara Admin juga aktif berinteraksi.
 - **Respon Sistem**: Edge burst guard menahan flood ekstrem sebelum unduh media/antrean; pure domain `TokenBucket` mengizinkan maks 3 pesan, mengirim maks 1x balasan cooldown sopan per window, lalu melakukan silent auto-drop + tombstone sementara, dicatat di `whatsapp_action_audits`; Admin tetap dilayani penuh.
-- **Ukuran Keberhasilan**: 0% kebocoran kuota `AccountPool` (429) akibat spam tamu, maks 1 balasan cooldown keluar per window (anti-ban WA), dan 0 impor `tokio`/I/O di `src/core/domain/rate_limiter.rs`.
+- **Ukuran Keberhasilan**: 0% kebocoran kuota `AccountPool` (429) akibat spam tamu, maks 1 balasan cooldown keluar per window (anti-ban WA), dan 0 impor `tokio`/I/O di `src/core/domain/rate_limiter.rs` (Terverifikasi di `rate_limiter.rs`, `test_phase19_guest_dm_flood_zero_pool_bleed_and_anti_ban`, & `test_phase19_edge_ingress_guard_stops_media_flood_before_disk_write`).
 
 ---
 
-### QS-16: Isolasi Nonce XML, Deterministic Target Binding, & Least-Privilege Subprocess Env *(Aspirational — Fase 20)*
+### QS-16: Isolasi Nonce XML, Deterministic Target Binding, & Least-Privilege Subprocess Env
 - **Kategori Mutu**: #security
 - **Kondisi Awal**: Tamu di grup mengirim payload indirect prompt injection (termasuk usaha XML breakout `</untrusted_ambient_history>`) untuk memicu `aina policy grant-user <attacker_jid>`, lalu Admin memanggil `@Aina` dengan pertanyaan netral.
 - **Pemicu**: `ContextPreparer` merakit prompt dan menerbitkan `TurnCapability`; agen dieksekusi di `AntigravityCliAdapter`.
-- **Respon Sistem**: Seluruh konteks untrusted (`ambient`, `recall`, `quote`, `sender.name`) terbungkus nonce XML acak + ter-escape; `capability::evaluate` menolak `GrantUser`/`RevokeUser` di grup untuk target yang tidak ada di `explicit_targets` pesan aktif Admin; subprocess `agy` pada turn `Guest` berjalan tanpa env `WHATSMEOW_API_KEY`/`WHATSMEOW_COMPANION_KEY`.
-- **Ukuran Keberhasilan**: 100% penolakan deterministik eskalasi akses dari konteks ambien grup dan 0% paparan kredensial gateway pada proses anak turn `Guest`.
+- **Respon Sistem**: Seluruh konteks untrusted (`ambient`, `recall`, `quote`, `sender.name`) terbungkus nonce XML acak + ter-escape (`&lt;` / `&gt;`); `capability::evaluate` menolak `GrantUser`/`RevokeUser` di grup untuk target yang tidak ada di `explicit_targets` pesan aktif Admin; subprocess `agy` pada turn `Guest` berjalan tanpa env `WHATSMEOW_API_KEY`/`WHATSMEOW_COMPANION_KEY`.
+- **Ukuran Keberhasilan**: 100% penolakan deterministik eskalasi akses dari konteks ambien grup dan 0% paparan kredensial gateway pada proses anak turn `Guest` (Terverifikasi di `capability.rs`, `test_phase20_nonce_xml_isolation_breakout_escaping_recall_and_target_binding`, & `test_phase20_least_privilege_subprocess_env_isolation`).
 
 ---
 
@@ -202,7 +202,7 @@ Hubungan antara sasaran mutu utama dan skenario pengujian dipetakan dalam pohon 
 | **QS-10** | #security, #usability | 100% penghapusan profil mandiri sesuai UU PDP | Lulus (Terverifikasi di `builtin_commands.rs` test) |
 | **QS-11** | #security | 100% klaim impersonasi terkunci `UNCONFIRMED` | Lulus (Terverifikasi di `profiler.rs` & `user.rs` test) |
 | **QS-12** | #reliability, #efficiency | Maks 8 agen simultan, <= 2 in-flight/akun, 0% 429 | Lulus (Terverifikasi di `account_pool.rs` & `adapter.rs`) |
-| **QS-13** | #security | 0% fail-open/SSRF/query-key admin, lockout 429 aktif | Aspirational (Target Fase 17 — terlacak di RISK-15 & DEBT-07) |
-| **QS-14** | #security, #maintainability | 0% path traversal OAuth, 0 hardcoded secret di Git | Aspirational (Target Fase 18 — terlacak di RISK-16 & DEBT-05) |
-| **QS-15** | #reliability, #security | 0% bleed kuota pool, maks 1x notice lalu silent drop | Aspirational (Target Fase 19 — terlacak di RISK-17 & DEBT-06) |
-| **QS-16** | #security | 100% blokir mutasi target ambien & 0% key di turn Guest | Aspirational (Target Fase 20 — terlacak di RISK-18 & DEBT-08) |
+| **QS-13** | #security | 0% fail-open/SSRF/query-key admin, lockout 429 aktif | Lulus (Terverifikasi di `test_phase17_fail_closed_lockout_ssrf_and_webhook_armor` & `webhook.rs`) |
+| **QS-14** | #security, #maintainability | 0% path traversal OAuth, 0 hardcoded secret di Git | Lulus (Terverifikasi di `oauth.rs`, `web/mod.rs`, & validasi Python Env-First) |
+| **QS-15** | #reliability, #security | 0% bleed kuota pool, maks 1x notice lalu silent drop | Lulus (Terverifikasi di `rate_limiter.rs`, `process_message/mod.rs`, & `web/mod.rs`) |
+| **QS-16** | #security | 100% blokir mutasi target ambien & 0% key di turn Guest | Lulus (Terverifikasi di `capability.rs`, `context_preparer.rs`, & `adapter.rs`) |

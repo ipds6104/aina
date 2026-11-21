@@ -1,8 +1,8 @@
 # 9. Keputusan Arsitektur (Architecture Decisions)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `c477616` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-17T19:05:39+07:00`
+> - **Verified Commit**: `17f951a` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-21T10:53:50+07:00`
 > - **Tracked Paths**: `src/core/domain/capability.rs`, `src/core/domain/audit/`, `src/adapters/driven/sqlite_store/audit.rs`
 > - **Drift Status**: `verified`
 
@@ -209,7 +209,7 @@ Bab ini mencatat keputusan-keputusan arsitektur penting (*Architecture Decision 
 
 ### ADR-016: Fail-Closed Web Auth, Hybrid Webhook Armor, & Header-First API (Fase 17)
 
-- **Status**: Diusulkan / Menunggu Implementasi (*Proposed — Planned Fase 17*)
+- **Status**: Diterima (*Accepted*)
 - **Konteks**:
   Audit keamanan mendeteksi bahwa `is_admin_authorized`, `is_api_authorized`, dan beberapa handler `auth_setup.rs` bersifat fail-open saat `setup_code` kosong, memakai perbandingan string non-constant-time (`==`), menerima rahasia via query URL (`?key=`), membiarkan endpoint diagnostik (`/api/auth/accounts`, `/api/schedule/*`, `/api/persona/*`, `/api/metacognition/*`) tanpa auth, menggunakan fallback secret OIDC lemah, serta membiarkan `POST /webhook` rentan SSRF (`download_url`) dan path traversal (`msg.id`). Sebagai repo upstream minimalis, pengamanan harus tanpa crate Rust baru dan tidak memutus setup Whatsmeow internal.
 - **Keputusan**:
@@ -225,7 +225,7 @@ Bab ini mencatat keputusan-keputusan arsitektur penting (*Architecture Decision 
 
 ### ADR-017: Canonical Path Sandboxing & 100% Env-Var First Zero Hardcoded Secrets (Fase 18)
 
-- **Status**: Diusulkan / Menunggu Implementasi (*Proposed — Planned Fase 18*)
+- **Status**: Diterima (*Accepted*)
 - **Konteks**:
   Parameter `session_id` pada `oauth.rs` dan `oauth_helper.py` digabungkan langsung ke jalur direktori (bahkan dipanggil dengan `remove_dir_all`) tanpa sanitasi maupun canonical check. Selain itu, ditemukan kredensial plaintext `INFISICAL_CLIENT_ID`/`INFISICAL_CLIENT_SECRET` hardcoded di `skills/infisical/scripts/secret_tool.py` serta byte-array OAuth XOR (`_decode_key`) dan domain privat di `scripts/login_account.py` & `oauth_helper.py`. Image Docker upstream juga tidak memasang biner `infisical` secara wajib.
 - **Keputusan**:
@@ -240,7 +240,7 @@ Bab ini mencatat keputusan-keputusan arsitektur penting (*Architecture Decision 
 
 ### ADR-018: Dual-Layer Hexagonal WhatsApp Throttling, Nonce Prompt Boundary, & Least-Privilege Turn (Fase 19–20)
 
-- **Status**: Diusulkan / Menunggu Implementasi (*Proposed — Planned Fase 19–20*)
+- **Status**: Diterima (*Accepted*)
 - **Konteks**:
   Banjir pesan DM WhatsApp dari nomor tak dikenal dapat memicu download media/antrean tak terbatas di `webhook.rs` & `queue.rs` serta menguras `AccountPool` (429 cooldown). Di sisi lain, penempatan state rate limiter di `core/domain/gatekeeper.rs` akan melanggar `ADR-001` (Hexagonal murni) karena `Gatekeeper` stateless dan belum mengenal `Authority`, sedangkan membalas setiap pesan spam berisiko menyebabkan ban WhatsApp. Pada jalur prompt grup, riwayat ambien, *On-Demand Recall*, `quoted_message`, dan `sender.name` disisipkan tanpa nonce anti-breakout, `TurnCapability` di grup belum membatasi target mutasi user ke pesan aktif Admin, dan `adapter.rs` menyuntikkan `WHATSMEOW_API_KEY` ke subprocess agen bahkan pada turn `Guest`.
 - **Keputusan**:

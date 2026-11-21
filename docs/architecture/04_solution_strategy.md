@@ -1,8 +1,8 @@
 # 4. Strategi Solusi (Solution Strategy)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `c477616` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-17T19:05:39+07:00`
+> - **Verified Commit**: `17f951a` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-21T10:53:50+07:00`
 > - **Tracked Paths**: `src/core/domain/capability.rs`, `src/core/domain/audit/`, `src/core/usecases/process_message/`
 > - **Drift Status**: `verified`
 
@@ -183,7 +183,7 @@ Untuk memfasilitasi akses dasbor web bagi pegawai dan admin instansi tanpa mengo
 
 ---
 
-## 4.14 Strategi Pengerasan Ingress, Minimal Dependency, & Pertahanan Berlapis (*Planned — Fase 17–20*)
+## 4.14 Strategi Pengerasan Ingress, Minimal Dependency, & Pertahanan Berlapis (*Fase 17–20*)
 
 Untuk mengamankan permukaan masuk web, webhook, jalur berkas, kuota WhatsApp, dan konteks ambien tanpa menambah crate wajib baru maupun vendor lock-in:
 1. **Fail-Closed & Hybrid Upstream Ingress Armor (Fase 17)**: Seluruh gerbang otorisasi web bersifat fail-closed dengan `constant_time_eq` dan header-only (dengan opt-in `AINA_EVENTS_ALLOW_QUERY_KEY` khusus webhook legacy). Endpoint `/webhook` menerapkan SSRF origin-lock dan sanitasi `msg.id` secara wajib, sementara shared secret `AINA_WEBHOOK_SECRET` bersifat opsional (fail-closed saat disetel).

@@ -1,6 +1,6 @@
 # 🔒 Fase 18: Canonical Path Sandboxing & Env-Var First Dynamic Secrets (Zero Hardcoded Credentials)
 
-> **Status**: READY (Aligned with ADR-004, ADR-005, ADR-017, RISK-16, DEBT-05, QS-14)  
+> **Status**: COMPLETED (`05cc43d` — Aligned with ADR-004, ADR-005, ADR-017, RISK-16, DEBT-05, QS-14)  
 > **Komponen Target**:  
 > - `skills/infisical/scripts/secret_tool.py`  
 > - `src/adapters/driven/agy_cli/oauth.rs`  
