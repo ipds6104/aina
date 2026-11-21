@@ -1,8 +1,8 @@
-use super::state::{ActiveTaskInfo, WebhookServerState};
+use super::state::{ActiveTaskInfo, WebhookServerState, CHAT_QUEUE_CAPACITY};
 use crate::core::domain::IncomingMessage;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 pub fn is_kill_or_cancel_command(text: &str) -> bool {
     let lower = text.trim().to_lowercase();
@@ -229,7 +229,7 @@ pub async fn dispatch_message_to_queue(state: &Arc<WebhookServerState>, msg: Inc
 }
 
 pub async fn dispatch_incoming_message_to_queue<F, Fut>(
-    chat_queues: &Arc<tokio::sync::Mutex<HashMap<String, tokio::sync::mpsc::UnboundedSender<IncomingMessage>>>>,
+    chat_queues: &Arc<tokio::sync::Mutex<HashMap<String, tokio::sync::mpsc::Sender<IncomingMessage>>>>,
     msg: IncomingMessage,
     idle_timeout_secs: u64,
     debounce_ms: u64,
@@ -251,7 +251,7 @@ pub async fn dispatch_incoming_message_to_queue<F, Fut>(
     }
 
     if needs_new_worker {
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<IncomingMessage>();
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<IncomingMessage>(CHAT_QUEUE_CAPACITY);
         let queues_ref = Arc::clone(chat_queues);
         let worker_chat_jid = chat_jid.clone();
         let handler = Arc::new(handler);
@@ -343,8 +343,20 @@ pub async fn dispatch_incoming_message_to_queue<F, Fut>(
     }
 
     if let Some(tx) = queues.get(&chat_jid) {
-        if let Err(e) = tx.send(msg) {
-            error!("Failed to enqueue message into queue for {}: {:?}", chat_jid, e);
+        match tx.try_send(msg) {
+            Ok(()) => {}
+            Err(tokio::sync::mpsc::error::TrySendError::Full(dropped)) => {
+                warn!(
+                    "Bounded chat queue full (capacity {}) for {}; dropping message {} to protect memory",
+                    CHAT_QUEUE_CAPACITY, chat_jid, dropped.id
+                );
+            }
+            Err(tokio::sync::mpsc::error::TrySendError::Closed(dropped)) => {
+                error!(
+                    "Failed to enqueue message {} into closed queue for {}",
+                    dropped.id, chat_jid
+                );
+            }
         }
     }
 }

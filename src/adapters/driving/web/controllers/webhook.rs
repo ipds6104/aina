@@ -183,6 +183,15 @@ pub async fn webhook_handler(
     );
 
     if let Some(ref mut msg) = msg_opt {
+        // Phase 19 Layer 1: Pre-media & pre-queue burst guard per sender JID
+        if !state.edge_ingress_guard.allow(&msg.sender.jid).await {
+            warn!(
+                "Edge ingress burst guard dropped extreme flood from {} (msg {}) before media download and queue",
+                msg.sender.jid, msg.id
+            );
+            return (StatusCode::OK, "OK");
+        }
+
         let root = if let Some(data_obj) = payload.get("data").and_then(|d| d.as_object()) {
             data_obj
         } else if let Some(root_obj) = payload.as_object() {

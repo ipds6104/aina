@@ -743,6 +743,7 @@ mod tests {
             trust_proxy_headers: false,
             ephemeral_session_secret: auth::generate_csprng_hex(32),
             auth_attempt_limiter: Arc::new(auth::AuthAttemptLimiter::new()),
+            edge_ingress_guard: Arc::new(state::EdgeIngressGuard::from_env()),
             timezone: "Asia/Jakarta".to_string(),
             locale: "id".to_string(),
             sim_jobs: Arc::new(RwLock::new(HashMap::new())),
@@ -864,6 +865,7 @@ mod tests {
             trust_proxy_headers: false,
             ephemeral_session_secret: auth::generate_csprng_hex(32),
             auth_attempt_limiter: Arc::new(auth::AuthAttemptLimiter::new()),
+            edge_ingress_guard: Arc::new(state::EdgeIngressGuard::from_env()),
             timezone: "Asia/Jakarta".to_string(),
             locale: "id".to_string(),
             sim_jobs: Arc::new(RwLock::new(HashMap::new())),
@@ -1186,6 +1188,7 @@ mod tests {
                 trust_proxy_headers: false,
                 ephemeral_session_secret: auth::generate_csprng_hex(32),
                 auth_attempt_limiter: Arc::new(auth::AuthAttemptLimiter::new()),
+                edge_ingress_guard: Arc::new(state::EdgeIngressGuard::from_env()),
                 timezone: "Asia/Jakarta".to_string(),
                 locale: "id".to_string(),
                 sim_jobs: Arc::new(RwLock::new(HashMap::new())),
@@ -1386,6 +1389,134 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(bad_oauth.status(), StatusCode::BAD_REQUEST);
+
+        let _ = tokio::fs::remove_dir_all(&temp_dir).await;
+    }
+
+    #[tokio::test]
+    async fn test_phase19_edge_ingress_guard_stops_media_flood_before_disk_write() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let downloads = Arc::new(AtomicUsize::new(0));
+        let downloads_clone = Arc::clone(&downloads);
+        let mock_media = Router::new().route(
+            "/api/v1/media/{id}/download",
+            get(move || {
+                let c = Arc::clone(&downloads_clone);
+                async move {
+                    c.fetch_add(1, Ordering::SeqCst);
+                    (StatusCode::OK, b"FAKE_PDF_BYTES".to_vec())
+                }
+            }),
+        );
+        let media_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let media_addr = media_listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = axum::serve(media_listener, mock_media).await;
+        });
+
+        let temp_dir = std::env::temp_dir().join(format!(
+            "aina_phase19_edge_test_{}",
+            rand::random::<u32>()
+        ));
+        let _ = tokio::fs::create_dir_all(&temp_dir).await;
+
+        let session_store = Arc::new(DummySessionStore);
+        let agent_engine = Arc::new(DummyAgentEngine);
+        let whatsapp = Arc::new(DummyWhatsApp);
+        let persona_engine = Arc::new(PersonaEngine::new(
+            "Aina".to_string(),
+            "Org".to_string(),
+            "admin@s.whatsapp.net".to_string(),
+            "Asia/Jakarta".to_string(),
+            7,
+            "id".to_string(),
+            format!("http://{}", media_addr),
+            "bot@s.whatsapp.net".to_string(),
+            Some(temp_dir.to_string_lossy().to_string()),
+        ));
+        let usecase = Arc::new(ProcessIncomingMessageUseCase::new(
+            session_store.clone(),
+            agent_engine.clone(),
+            whatsapp.clone(),
+            persona_engine.clone(),
+            "bot@s.whatsapp.net".to_string(),
+            "Aina".to_string(),
+            None,
+        ));
+
+        let state = Arc::new(WebhookServerState {
+            usecase,
+            agent_engine,
+            session_store,
+            persona_engine,
+            bot_name: "Aina".to_string(),
+            bot_jid: "bot@s.whatsapp.net".to_string(),
+            bot_lid: None,
+            companion_jid: None,
+            companion_name: None,
+            companion_session_id: None,
+            model: "dummy".to_string(),
+            whatsmeow_url: format!("http://{}", media_addr),
+            whatsmeow_api_key: "key".to_string(),
+            companion_base_url: None,
+            companion_api_key: None,
+            setup_code: "SECRET".to_string(),
+            events_api_key: None,
+            events_allow_query_key: false,
+            webhook_secret: None,
+            trust_proxy_headers: false,
+            ephemeral_session_secret: auth::generate_csprng_hex(32),
+            auth_attempt_limiter: Arc::new(auth::AuthAttemptLimiter::new()),
+            edge_ingress_guard: Arc::new(state::EdgeIngressGuard::new(10, 3, 100)),
+            timezone: "Asia/Jakarta".to_string(),
+            locale: "id".to_string(),
+            sim_jobs: Arc::new(RwLock::new(HashMap::new())),
+            chat_queues: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+            active_tasks: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+            presence_tracker: Arc::new(crate::core::domain::PresenceTracker::new()),
+            workspace_dir: temp_dir.clone(),
+            brain_dir: temp_dir.join("brain"),
+            oidc_config: crate::config::settings::OidcConfig::default(),
+            oidc_states: Arc::new(RwLock::new(HashMap::new())),
+        });
+
+        let app = create_router(state);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
+        for i in 1..=10 {
+            let payload = json!({
+                "id": format!("FLOOD_MEDIA_{}", i),
+                "chat_jid": "flooder@s.whatsapp.net",
+                "sender_jid": "flooder@s.whatsapp.net",
+                "has_media": true,
+                "media_type": "document",
+                "mime_type": "application/pdf",
+                "download_url": format!("/api/v1/media/FLOOD_MEDIA_{}/download", i),
+                "text": "flood"
+            });
+            let resp = client
+                .post(format!("http://{}/webhook", addr))
+                .json(&payload)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+        }
+
+        // Edge guard limit is 3 per 10s: events 4..10 MUST be dropped BEFORE downloading or writing media
+        assert_eq!(
+            downloads.load(Ordering::SeqCst),
+            3,
+            "Edge ingress guard MUST block media downloads beyond burst threshold"
+        );
+        assert!(temp_dir.join("media").join("FLOOD_MEDIA_3.pdf").exists());
+        assert!(!temp_dir.join("media").join("FLOOD_MEDIA_4.pdf").exists());
 
         let _ = tokio::fs::remove_dir_all(&temp_dir).await;
     }

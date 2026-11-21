@@ -18,7 +18,10 @@ pub use response_deliverer::ResponseDeliverer;
 #[allow(unused_imports)]
 pub use crate::core::domain::{detect_conversational_closing, split_response_into_bubbles};
 
-use crate::core::domain::{ChatType, Gatekeeper, GatekeeperDecision, IncomingMessage, PersonaEngine, PresenceState};
+use crate::core::domain::{
+    Authority, ChatType, Gatekeeper, GatekeeperDecision, IncomingMessage, IngressRateLimiter,
+    PersonaEngine, PresenceState, RateLimitConfig, ThrottleDecision,
+};
 use crate::core::ports::{AgentEnginePort, SessionStorePort, WhatsAppPort};
 use std::sync::Arc;
 use tracing::{error, info, warn};
@@ -28,6 +31,7 @@ pub struct ProcessIncomingMessageUseCase {
     agent_engine: Arc<dyn AgentEnginePort>,
     whatsapp: Arc<dyn WhatsAppPort>,
     persona_engine: Arc<PersonaEngine>,
+    rate_limiter: Arc<tokio::sync::Mutex<IngressRateLimiter>>,
     bot_jid: String,
     bot_name: String,
     bot_lid: Option<String>,
@@ -60,10 +64,19 @@ impl ProcessIncomingMessageUseCase {
             agent_engine,
             whatsapp,
             persona_engine,
+            rate_limiter: Arc::new(tokio::sync::Mutex::new(IngressRateLimiter::new(
+                RateLimitConfig::from_env(),
+            ))),
             bot_jid,
             bot_name,
             bot_lid,
         }
+    }
+
+    #[allow(dead_code)]
+    pub fn with_rate_limit_config(mut self, config: RateLimitConfig) -> Self {
+        self.rate_limiter = Arc::new(tokio::sync::Mutex::new(IngressRateLimiter::new(config)));
+        self
     }
 
     pub fn whatsapp(&self) -> &Arc<dyn WhatsAppPort> {
@@ -185,6 +198,137 @@ impl ProcessIncomingMessageUseCase {
                 Ok(())
             }
             GatekeeperDecision::Respond { reason } => {
+                // Phase 19 Layer 2: Authority-aware pre-LLM ingress rate limiter (ADR-018)
+                let sender_authority = if crate::core::domain::capability::is_admin_identity(
+                    self.persona_engine.admin_jid(),
+                    &msg.sender.jid,
+                ) {
+                    Authority::Admin
+                } else if let Ok(Some(profile)) =
+                    self.session_store.get_user_profile(&msg.sender.jid).await
+                {
+                    context_preparer::resolve_authority(
+                        &msg.sender.jid,
+                        self.persona_engine.admin_jid(),
+                        &profile.authority_level,
+                    )
+                } else if msg.chat_type == ChatType::Group
+                    && self
+                        .session_store
+                        .is_group_trusted(&msg.chat_jid)
+                        .await
+                        .unwrap_or(false)
+                {
+                    Authority::Staff
+                } else {
+                    Authority::Guest
+                };
+
+                let now_epoch = chrono::Utc::now().timestamp();
+                let (throttle_decision, tombstone_threshold) = {
+                    let mut limiter = self.rate_limiter.lock().await;
+                    let threshold = limiter.config().tombstone_threshold;
+                    (
+                        limiter.check(&msg.sender.jid, sender_authority, now_epoch),
+                        threshold,
+                    )
+                };
+
+                match throttle_decision {
+                    ThrottleDecision::Allow => {}
+                    ThrottleDecision::NotifyOnceAndDrop { retry_after_secs } => {
+                        warn!(
+                            "Ingress rate limit triggered for {} ({:?}): sending 1x cooldown notice ({}s)",
+                            msg.sender.jid, sender_authority, retry_after_secs
+                        );
+                        let notice = format!(
+                            "Pesan diterima. Aina sedang memproses permintaan lain; mohon tunggu sekitar {} detik sebelum mengirim pesan berikutnya ya.",
+                            retry_after_secs
+                        );
+                        let quote_id = match msg.chat_type {
+                            ChatType::Group => Some(msg.id.as_str()),
+                            ChatType::DirectMessage => None,
+                        };
+                        let _ = self
+                            .whatsapp
+                            .send_text_with_session(
+                                &msg.chat_jid,
+                                &notice,
+                                quote_id,
+                                msg.session_role,
+                            )
+                            .await;
+
+                        let _ = AuditTracker::record_terminal_event(
+                            &self.session_store,
+                            msg.id,
+                            msg.chat_jid,
+                            msg.sender.jid,
+                            msg.sender.name,
+                            chat_type_str,
+                            msg.text,
+                            msg.has_media,
+                            msg.media_path,
+                            "rate_limited",
+                            "INGRESS_RATE_LIMIT_NOTIFIED",
+                            "throttled",
+                            Some(&notice),
+                            Some("security:rate_limiter"),
+                            Some("security_rate_limit"),
+                            Some(0.0),
+                        )
+                        .await;
+                        return Ok(());
+                    }
+                    ThrottleDecision::SilentDrop {
+                        retry_after_secs,
+                        consecutive_hits,
+                        tombstoned,
+                    } => {
+                        let reason_code = if tombstoned {
+                            "INGRESS_RATE_LIMIT_TOMBSTONED"
+                        } else {
+                            "INGRESS_RATE_LIMIT_DROPPED"
+                        };
+                        let should_audit = !tombstoned
+                            || consecutive_hits == tombstone_threshold
+                            || consecutive_hits % 25 == 0;
+                        if tombstoned {
+                            warn!(
+                                "Silent-dropping tombstoned sender {} (hits={}, retry_after={}s)",
+                                msg.sender.jid, consecutive_hits, retry_after_secs
+                            );
+                        } else {
+                            info!(
+                                "Silent-dropping rate-limited sender {} (hits={}, retry_after={}s)",
+                                msg.sender.jid, consecutive_hits, retry_after_secs
+                            );
+                        }
+                        if should_audit {
+                            let _ = AuditTracker::record_terminal_event(
+                                &self.session_store,
+                                msg.id,
+                                msg.chat_jid,
+                                msg.sender.jid,
+                                msg.sender.name,
+                                chat_type_str,
+                                msg.text,
+                                msg.has_media,
+                                msg.media_path,
+                                "rate_limited",
+                                reason_code,
+                                if tombstoned { "tombstoned" } else { "throttled" },
+                                None,
+                                Some("security:rate_limiter"),
+                                Some("security_rate_limit"),
+                                Some(0.0),
+                            )
+                            .await;
+                        }
+                        return Ok(());
+                    }
+                }
+
                 info!(
                     "Responding to message from {} in {}: {}",
                     msg.sender.jid, msg.chat_jid, reason
@@ -659,6 +803,190 @@ mod tests {
         assert!(alert_text.contains("🚨 *Laporan Kegagalan Pemrosesan Pesan Aina*"));
         assert!(alert_text.contains("Obrolan Pribadi"));
         assert!(alert_text.contains("Eligibility check failed"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    struct CountingSuccessAgent {
+        pub calls: Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    #[async_trait::async_trait]
+    impl AgentEnginePort for CountingSuccessAgent {
+        async fn execute_with_model(
+            &self,
+            _conversation_id: Option<&str>,
+            _prompt: &str,
+            _model_override: Option<&str>,
+        ) -> anyhow::Result<crate::core::ports::AgentResponse> {
+            let n = self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+            Ok(crate::core::ports::AgentResponse {
+                conversation_id: format!("conv_{}", n),
+                response_text: format!("Balasan normal #{}", n),
+                duration_seconds: 0.01,
+            })
+        }
+        async fn get_model(&self) -> String {
+            "gemini-3.8-flash".to_string()
+        }
+        async fn set_model(&self, _model: &str) -> anyhow::Result<()> {
+            Ok(())
+        }
+        async fn is_authenticated(&self) -> bool {
+            true
+        }
+        async fn save_auth_token(&self, _token_content: &str) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn test_phase19_guest_dm_flood_zero_pool_bleed_and_anti_ban() {
+        use crate::adapters::driven::SqliteSessionStore;
+        use crate::core::domain::{
+            ActionAuditFilter, ChatType, IncomingMessage, Platform, Sender, SessionRole,
+        };
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let dir = std::env::temp_dir().join(format!(
+            "aina_test_phase19_rl_{}",
+            rand::random::<u32>()
+        ));
+        let db_path = dir.join("test.db");
+        let store = Arc::new(SqliteSessionStore::new(&db_path).unwrap());
+
+        let agent_calls = Arc::new(AtomicUsize::new(0));
+        let agent = Arc::new(CountingSuccessAgent {
+            calls: Arc::clone(&agent_calls),
+        });
+
+        let sent = Arc::new(tokio::sync::Mutex::new(Vec::new()));
+        let whatsapp = Arc::new(TestRecordingWhatsApp {
+            sent_messages: Arc::clone(&sent),
+        });
+
+        let admin_jid = "6289625345646@s.whatsapp.net";
+        let persona = Arc::new(PersonaEngine::new(
+            "Persona text".to_string(),
+            "Org text".to_string(),
+            admin_jid.to_string(),
+            "Asia/Jakarta".to_string(),
+            7,
+            "id-ID".to_string(),
+            "http://127.0.0.1:8080".to_string(),
+            "628982157341@s.whatsapp.net".to_string(),
+            None,
+        ));
+
+        let usecase = ProcessIncomingMessageUseCase::new(
+            Arc::clone(&store) as _,
+            agent,
+            Arc::clone(&whatsapp) as _,
+            persona,
+            "628982157341@s.whatsapp.net".to_string(),
+            "Aina".to_string(),
+            None,
+        )
+        .with_rate_limit_config(RateLimitConfig::default());
+
+        let guest_jid = "628777888999@s.whatsapp.net";
+        for i in 1..=50 {
+            let msg = IncomingMessage {
+                id: format!("SPAM_MSG_{}", i),
+                platform: Platform::WhatsApp,
+                session_role: SessionRole::PrimaryBot,
+                chat_jid: guest_jid.to_string(),
+                chat_type: ChatType::DirectMessage,
+                sender: Sender {
+                    jid: guest_jid.to_string(),
+                    name: Some("Guest Spammer".to_string()),
+                },
+                text: format!("Halo tanya dong #{}", i),
+                timestamp: 1_790_335_800,
+                is_from_me: false,
+                quoted_message: None,
+                mentioned_jids: vec![],
+                is_bot_mentioned: false,
+                bot_lid: None,
+                has_media: false,
+                media_type: None,
+                media_path: None,
+            };
+            usecase.execute(msg).await.unwrap();
+        }
+
+        // 1. Zero AccountPool / LLM bleed: max 3 agent calls out of 50 spam DMs
+        assert_eq!(
+            agent_calls.load(Ordering::SeqCst),
+            3,
+            "Guest spam burst MUST NOT invoke AgentEngine more than capacity (3)"
+        );
+
+        // 2. Anti-Ban invariant: exactly 1 polite cooldown notice sent (NOT 47!)
+        let msgs = sent.lock().await.clone();
+        let cooldown_notices = msgs
+            .iter()
+            .filter(|(to, body)| {
+                to == guest_jid && body.contains("mohon tunggu sekitar")
+            })
+            .count();
+        assert_eq!(
+            cooldown_notices, 1,
+            "Anti-ban invariant violated: expected exactly 1 cooldown notice, got {}",
+            cooldown_notices
+        );
+        // 3 normal replies + 1 cooldown notice = 4 total outbound messages
+        assert_eq!(msgs.len(), 4);
+
+        // 3. Real SQLite `whatsapp_action_audits` records throttle & tombstone events
+        let audits = store
+            .query_action_audits(&ActionAuditFilter {
+                sender_jid: Some(guest_jid.to_string()),
+                decision: Some("rate_limited".to_string()),
+                limit: Some(50),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert!(
+            audits.iter().any(|a| a.decision_reason == "INGRESS_RATE_LIMIT_NOTIFIED"),
+            "Expected INGRESS_RATE_LIMIT_NOTIFIED in whatsapp_action_audits"
+        );
+        assert!(
+            audits.iter().any(|a| a.decision_reason == "INGRESS_RATE_LIMIT_TOMBSTONED"),
+            "Expected INGRESS_RATE_LIMIT_TOMBSTONED in whatsapp_action_audits"
+        );
+
+        // 4. Admin DM completely bypasses rate limiting even during active guest attack
+        for i in 1..=10 {
+            let admin_msg = IncomingMessage {
+                id: format!("ADMIN_MSG_{}", i),
+                platform: Platform::WhatsApp,
+                session_role: SessionRole::PrimaryBot,
+                chat_jid: admin_jid.to_string(),
+                chat_type: ChatType::DirectMessage,
+                sender: Sender {
+                    jid: admin_jid.to_string(),
+                    name: Some("Admin".to_string()),
+                },
+                text: format!("Cek status sistem #{}", i),
+                timestamp: 1_790_335_800,
+                is_from_me: false,
+                quoted_message: None,
+                mentioned_jids: vec![],
+                is_bot_mentioned: false,
+                bot_lid: None,
+                has_media: false,
+                media_type: None,
+                media_path: None,
+            };
+            usecase.execute(admin_msg).await.unwrap();
+        }
+        assert_eq!(
+            agent_calls.load(Ordering::SeqCst),
+            13,
+            "Admin DM must completely bypass rate limiting"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -245,6 +245,7 @@ async fn main() -> anyhow::Result<()> {
         trust_proxy_headers,
         ephemeral_session_secret,
         auth_attempt_limiter: Arc::new(adapters::driving::web::auth::AuthAttemptLimiter::new()),
+        edge_ingress_guard: Arc::new(adapters::driving::web::state::EdgeIngressGuard::from_env()),
         timezone: config.app.timezone.clone(),
         locale: config.app.locale.clone(),
         sim_jobs: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
