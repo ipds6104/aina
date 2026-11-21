@@ -72,13 +72,12 @@ impl ErrorHandler {
         whatsapp: &Arc<dyn WhatsAppPort>,
         quote_id: Option<&str>,
     ) {
-        let admin_jid = persona_engine.admin_jid();
+        let admin_jid_list = persona_engine.admin_jid();
+        let primary_admin = persona_engine.primary_admin_jid();
         let is_target_group_or_status =
             msg.chat_jid.ends_with("@g.us") || msg.chat_jid.contains("@broadcast");
-        let is_sender_admin = !admin_jid.trim().is_empty()
-            && (msg.sender.jid == admin_jid
-                || msg.sender.jid.replace("@s.whatsapp.net", "")
-                    == admin_jid.replace("@s.whatsapp.net", ""));
+        let is_sender_admin =
+            crate::core::domain::capability::is_admin_identity(admin_jid_list, &msg.sender.jid);
 
         let admin_alert = Self::format_admin_alert(msg, raw_err, persona_engine);
         let is_quota = Self::is_quota_error(raw_err);
@@ -108,10 +107,10 @@ impl ErrorHandler {
                     .await;
             }
         } else {
-            // Non-admin DM or Group/Status: send private alert to admin if configured
-            if !admin_jid.trim().is_empty() {
+            // Non-admin DM or Group/Status: send private alert to primary admin JID if configured
+            if let Some(admin_target) = primary_admin {
                 let _ = whatsapp
-                    .send_text_with_session(admin_jid, &admin_alert, None, SessionRole::PrimaryBot)
+                    .send_text_with_session(admin_target, &admin_alert, None, SessionRole::PrimaryBot)
                     .await;
             }
 

@@ -130,10 +130,7 @@ impl TaskExecutor {
                 )
                 .await;
 
-            if let Some(admin) = persona_engine
-                .map(|p| p.admin_jid())
-                .filter(|j| !j.trim().is_empty())
-            {
+            if let Some(admin) = persona_engine.and_then(|p| p.primary_admin_jid()) {
                 if admin != task.target_jid {
                     let time_str = persona_engine
                         .map(|p| p.current_local_time_string())
@@ -299,8 +296,7 @@ impl TaskExecutor {
                         || clean_res.contains("quota");
                     let actual_target = if is_story && is_error_output {
                         persona_engine
-                            .map(|p| p.admin_jid())
-                            .filter(|j| !j.trim().is_empty())
+                            .and_then(|p| p.primary_admin_jid())
                             .unwrap_or(&task.target_jid)
                     } else {
                         &task.target_jid
@@ -444,9 +440,7 @@ impl TaskExecutor {
                     )
                     .await;
 
-                let admin_jid = persona_engine
-                    .map(|p| p.admin_jid())
-                    .filter(|j| !j.trim().is_empty());
+                let admin_jid = persona_engine.and_then(|p| p.primary_admin_jid());
 
                 let time_str = persona_engine
                     .map(|p| p.current_local_time_string())

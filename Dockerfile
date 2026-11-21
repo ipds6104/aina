@@ -27,9 +27,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Pre-install OLAP analytics engines for Parquet and tabular data
 RUN pip install --no-cache-dir --break-system-packages duckdb pyarrow
 
-# Install official Google Antigravity CLI (agy)
+# Install official Google Antigravity CLI (agy) — symlink avoids 270MB duplication & version split-brain
 RUN curl -fsSL https://antigravity.google/cli/install.sh | bash && \
-    (cp /root/.local/bin/agy /usr/local/bin/agy || true)
+    ln -sf /root/.local/bin/agy /usr/local/bin/agy
 
 # Create application directories & pip defaults
 RUN mkdir -p /app/config /app/data /app/workspaces /app/scripts /app/assets /root/.gemini/antigravity-cli && \

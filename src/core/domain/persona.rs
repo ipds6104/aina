@@ -253,6 +253,28 @@ impl PersonaEngine {
         &self.admin_jid
     }
 
+    /// Returns a single dialable WhatsApp JID for sending private alerts to the Admin.
+    /// `admin_jid()` may contain a comma-separated Root-of-Trust list (phone JID + LID);
+    /// prefers the first `@s.whatsapp.net` entry so Whatsmeow dispatch never fails with
+    /// an invalid comma-joined server string.
+    pub fn primary_admin_jid(&self) -> Option<&str> {
+        let mut first_non_empty: Option<&str> = None;
+        for entry in self
+            .admin_jid
+            .split(|c: char| c == ',' || c == ';' || c.is_whitespace())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            if first_non_empty.is_none() {
+                first_non_empty = Some(entry);
+            }
+            if entry.to_ascii_lowercase().ends_with("@s.whatsapp.net") {
+                return Some(entry);
+            }
+        }
+        first_non_empty
+    }
+
     /// Reads the concise knowledge base catalog index (index.md) if available.
     pub fn load_knowledge_index(&self) -> Option<String> {
         let ws_dir = self.workspace_dir.as_deref().unwrap_or("./workspaces/default");
@@ -1194,6 +1216,35 @@ mod tests {
         assert!(prompt.contains("• `sample-skill`: Sample custom tool for automated testing."));
 
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_primary_admin_jid_extracts_single_dialable_jid_from_multi_identity_config() {
+        let engine = PersonaEngine::new(
+            "Persona".into(),
+            "Org".into(),
+            "87097809592405@lid, 6289625345646@s.whatsapp.net".into(),
+            "Asia/Jakarta".into(),
+            7,
+            "id-ID".into(),
+            "http://127.0.0.1:8080".into(),
+            "bot@s.whatsapp.net".into(),
+            None,
+        );
+        assert_eq!(engine.primary_admin_jid(), Some("6289625345646@s.whatsapp.net"));
+
+        let empty_engine = PersonaEngine::new(
+            "Persona".into(),
+            "Org".into(),
+            "   ".into(),
+            "Asia/Jakarta".into(),
+            7,
+            "id-ID".into(),
+            "http://127.0.0.1:8080".into(),
+            "bot@s.whatsapp.net".into(),
+            None,
+        );
+        assert_eq!(empty_engine.primary_admin_jid(), None);
     }
 }
 
