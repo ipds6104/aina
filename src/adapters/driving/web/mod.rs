@@ -738,6 +738,11 @@ mod tests {
             companion_api_key: None,
             setup_code: "SECRET123".to_string(),
             events_api_key: None,
+            events_allow_query_key: false,
+            webhook_secret: None,
+            trust_proxy_headers: false,
+            ephemeral_session_secret: auth::generate_csprng_hex(32),
+            auth_attempt_limiter: Arc::new(auth::AuthAttemptLimiter::new()),
             timezone: "Asia/Jakarta".to_string(),
             locale: "id".to_string(),
             sim_jobs: Arc::new(RwLock::new(HashMap::new())),
@@ -854,6 +859,11 @@ mod tests {
             companion_api_key: None,
             setup_code: "SETUP_SECRET_777".to_string(),
             events_api_key: None,
+            events_allow_query_key: false,
+            webhook_secret: None,
+            trust_proxy_headers: false,
+            ephemeral_session_secret: auth::generate_csprng_hex(32),
+            auth_attempt_limiter: Arc::new(auth::AuthAttemptLimiter::new()),
             timezone: "Asia/Jakarta".to_string(),
             locale: "id".to_string(),
             sim_jobs: Arc::new(RwLock::new(HashMap::new())),
@@ -894,10 +904,19 @@ mod tests {
         let json_data: serde_json::Value = bearer_resp.json().await.unwrap();
         assert_eq!(json_data["success"], true);
 
-        // 3. Authorized request with X-API-Key matching whatsmeow_api_key
-        let api_key_resp = client
+        // 3. Gateway key (whatsmeow_api_key) must NOT authorize admin audit routes (Phase 17 key separation)
+        let gateway_key_resp = client
             .get(format!("http://{}/api/audit/summary", aina_addr))
             .header("X-API-Key", "WM_KEY_999")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(gateway_key_resp.status(), StatusCode::UNAUTHORIZED);
+
+        // 3b. Valid setup_code via X-API-Key -> 200 OK
+        let api_key_resp = client
+            .get(format!("http://{}/api/audit/summary", aina_addr))
+            .header("X-API-Key", "SETUP_SECRET_777")
             .send()
             .await
             .unwrap();
@@ -918,19 +937,51 @@ mod tests {
         assert!(diag_data["diagnostics"]["memory_rss_bytes"].is_number());
         assert_eq!(diag_data["diagnostics"]["bot_name"], "Aina");
 
-        // 5. Authorized request via query parameter ?key=...
+        // 5. Query parameter ?key=... MUST be rejected on admin/audit APIs (Phase 17)
         let query_resp = client
             .get(format!("http://{}/api/audit/transcripts?key=SETUP_SECRET_777", aina_addr))
             .send()
             .await
             .unwrap();
-        assert_eq!(query_resp.status(), StatusCode::OK);
-        let trans_data: serde_json::Value = query_resp.json().await.unwrap();
+        assert_eq!(query_resp.status(), StatusCode::UNAUTHORIZED);
+
+        // 5b. Same endpoint with X-Admin-Key header succeeds
+        let header_trans_resp = client
+            .get(format!("http://{}/api/audit/transcripts", aina_addr))
+            .header("X-Admin-Key", "SETUP_SECRET_777")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(header_trans_resp.status(), StatusCode::OK);
+        let trans_data: serde_json::Value = header_trans_resp.json().await.unwrap();
         assert_eq!(trans_data["success"], true);
 
-        // 6. Test /api/persona/diagnostics & /api/persona/journal
+        // 6. Diagnostic & accounts endpoints MUST reject unauthenticated requests (Phase 17)
+        assert_eq!(
+            client.get(format!("http://{}/api/auth/accounts", aina_addr)).send().await.unwrap().status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            client.get(format!("http://{}/api/persona/diagnostics", aina_addr)).send().await.unwrap().status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            client.get(format!("http://{}/api/persona/journal?limit=5", aina_addr)).send().await.unwrap().status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            client.get(format!("http://{}/api/schedule/diagnostics", aina_addr)).send().await.unwrap().status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            client.get(format!("http://{}/api/metacognition/diagnostics", aina_addr)).send().await.unwrap().status(),
+            StatusCode::UNAUTHORIZED
+        );
+
+        // 6b. Authenticated /api/persona/diagnostics & /api/persona/journal & /api/schedule/diagnostics
         let persona_diag_resp = client
             .get(format!("http://{}/api/persona/diagnostics", aina_addr))
+            .header("X-Admin-Key", "SETUP_SECRET_777")
             .send()
             .await
             .unwrap();
@@ -941,6 +992,7 @@ mod tests {
 
         let persona_journal_resp = client
             .get(format!("http://{}/api/persona/journal?limit=5", aina_addr))
+            .header("X-Admin-Key", "SETUP_SECRET_777")
             .send()
             .await
             .unwrap();
@@ -948,9 +1000,10 @@ mod tests {
         let pjournal_data: serde_json::Value = persona_journal_resp.json().await.unwrap();
         assert_eq!(pjournal_data["success"], true);
 
-        // 7. Test /api/schedule/diagnostics
+        // 7. Authenticated /api/schedule/diagnostics
         let sched_diag_resp = client
             .get(format!("http://{}/api/schedule/diagnostics", aina_addr))
+            .header("X-Admin-Key", "SETUP_SECRET_777")
             .send()
             .await
             .unwrap();
@@ -1040,7 +1093,7 @@ mod tests {
         assert_eq!(alias_evt_data["status"], "accepted");
         assert_eq!(alias_evt_data["service"], "auth-service");
 
-        // 9d. Authorized via query param ?api_key=... with arbitrary vendor JSON -> 202 Accepted
+        // 9d. Query param ?api_key=... MUST be rejected by default (events_allow_query_key = false)
         let query_evt_resp = client
             .post(format!("http://{}/api/v1/events?api_key=SETUP_SECRET_777", aina_addr))
             .json(&json!({
@@ -1052,9 +1105,274 @@ mod tests {
             .send()
             .await
             .unwrap();
-        assert_eq!(query_evt_resp.status(), StatusCode::ACCEPTED);
-        let query_evt_data: serde_json::Value = query_evt_resp.json().await.unwrap();
-        assert_eq!(query_evt_data["status"], "accepted");
+        assert_eq!(query_evt_resp.status(), StatusCode::UNAUTHORIZED);
+
+        let _ = tokio::fs::remove_dir_all(&temp_dir).await;
+    }
+
+    #[tokio::test]
+    async fn test_phase17_fail_closed_lockout_ssrf_and_webhook_armor() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        // 1. Mock external attacker server to prove SSRF is strictly blocked (0 hits)
+        let ssrf_hits = Arc::new(AtomicUsize::new(0));
+        let ssrf_hits_clone = Arc::clone(&ssrf_hits);
+        let attacker_app = Router::new().route(
+            "/steal",
+            get(move || {
+                let c = Arc::clone(&ssrf_hits_clone);
+                async move {
+                    c.fetch_add(1, Ordering::SeqCst);
+                    (StatusCode::OK, "STOLEN")
+                }
+            }),
+        );
+        let attacker_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let attacker_addr = attacker_listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = axum::serve(attacker_listener, attacker_app).await;
+        });
+
+        let test_id = format!("aina_phase17_test_{}", rand::random::<u32>());
+        let temp_dir = std::env::temp_dir().join(test_id);
+        let _ = tokio::fs::create_dir_all(&temp_dir).await;
+
+        let make_state = |setup_code: &str,
+                          webhook_secret: Option<String>,
+                          events_allow_query_key: bool| {
+            let dummy_session_store = Arc::new(DummySessionStore);
+            let dummy_agent_engine = Arc::new(DummyAgentEngine);
+            let dummy_whatsapp = Arc::new(DummyWhatsApp);
+            let persona_engine = Arc::new(PersonaEngine::new(
+                "Aina".to_string(),
+                "Org".to_string(),
+                "admin@s.whatsapp.net".to_string(),
+                "Asia/Jakarta".to_string(),
+                7,
+                "id".to_string(),
+                "http://127.0.0.1:19999".to_string(),
+                "aina@s.whatsapp.net".to_string(),
+                Some(temp_dir.to_string_lossy().to_string()),
+            ));
+            let usecase = Arc::new(ProcessIncomingMessageUseCase::new(
+                dummy_session_store.clone(),
+                dummy_agent_engine.clone(),
+                dummy_whatsapp.clone(),
+                persona_engine.clone(),
+                "aina@s.whatsapp.net".to_string(),
+                "Aina".to_string(),
+                None,
+            ));
+            Arc::new(WebhookServerState {
+                usecase,
+                agent_engine: dummy_agent_engine,
+                session_store: dummy_session_store,
+                persona_engine,
+                bot_name: "Aina".to_string(),
+                bot_jid: "aina@s.whatsapp.net".to_string(),
+                bot_lid: None,
+                companion_jid: None,
+                companion_name: None,
+                companion_session_id: None,
+                model: "dummy".to_string(),
+                whatsmeow_url: "http://127.0.0.1:19999".to_string(),
+                whatsmeow_api_key: "default-secret".to_string(),
+                companion_base_url: None,
+                companion_api_key: None,
+                setup_code: setup_code.to_string(),
+                events_api_key: Some("EVT_SECRET_123".to_string()),
+                events_allow_query_key,
+                webhook_secret,
+                trust_proxy_headers: false,
+                ephemeral_session_secret: auth::generate_csprng_hex(32),
+                auth_attempt_limiter: Arc::new(auth::AuthAttemptLimiter::new()),
+                timezone: "Asia/Jakarta".to_string(),
+                locale: "id".to_string(),
+                sim_jobs: Arc::new(RwLock::new(HashMap::new())),
+                chat_queues: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+                active_tasks: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+                presence_tracker: Arc::new(crate::core::domain::PresenceTracker::new()),
+                workspace_dir: temp_dir.clone(),
+                brain_dir: temp_dir.join("brain"),
+                oidc_config: crate::config::settings::OidcConfig::default(),
+                oidc_states: Arc::new(RwLock::new(HashMap::new())),
+            })
+        };
+
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
+
+        // A. Fail-closed server when setup_code is empty ("")
+        let empty_state = make_state("", Some("HOOK_SECRET_999".to_string()), true);
+        let empty_app = create_router(empty_state);
+        let empty_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let empty_addr = empty_listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = axum::serve(
+                empty_listener,
+                empty_app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+            )
+            .await;
+        });
+
+        // Empty setup_code MUST reject /api/simulate, /api/setup, /api/auth/verify, /api/auth/token
+        assert_eq!(
+            client
+                .post(format!("http://{}/api/simulate", empty_addr))
+                .json(&json!({"text": "halo"}))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            client
+                .post(format!("http://{}/api/setup", empty_addr))
+                .json(&json!({"token": "{}", "setup_code": ""}))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            client
+                .post(format!("http://{}/api/auth/verify", empty_addr))
+                .json(&json!({"admin_key": ""}))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+
+        // Forged OIDC cookie signed with old weak fallback ":default-secret" MUST be rejected
+        let forged_session = state::AuthenticatedUserSession {
+            sub: "attacker".to_string(),
+            name: "Attacker".to_string(),
+            email: None,
+            preferred_username: None,
+            nip: None,
+            unit_kerja: None,
+            role: Some("admin".to_string()),
+            is_admin: true,
+            exp: ui::chrono_now_secs() + 3600,
+        };
+        let forged_cookie = controllers::oidc::sign_session(&forged_session, ":default-secret");
+        assert_eq!(
+            client
+                .get(format!("http://{}/api/auth/accounts", empty_addr))
+                .header("Cookie", format!("aina_session={}", forged_cookie))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+
+        // Opt-in events query key works ONLY when events_allow_query_key = true
+        assert_eq!(
+            client
+                .post(format!("http://{}/api/v1/events?api_key=EVT_SECRET_123", empty_addr))
+                .json(&json!({"source": "grafana", "title": "legacy webhook"}))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::ACCEPTED
+        );
+
+        // Webhook with AINA_WEBHOOK_SECRET set MUST reject unauthorized requests (401)
+        assert_eq!(
+            client
+                .post(format!("http://{}/webhook", empty_addr))
+                .json(&json!({"id": "MSG1", "from": "123@s.whatsapp.net", "body": "hi"}))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+
+        // Authorized webhook with SSRF download_url & path-traversal msg.id
+        use base64::Engine;
+        let b64_payload = base64::engine::general_purpose::STANDARD.encode(b"SAFE_CONTENT");
+        let resp_ssrf = client
+            .post(format!("http://{}/webhook", empty_addr))
+            .header("X-Webhook-Secret", "HOOK_SECRET_999")
+            .json(&json!({
+                "id": "MSG_SSRF_1",
+                "chat_jid": "user1@s.whatsapp.net",
+                "sender_jid": "user1@s.whatsapp.net",
+                "has_media": true,
+                "media_type": "document",
+                "download_url": format!("http://{}/steal", attacker_addr),
+                "text": "check this"
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp_ssrf.status(), StatusCode::OK);
+        assert_eq!(
+            ssrf_hits.load(Ordering::SeqCst),
+            0,
+            "SSRF attacker host MUST receive 0 outbound requests!"
+        );
+
+        // Path traversal msg.id MUST NOT write outside workspace/media/
+        let resp_trav = client
+            .post(format!("http://{}/webhook", empty_addr))
+            .header("X-Webhook-Secret", "HOOK_SECRET_999")
+            .json(&json!({
+                "id": "../../escaped_evil",
+                "chat_jid": "user1@s.whatsapp.net",
+                "sender_jid": "user1@s.whatsapp.net",
+                "has_media": true,
+                "media_type": "document",
+                "mime_type": "text/plain",
+                "media_base64": b64_payload,
+                "text": "traversal test"
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp_trav.status(), StatusCode::OK);
+        assert!(
+            !temp_dir.join("escaped_evil.txt").exists(),
+            "Escaped file must NOT exist outside media/"
+        );
+
+        // B. Brute-force IP lockout test (5 failures -> 429 Too Many Requests)
+        let lock_state = make_state("REAL_SECRET_999", None, false);
+        let lock_app = create_router(lock_state);
+        let lock_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let lock_addr = lock_listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = axum::serve(
+                lock_listener,
+                lock_app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+            )
+            .await;
+        });
+
+        for attempt in 1..=4 {
+            let r = client
+                .post(format!("http://{}/api/auth/verify", lock_addr))
+                .json(&json!({"admin_key": format!("wrong-{}", attempt)}))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
+        }
+        // 5th failure triggers lockout (429 with Retry-After)
+        let locked_resp = client
+            .post(format!("http://{}/api/auth/verify", lock_addr))
+            .json(&json!({"admin_key": "wrong-5"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(locked_resp.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert!(locked_resp.headers().contains_key("retry-after"));
 
         let _ = tokio::fs::remove_dir_all(&temp_dir).await;
     }

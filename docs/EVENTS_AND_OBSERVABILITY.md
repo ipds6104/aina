@@ -117,15 +117,15 @@ Respon diberikan secara instan (<5ms) karena pemrosesan diserahkan ke antrean ot
 Untuk mencegah penyalahgunaan endpoint ingress dari pihak luar, Aina menerapkan verifikasi autentikasi bertingkat:
 
 ### Hierarki API Key
-1. **`AINA_EVENTS_API_KEY` (atau `EVENTS_API_KEY`)**: Kunci khusus untuk sistem observability.
-2. **Fallback Otomatis**: Jika kunci khusus di atas tidak didefinisikan di `.env` / environment container, sistem otomatis memverifikasi kecocokan terhadap `AINA_ADMIN_KEY` / `SETUP_CODE` atau `WHATSMEOW_API_KEY`.
+1. **`AINA_EVENTS_API_KEY` (atau `EVENTS_API_KEY`)**: Kunci khusus untuk sistem observability (evaluasi konstan waktu & *fail-closed*).
+2. **Fallback Otomatis**: Jika kunci khusus di atas tidak didefinisikan di `.env` / environment container, sistem memverifikasi kecocokan terhadap `ADMIN_KEY` / `AINA_ADMIN_KEY` (*setup code*) atau sesi SSO OIDC admin. *(Kunci gateway `WHATSMEOW_API_KEY` dipisahkan dan tidak dapat mengotorisasi endpoint admin/events).*
 
 ### Metode Pengiriman Autentikasi yang Didukung
-Klien atau webhook penyedia monitoring dapat mengirimkan token melalui salah satu metode berikut:
+Klien atau webhook penyedia monitoring mengirimkan token melalui metode **Header-First**:
 - **Header `X-API-Key`**: `X-API-Key: YOUR_SECRET_KEY`
 - **Header `X-Events-Key`**: `X-Events-Key: YOUR_SECRET_KEY`
 - **Header `Authorization`**: `Authorization: Bearer YOUR_SECRET_KEY`
-- **URL Query Parameter**: `?api_key=YOUR_SECRET_KEY` atau `?token=YOUR_SECRET_KEY` *(sangat berguna untuk webhook eksternal yang tidak mendukung custom header)*.
+- **URL Query Parameter (Opsional / Opt-In Legacy)**: `?api_key=YOUR_SECRET_KEY` atau `?token=YOUR_SECRET_KEY` — **nonaktif secara bawaan** untuk mencegah kebocoran kunci pada log proxy. Hanya aktif bila operator menyetel `AINA_EVENTS_ALLOW_QUERY_KEY=true` khusus untuk webhook eksternal legacy yang tidak mendukung custom header.
 
 Jika tidak valid, Aina mengembalikan HTTP `401 Unauthorized`:
 ```json

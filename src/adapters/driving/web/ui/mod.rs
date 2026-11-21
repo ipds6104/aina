@@ -147,8 +147,8 @@ pub fn render_html(
                     </div>
 
                     <div style="margin-bottom: 10px;">
-                        <label class="form-label">Admin Key / WHATSMEOW_API_KEY:</label>
-                        <input id="add-token-key" class="form-input" type="password" placeholder="Masukkan WHATSMEOW_API_KEY atau ADMIN_KEY Anda..." />
+                        <label class="form-label">Admin Key / Setup Code:</label>
+                        <input id="add-token-key" class="form-input" type="password" placeholder="Masukkan ADMIN_KEY atau Setup Code Anda..." />
                     </div>
 
                     <!-- METODE 1: OAUTH CEPAT -->

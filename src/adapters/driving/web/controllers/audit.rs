@@ -11,6 +11,8 @@ use serde::Deserialize;
 use serde_json::json;
 use std::sync::Arc;
 
+const AUDIT_UNAUTHORIZED_MSG: &str = "Akses ditolak. Berikan Admin Key yang valid via header (Authorization: Bearer <key>, X-Admin-Key: <key>, X-API-Key: <key>) atau sesi SSO admin.";
+
 #[derive(Debug, Deserialize)]
 pub struct AuditActionsQuery {
     pub chat_jid: Option<String>,
@@ -24,8 +26,6 @@ pub struct AuditActionsQuery {
     pub until: Option<i64>,
     pub limit: Option<usize>,
     pub offset: Option<usize>,
-    pub key: Option<String>,
-    pub api_key: Option<String>,
 }
 
 pub async fn api_audit_actions_handler(
@@ -33,13 +33,12 @@ pub async fn api_audit_actions_handler(
     headers: HeaderMap,
     Query(query): Query<AuditActionsQuery>,
 ) -> impl IntoResponse {
-    let key_candidate = query.key.as_deref().or(query.api_key.as_deref());
-    if !is_api_authorized(&headers, key_candidate, &state) {
+    if !is_api_authorized(&headers, &state) {
         return (
             StatusCode::UNAUTHORIZED,
             Json(json!({
                 "success": false,
-                "error": "Akses ditolak. Berikan API Key yang valid via header (Authorization: Bearer <key>, X-API-Key: <key>, X-Admin-Key: <key>) atau query parameter (?key=<key>)."
+                "error": AUDIT_UNAUTHORIZED_MSG
             })),
         );
     }
@@ -79,16 +78,8 @@ pub async fn api_audit_actions_handler(
 
 #[derive(Debug, Deserialize)]
 pub struct AuditActionDetailQuery {
-    pub key: Option<String>,
-    pub api_key: Option<String>,
     pub limit: Option<usize>,
     pub all: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct AuditAuthOnlyQuery {
-    pub key: Option<String>,
-    pub api_key: Option<String>,
 }
 
 pub async fn api_audit_action_detail_handler(
@@ -97,13 +88,12 @@ pub async fn api_audit_action_detail_handler(
     headers: HeaderMap,
     Query(query): Query<AuditActionDetailQuery>,
 ) -> impl IntoResponse {
-    let key_candidate = query.key.as_deref().or(query.api_key.as_deref());
-    if !is_api_authorized(&headers, key_candidate, &state) {
+    if !is_api_authorized(&headers, &state) {
         return (
             StatusCode::UNAUTHORIZED,
             Json(json!({
                 "success": false,
-                "error": "Akses ditolak. Berikan API Key yang valid via header (Authorization: Bearer <key>, X-API-Key: <key>, X-Admin-Key: <key>) atau query parameter (?key=<key>)."
+                "error": AUDIT_UNAUTHORIZED_MSG
             })),
         );
     }
@@ -184,15 +174,13 @@ pub async fn api_audit_action_detail_handler(
 pub async fn api_audit_summary_handler(
     State(state): State<Arc<WebhookServerState>>,
     headers: HeaderMap,
-    Query(query): Query<AuditAuthOnlyQuery>,
 ) -> impl IntoResponse {
-    let key_candidate = query.key.as_deref().or(query.api_key.as_deref());
-    if !is_api_authorized(&headers, key_candidate, &state) {
+    if !is_api_authorized(&headers, &state) {
         return (
             StatusCode::UNAUTHORIZED,
             Json(json!({
                 "success": false,
-                "error": "Akses ditolak. Berikan API Key yang valid via header (Authorization: Bearer <key>, X-API-Key: <key>, X-Admin-Key: <key>) atau query parameter (?key=<key>)."
+                "error": AUDIT_UNAUTHORIZED_MSG
             })),
         );
     }
@@ -218,15 +206,13 @@ pub async fn api_audit_summary_handler(
 pub async fn api_audit_diagnostics_handler(
     State(state): State<Arc<WebhookServerState>>,
     headers: HeaderMap,
-    Query(query): Query<AuditAuthOnlyQuery>,
 ) -> impl IntoResponse {
-    let key_candidate = query.key.as_deref().or(query.api_key.as_deref());
-    if !is_api_authorized(&headers, key_candidate, &state) {
+    if !is_api_authorized(&headers, &state) {
         return (
             StatusCode::UNAUTHORIZED,
             Json(json!({
                 "success": false,
-                "error": "Akses ditolak. Berikan API Key yang valid via header (Authorization: Bearer <key>, X-API-Key: <key>, X-Admin-Key: <key>) atau query parameter (?key=<key>)."
+                "error": AUDIT_UNAUTHORIZED_MSG
             })),
         );
     }
@@ -274,8 +260,6 @@ pub struct AuditTranscriptsQuery {
     pub q: Option<String>,
     pub errors_only: Option<bool>,
     pub limit: Option<usize>,
-    pub key: Option<String>,
-    pub api_key: Option<String>,
 }
 
 pub async fn api_audit_transcripts_handler(
@@ -283,13 +267,12 @@ pub async fn api_audit_transcripts_handler(
     headers: HeaderMap,
     Query(query): Query<AuditTranscriptsQuery>,
 ) -> impl IntoResponse {
-    let key_candidate = query.key.as_deref().or(query.api_key.as_deref());
-    if !is_api_authorized(&headers, key_candidate, &state) {
+    if !is_api_authorized(&headers, &state) {
         return (
             StatusCode::UNAUTHORIZED,
             Json(json!({
                 "success": false,
-                "error": "Akses ditolak. Berikan API Key yang valid via header (Authorization: Bearer <key>, X-API-Key: <key>, X-Admin-Key: <key>) atau query parameter (?key=<key>)."
+                "error": AUDIT_UNAUTHORIZED_MSG
             })),
         );
     }
@@ -316,15 +299,13 @@ pub async fn api_audit_transcripts_handler(
 pub async fn api_audit_presence_handler(
     State(state): State<Arc<WebhookServerState>>,
     headers: HeaderMap,
-    Query(query): Query<AuditAuthOnlyQuery>,
 ) -> impl IntoResponse {
-    let key_candidate = query.key.as_deref().or(query.api_key.as_deref());
-    if !is_api_authorized(&headers, key_candidate, &state) {
+    if !is_api_authorized(&headers, &state) {
         return (
             StatusCode::UNAUTHORIZED,
             Json(json!({
                 "success": false,
-                "error": "Akses ditolak. Berikan API Key yang valid."
+                "error": AUDIT_UNAUTHORIZED_MSG
             })),
         );
     }
@@ -347,16 +328,14 @@ pub struct StopPresencePayload {
 pub async fn api_audit_presence_stop_handler(
     State(state): State<Arc<WebhookServerState>>,
     headers: HeaderMap,
-    Query(query): Query<AuditAuthOnlyQuery>,
     payload: Option<Json<StopPresencePayload>>,
 ) -> impl IntoResponse {
-    let key_candidate = query.key.as_deref().or(query.api_key.as_deref());
-    if !is_api_authorized(&headers, key_candidate, &state) {
+    if !is_api_authorized(&headers, &state) {
         return (
             StatusCode::UNAUTHORIZED,
             Json(json!({
                 "success": false,
-                "error": "Akses ditolak. Berikan API Key yang valid."
+                "error": AUDIT_UNAUTHORIZED_MSG
             })),
         );
     }

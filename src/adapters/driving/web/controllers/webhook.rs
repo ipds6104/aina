@@ -1,22 +1,177 @@
+use crate::adapters::driving::web::auth::is_webhook_authorized;
 use crate::adapters::driving::web::ingress::{parse_whatsmeow_message, resolve_media_extension};
 use crate::adapters::driving::web::queue::dispatch_message_to_queue;
 use crate::adapters::driving::web::state::WebhookServerState;
 use axum::{
     extract::{Query, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::IntoResponse,
     Json,
 };
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
+/// Parses a URL into `(lowercase_scheme, lowercase_host, effective_port)` without external crates.
+/// Rejects URLs containing userinfo (`@`), whitespace, control characters, or non-HTTP(S) schemes.
+fn extract_http_origin(raw: &str) -> Option<(String, String, u16)> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty()
+        || trimmed.chars().any(|c| c.is_whitespace() || c.is_control())
+    {
+        return None;
+    }
+
+    let (scheme, rest) = if let Some(r) = trimmed.strip_prefix("https://") {
+        ("https", r)
+    } else if let Some(r) = trimmed.strip_prefix("http://") {
+        ("http", r)
+    } else {
+        return None;
+    };
+
+    let authority_end = rest
+        .find(|c| c == '/' || c == '?' || c == '#')
+        .unwrap_or(rest.len());
+    let authority = &rest[..authority_end];
+    if authority.is_empty() || authority.contains('@') {
+        return None;
+    }
+
+    let default_port: u16 = if scheme == "https" { 443 } else { 80 };
+
+    // Handle bracketed IPv6 (`[::1]:8080`) or regular `host[:port]`
+    let (host, port) = if let Some(after_bracket) = authority.strip_prefix('[') {
+        let close_idx = after_bracket.find(']')?;
+        let ipv6_host = &after_bracket[..close_idx];
+        let remainder = &after_bracket[close_idx + 1..];
+        if remainder.is_empty() {
+            (ipv6_host, default_port)
+        } else if let Some(port_str) = remainder.strip_prefix(':') {
+            (ipv6_host, port_str.parse::<u16>().ok()?)
+        } else {
+            return None;
+        }
+    } else if let Some((h, p)) = authority.rsplit_once(':') {
+        if h.is_empty() || h.contains(':') {
+            return None;
+        }
+        (h, p.parse::<u16>().ok()?)
+    } else {
+        (authority, default_port)
+    };
+
+    if host.is_empty() {
+        return None;
+    }
+
+    Some((scheme.to_string(), host.to_ascii_lowercase(), port))
+}
+
+/// Validates and resolves a media claim-check URL strictly against configured Whatsmeow gateway origins.
+/// Prevents SSRF and leaking `WHATSMEOW_API_KEY` to arbitrary external hosts.
+pub fn resolve_safe_media_download_url(
+    download_url_opt: Option<&str>,
+    msg_id: &str,
+    has_media: bool,
+    target_url: &str,
+    allowed_base_urls: &[&str],
+) -> Option<String> {
+    let target_base = target_url.trim().trim_end_matches('/');
+
+    if let Some(raw_url) = download_url_opt {
+        let url_str = raw_url.trim();
+        if url_str.is_empty()
+            || url_str.chars().any(|c| c.is_whitespace() || c.is_control())
+        {
+            return None;
+        }
+
+        if url_str.starts_with("http://") || url_str.starts_with("https://") {
+            let candidate_origin = extract_http_origin(url_str)?;
+            let is_allowed = allowed_base_urls
+                .iter()
+                .filter_map(|base| extract_http_origin(base))
+                .any(|allowed| allowed == candidate_origin);
+
+            if is_allowed {
+                return Some(url_str.to_string());
+            } else {
+                warn!(
+                    "Blocked potential SSRF media download_url outside configured Whatsmeow origins: '{}'",
+                    url_str
+                );
+                return None;
+            }
+        }
+
+        // Reject other URI schemes (e.g. file://, ftp://, //evil.com) or traversal attempts
+        if url_str.starts_with("//")
+            || url_str.contains("://")
+            || url_str.contains("..")
+            || url_str.contains('\\')
+            || url_str.contains('@')
+        {
+            warn!("Blocked unsafe relative media download_url: '{}'", url_str);
+            return None;
+        }
+
+        if target_base.is_empty() {
+            return None;
+        }
+
+        let path = if url_str.starts_with('/') {
+            url_str.to_string()
+        } else {
+            format!("/{}", url_str)
+        };
+        return Some(format!("{}{}", target_base, path));
+    }
+
+    if has_media && !msg_id.is_empty() && msg_id != "unknown_id" && !target_base.is_empty() {
+        let safe_id = sanitize_media_file_id(msg_id);
+        return Some(format!("{}/api/v1/media/{}/download", target_base, safe_id));
+    }
+
+    None
+}
+
+/// Sanitizes an incoming WhatsApp `msg.id` into a safe single-component filename stem.
+/// Prevents path traversal (`..`, `/`, `\`, null bytes) when writing media & sidecar files.
+pub fn sanitize_media_file_id(raw_id: &str) -> String {
+    let trimmed = raw_id.trim();
+    if !trimmed.is_empty()
+        && trimmed.len() <= 128
+        && trimmed
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+    {
+        return trimmed.to_string();
+    }
+
+    let digest = Sha256::digest(raw_id.as_bytes());
+    let mut hex = String::with_capacity(28);
+    hex.push_str("msg_");
+    for b in digest.iter().take(12) {
+        use std::fmt::Write;
+        let _ = write!(hex, "{:02x}", b);
+    }
+    hex
+}
+
 pub async fn webhook_handler(
     State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
     Query(query_params): Query<HashMap<String, String>>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
+    if !is_webhook_authorized(&headers, &state) {
+        warn!("Rejected unauthorized POST /webhook request (AINA_WEBHOOK_SECRET mismatch)");
+        return (StatusCode::UNAUTHORIZED, "Unauthorized");
+    }
+
     debug!("Received webhook payload: {:?}, query: {:?}", payload, query_params);
 
     let mut msg_opt = parse_whatsmeow_message(
@@ -87,54 +242,49 @@ pub async fn webhook_handler(
             || mime_type.starts_with("video/");
 
         if is_heavy_media {
-            info!("Skipping media download for heavy media type (audio/video): mime='{}', type='{:?}'", effective_mime, media_type_opt);
+            info!(
+                "Skipping media download for heavy media type (audio/video): mime='{}', type='{:?}'",
+                effective_mime, media_type_opt
+            );
             msg.has_media = false;
         } else if media_bytes.is_none() {
-            // CLAIM-CHECK PATTERN:
-            // If media_base64 is absent or omitted, retrieve media stream on-demand
-            // using the download_url claim check ticket or fallback to media id.
-            let (target_url, target_key) = if msg.session_role == crate::core::domain::SessionRole::UserCompanion
-                && state.companion_base_url.is_some()
-            {
-                (
-                    state.companion_base_url.as_deref().unwrap(),
-                    state.companion_api_key.as_deref().unwrap_or(&state.whatsmeow_api_key),
-                )
-            } else {
-                (state.whatsmeow_url.as_str(), state.whatsmeow_api_key.as_str())
-            };
-
-            let full_url = if let Some(url_str) = download_url_opt {
-                if url_str.starts_with("http://") || url_str.starts_with("https://") {
-                    url_str.to_string()
-                } else {
-                    format!(
-                        "{}{}",
-                        target_url.trim_end_matches('/'),
-                        if url_str.starts_with('/') {
-                            url_str.to_string()
-                        } else {
-                            format!("/{}", url_str)
-                        }
+            // CLAIM-CHECK PATTERN (with mandatory SSRF origin lock):
+            let (target_url, target_key) =
+                if msg.session_role == crate::core::domain::SessionRole::UserCompanion
+                    && state.companion_base_url.is_some()
+                {
+                    (
+                        state.companion_base_url.as_deref().unwrap(),
+                        state
+                            .companion_api_key
+                            .as_deref()
+                            .unwrap_or(&state.whatsmeow_api_key),
                     )
-                }
-            } else if msg.has_media
-                && !msg.id.is_empty()
-                && msg.id != "unknown_id"
-                && !target_url.is_empty()
-            {
-                format!(
-                    "{}/api/v1/media/{}/download",
-                    target_url.trim_end_matches('/'),
-                    msg.id
-                )
-            } else {
-                String::new()
-            };
+                } else {
+                    (
+                        state.whatsmeow_url.as_str(),
+                        state.whatsmeow_api_key.as_str(),
+                    )
+                };
 
-            if !full_url.is_empty() {
-                info!("Claim-Check: Fetching media for msg {} from {}", msg.id, full_url);
+            let mut allowed_bases = vec![state.whatsmeow_url.as_str()];
+            if let Some(ref comp_url) = state.companion_base_url {
+                allowed_bases.push(comp_url.as_str());
+            }
+
+            if let Some(full_url) = resolve_safe_media_download_url(
+                download_url_opt,
+                &msg.id,
+                msg.has_media,
+                target_url,
+                &allowed_bases,
+            ) {
+                info!(
+                    "Claim-Check: Fetching media for msg {} from {}",
+                    msg.id, full_url
+                );
                 let client = reqwest::Client::builder()
+                    .redirect(reqwest::redirect::Policy::none())
                     .timeout(std::time::Duration::from_secs(60))
                     .build()
                     .unwrap_or_else(|_| reqwest::Client::new());
@@ -195,14 +345,27 @@ pub async fn webhook_handler(
             if let Err(e) = tokio::fs::create_dir_all(&media_dir).await {
                 error!("Failed to create media directory {:?}: {:?}", media_dir, e);
             } else {
-                let file_name = format!("{}.{}", msg.id, ext);
+                let safe_id = sanitize_media_file_id(&msg.id);
+                let file_name = format!("{}.{}", safe_id, ext);
                 let target_path = media_dir.join(&file_name);
-                let sidecar_txt_path = media_dir.join(format!("{}.txt", msg.id));
+                let sidecar_txt_path = media_dir.join(format!("{}.txt", safe_id));
 
-                if let Err(e) = tokio::fs::write(&target_path, &bytes).await {
+                // Defense-in-depth containment check
+                if target_path.parent() != Some(media_dir.as_path())
+                    || sidecar_txt_path.parent() != Some(media_dir.as_path())
+                {
+                    warn!(
+                        "Blocked media write outside sandbox directory for msg id '{}'",
+                        msg.id
+                    );
+                } else if let Err(e) = tokio::fs::write(&target_path, &bytes).await {
                     error!("Failed to write media file to {:?}: {:?}", target_path, e);
                 } else {
-                    info!("Saved incoming media to {:?} ({} bytes)", target_path, bytes.len());
+                    info!(
+                        "Saved incoming media to {:?} ({} bytes)",
+                        target_path,
+                        bytes.len()
+                    );
                     let abs_path_str = target_path.to_string_lossy().to_string();
                     msg.media_path = Some(abs_path_str.clone());
                     msg.has_media = true;
@@ -211,12 +374,15 @@ pub async fn webhook_handler(
                         if let Some(fname) = filename_opt {
                             msg.text = format!("[Dokumen terlampir: {}]", fname);
                         } else if let Some(m_type) = media_type_opt {
-                            msg.text = format!("[{} terlampir]", match m_type {
-                                "document" => "Dokumen",
-                                "video" => "Video",
-                                "audio" => "Audio",
-                                _ => "Foto / Media",
-                            });
+                            msg.text = format!(
+                                "[{} terlampir]",
+                                match m_type {
+                                    "document" => "Dokumen",
+                                    "video" => "Video",
+                                    "audio" => "Audio",
+                                    _ => "Foto / Media",
+                                }
+                            );
                         }
                     }
 
@@ -244,4 +410,90 @@ pub async fn webhook_handler(
     }
 
     (StatusCode::OK, "OK")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_resolve_safe_media_download_url_blocks_ssrf() {
+        let allowed = ["http://127.0.0.1:8080", "https://wa.internal.local"];
+
+        // Relative valid path
+        assert_eq!(
+            resolve_safe_media_download_url(
+                Some("/api/v1/media/MSG1/download"),
+                "MSG1",
+                true,
+                "http://127.0.0.1:8080",
+                &allowed
+            ),
+            Some("http://127.0.0.1:8080/api/v1/media/MSG1/download".to_string())
+        );
+
+        // Same-origin absolute URL allowed
+        assert_eq!(
+            resolve_safe_media_download_url(
+                Some("https://wa.internal.local/api/v1/media/MSG1/download"),
+                "MSG1",
+                true,
+                "http://127.0.0.1:8080",
+                &allowed
+            ),
+            Some("https://wa.internal.local/api/v1/media/MSG1/download".to_string())
+        );
+
+        // External metadata / attacker origins strictly blocked
+        assert_eq!(
+            resolve_safe_media_download_url(
+                Some("http://169.254.169.254/latest/meta-data/"),
+                "MSG1",
+                true,
+                "http://127.0.0.1:8080",
+                &allowed
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_safe_media_download_url(
+                Some("http://127.0.0.1:8080@evil.com/steal"),
+                "MSG1",
+                true,
+                "http://127.0.0.1:8080",
+                &allowed
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_safe_media_download_url(
+                Some("//evil.com/steal"),
+                "MSG1",
+                true,
+                "http://127.0.0.1:8080",
+                &allowed
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_safe_media_download_url(
+                Some("/api/v1/../../etc/passwd"),
+                "MSG1",
+                true,
+                "http://127.0.0.1:8080",
+                &allowed
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn test_sanitize_media_file_id_prevents_path_traversal() {
+        assert_eq!(sanitize_media_file_id("MSG_CC_TEST_001"), "MSG_CC_TEST_001");
+        let evil = sanitize_media_file_id("../../config/persona");
+        assert!(evil.starts_with("msg_"));
+        assert!(!evil.contains(".."));
+        assert!(!evil.contains('/'));
+        assert!(!evil.contains('\\'));
+    }
 }

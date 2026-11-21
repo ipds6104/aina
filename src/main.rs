@@ -161,13 +161,44 @@ async fn main() -> anyhow::Result<()> {
         runner.start();
     }
 
-    // 5. Setup Code / Admin Key for First-Time Setup Security
+    // 5. Setup Code / Admin Key for First-Time Setup Security (128-bit CSPRNG fallback; never empty)
     let setup_code = std::env::var("ADMIN_KEY")
-        .or_else(|_| std::env::var("AINA_ADMIN_KEY"))
-        .unwrap_or_else(|_| {
-            let code_num: u32 = rand::random::<u32>() % 900000 + 100000;
-            format!("AINA-{}", code_num)
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            std::env::var("AINA_ADMIN_KEY")
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        })
+        .unwrap_or_else(|| {
+            format!(
+                "AINA-{}",
+                adapters::driving::web::auth::generate_csprng_hex(16)
+            )
         });
+
+    let ephemeral_session_secret = adapters::driving::web::auth::generate_csprng_hex(32);
+
+    let webhook_secret = std::env::var("AINA_WEBHOOK_SECRET")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            std::env::var("WHATSMEOW_WEBHOOK_SECRET")
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        });
+
+    let events_allow_query_key = std::env::var("AINA_EVENTS_ALLOW_QUERY_KEY")
+        .map(|v| matches!(v.trim().to_lowercase().as_str(), "true" | "1" | "yes"))
+        .unwrap_or(false);
+
+    let trust_proxy_headers = std::env::var("AINA_TRUST_PROXY_HEADERS")
+        .map(|v| matches!(v.trim().to_lowercase().as_str(), "true" | "1" | "yes"))
+        .unwrap_or(false);
 
     info!("========================================================================");
     info!("🔐 SETUP / ADMIN CODE: {}", setup_code);
@@ -176,6 +207,13 @@ async fn main() -> anyhow::Result<()> {
         info!("🔑 SSO / OIDC ENABLED via provider: {} (Issuer: {:?})", config.oidc.provider_name, config.oidc.issuer_url);
     } else {
         info!("ℹ️ SSO / OIDC is disabled (set OIDC_ENABLED=true to activate)");
+    }
+    if webhook_secret.is_some() {
+        info!("🛡️ Webhook auth enabled via AINA_WEBHOOK_SECRET (fail-closed)");
+    } else {
+        tracing::warn!(
+            "AINA_WEBHOOK_SECRET is not set; POST /webhook relies on isolated internal network trust. Set AINA_WEBHOOK_SECRET if exposing /webhook publicly."
+        );
     }
     info!("========================================================================");
 
@@ -197,7 +235,16 @@ async fn main() -> anyhow::Result<()> {
         companion_base_url: config.whatsmeow.companion_base_url.clone(),
         companion_api_key: config.whatsmeow.companion_api_key.clone(),
         setup_code,
-        events_api_key: std::env::var("AINA_EVENTS_API_KEY").or_else(|_| std::env::var("EVENTS_API_KEY")).ok(),
+        events_api_key: std::env::var("AINA_EVENTS_API_KEY")
+            .or_else(|_| std::env::var("EVENTS_API_KEY"))
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
+        events_allow_query_key,
+        webhook_secret,
+        trust_proxy_headers,
+        ephemeral_session_secret,
+        auth_attempt_limiter: Arc::new(adapters::driving::web::auth::AuthAttemptLimiter::new()),
         timezone: config.app.timezone.clone(),
         locale: config.app.locale.clone(),
         sim_jobs: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
@@ -215,9 +262,12 @@ async fn main() -> anyhow::Result<()> {
     info!("Aina Webhook server listening on http://{}", bind_addr);
 
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await?;
 
     info!("Aina daemon shut down gracefully.");
     Ok(())

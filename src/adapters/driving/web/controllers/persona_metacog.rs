@@ -1,7 +1,8 @@
+use crate::adapters::driving::web::auth::is_api_authorized;
 use crate::adapters::driving::web::state::WebhookServerState;
 use axum::{
     extract::{Query, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::IntoResponse,
     Json,
 };
@@ -10,11 +11,27 @@ use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-pub async fn api_persona_diagnostics_handler() -> impl IntoResponse {
+fn unauthorized_diag() -> (StatusCode, Json<serde_json::Value>) {
+    (
+        StatusCode::UNAUTHORIZED,
+        Json(json!({
+            "success": false,
+            "error": "Akses ditolak. Berikan Admin Key yang valid via header (X-Admin-Key / Authorization: Bearer) atau sesi SSO admin."
+        })),
+    )
+}
+
+pub async fn api_persona_diagnostics_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if !is_api_authorized(&headers, &state) {
+        return unauthorized_diag();
+    }
+
     let script_candidates = [
         PathBuf::from("scripts/persona_status.py"),
         PathBuf::from("/app/scripts/persona_status.py"),
-        PathBuf::from("/root/projects/aina/scripts/persona_status.py"),
     ];
 
     let resolved = script_candidates
@@ -85,13 +102,18 @@ pub struct PersonaJournalQuery {
 }
 
 pub async fn api_persona_journal_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
     Query(query): Query<PersonaJournalQuery>,
 ) -> impl IntoResponse {
+    if !is_api_authorized(&headers, &state) {
+        return unauthorized_diag();
+    }
+
     let limit = query.limit.unwrap_or(20);
     let script_candidates = [
         PathBuf::from("scripts/persona_status.py"),
         PathBuf::from("/app/scripts/persona_status.py"),
-        PathBuf::from("/root/projects/aina/scripts/persona_status.py"),
     ];
 
     let resolved = script_candidates
@@ -166,12 +188,21 @@ pub struct MetacogQuery {
 
 pub async fn api_metacog_diagnostics_handler(
     State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
     Query(query): Query<MetacogQuery>,
 ) -> impl IntoResponse {
+    if !is_api_authorized(&headers, &state) {
+        return unauthorized_diag();
+    }
+
     let manifest = crate::core::domain::metacognition::AgentCapabilityManifest::default_manifest();
     let stats = state.session_store.get_metacognitive_calibration_stats().await.ok();
     let limit = query.limit.unwrap_or(10);
-    let recent = state.session_store.list_metacognitive_predictions(limit, query.domain.as_deref()).await.unwrap_or_default();
+    let recent = state
+        .session_store
+        .list_metacognitive_predictions(limit, query.domain.as_deref())
+        .await
+        .unwrap_or_default();
 
     (
         StatusCode::OK,
@@ -184,7 +215,14 @@ pub async fn api_metacog_diagnostics_handler(
     )
 }
 
-pub async fn api_metacog_capabilities_handler() -> impl IntoResponse {
+pub async fn api_metacog_capabilities_handler(
+    State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if !is_api_authorized(&headers, &state) {
+        return unauthorized_diag();
+    }
+
     let manifest = crate::core::domain::metacognition::AgentCapabilityManifest::default_manifest();
     (
         StatusCode::OK,
@@ -197,8 +235,13 @@ pub async fn api_metacog_capabilities_handler() -> impl IntoResponse {
 
 pub async fn api_metacog_calibration_handler(
     State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
     Query(query): Query<MetacogQuery>,
 ) -> impl IntoResponse {
+    if !is_api_authorized(&headers, &state) {
+        return unauthorized_diag();
+    }
+
     match state.session_store.get_metacognitive_calibration_stats().await {
         Ok(stats) => (
             StatusCode::OK,
@@ -217,4 +260,3 @@ pub async fn api_metacog_calibration_handler(
         ),
     }
 }
-

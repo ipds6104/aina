@@ -74,17 +74,8 @@ pub fn hmac_sha256(key: &[u8], message: &[u8]) -> [u8; 32] {
     outer.finalize().into()
 }
 
-/// Constant-time byte slice comparison to prevent timing attacks
-pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    let mut diff = 0u8;
-    for (x, y) in a.iter().zip(b.iter()) {
-        diff |= x ^ y;
-    }
-    diff == 0
-}
+/// Re-export shared constant-time comparison helper from `web::auth`.
+pub use crate::adapters::driving::web::auth::constant_time_eq;
 
 /// Sign a session struct into a tamper-evident session token
 pub fn sign_session(session: &AuthenticatedUserSession, secret: &str) -> String {
@@ -137,15 +128,48 @@ pub fn extract_session_from_headers(
     None
 }
 
-/// Resolve the active session secret for HMAC signing
+/// Extract a named cookie value from HTTP `Cookie` header.
+fn extract_cookie_value(headers: &HeaderMap, cookie_name: &str) -> Option<String> {
+    let cookie_header = headers.get(header::COOKIE)?.to_str().ok()?;
+    let prefix = format!("{}=", cookie_name);
+    for part in cookie_header.split(';') {
+        let trimmed = part.trim();
+        if let Some(val) = trimmed.strip_prefix(&prefix) {
+            return Some(val.to_string());
+        }
+    }
+    None
+}
+
+/// Detects whether the client connection is served over HTTPS (for cookie `Secure` flag).
+fn is_https_context(headers: &HeaderMap, state: &WebhookServerState) -> bool {
+    if let Some(ref redirect_uri) = state.oidc_config.redirect_uri {
+        if redirect_uri.trim().starts_with("https://") {
+            return true;
+        }
+    }
+    if state.trust_proxy_headers {
+        if let Some(proto) = headers
+            .get("x-forwarded-proto")
+            .and_then(|v| v.to_str().ok())
+        {
+            if proto.trim().eq_ignore_ascii_case("https") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Resolve the active session secret for HMAC signing.
+/// Never falls back to weak/default gateway keys; uses per-boot 256-bit CSPRNG secret when unset.
 pub fn resolve_session_secret(state: &WebhookServerState) -> String {
     if let Some(ref sec) = state.oidc_config.session_secret {
         if !sec.trim().is_empty() {
             return sec.trim().to_string();
         }
     }
-    // Deterministic fallback derived from setup_code and whatsmeow_api_key
-    format!("{}:{}", state.setup_code, state.whatsmeow_api_key)
+    state.ephemeral_session_secret.clone()
 }
 
 /// Clean up expired pending OIDC states (> 10 minutes)
@@ -251,9 +275,14 @@ pub async fn oidc_login_handler(
         urlencoding(&code_challenge),
     );
 
+    let secure_attr = if is_https_context(&headers, &state) {
+        "; Secure"
+    } else {
+        ""
+    };
     let state_cookie = format!(
-        "{}={}; Path=/auth; HttpOnly; SameSite=Lax; Max-Age=600",
-        OIDC_STATE_COOKIE, state_param
+        "{}={}; Path=/auth; HttpOnly; SameSite=Lax; Max-Age=600{}",
+        OIDC_STATE_COOKIE, state_param, secure_attr
     );
 
     let mut response_headers = HeaderMap::new();
@@ -312,6 +341,21 @@ pub async fn oidc_callback_handler(
             .into_response();
         }
     };
+
+    // Verify OIDC_STATE_COOKIE against callback state parameter to prevent Login CSRF
+    let cookie_state = extract_cookie_value(&headers, OIDC_STATE_COOKIE);
+    let state_cookie_matches = cookie_state
+        .as_deref()
+        .map(|c| constant_time_eq(c.as_bytes(), state_param.as_bytes()))
+        .unwrap_or(false);
+    if !state_cookie_matches {
+        warn!("OIDC callback rejected: missing or mismatched state cookie (possible Login CSRF)");
+        return Html(render_auth_error_card(
+            &state.oidc_config.provider_name,
+            "Verifikasi state cookie login gagal. Silakan ulangi proses masuk dari awal.",
+        ))
+        .into_response();
+    }
 
     // Retrieve and remove pending state
     let pending_state = {
@@ -634,14 +678,19 @@ pub async fn oidc_callback_handler(
         name, is_admin, state.oidc_config.provider_name
     );
 
+    let secure_attr = if is_https_context(&headers, &state) {
+        "; Secure"
+    } else {
+        ""
+    };
     let session_cookie = format!(
-        "{}={}; Path=/; HttpOnly; SameSite=Lax; Max-Age={}",
-        OIDC_SESSION_COOKIE, session_token, DEFAULT_SESSION_TTL_SECS
+        "{}={}; Path=/; HttpOnly; SameSite=Lax; Max-Age={}{}",
+        OIDC_SESSION_COOKIE, session_token, DEFAULT_SESSION_TTL_SECS, secure_attr
     );
 
     let clear_state_cookie = format!(
-        "{}=; Path=/auth; HttpOnly; SameSite=Lax; Max-Age=0",
-        OIDC_STATE_COOKIE
+        "{}=; Path=/auth; HttpOnly; SameSite=Lax; Max-Age=0{}",
+        OIDC_STATE_COOKIE, secure_attr
     );
 
     let mut response_headers = HeaderMap::new();

@@ -157,12 +157,15 @@ def run_single_oauth_session(account_idx=1, admin_key=None, server_url="https://
             if server_url and admin_key:
                 print(f"🚀 Mendaftarkan ke Pool Akun Aina ({server_url})...")
                 try:
-                    req_url = f"{server_url.rstrip('/')}/api/auth/token?key={urllib.parse.quote(admin_key)}"
+                    req_url = f"{server_url.rstrip('/')}/api/auth/token"
                     payload = json.dumps({"token": token_content, "setup_code": admin_key}).encode("utf-8")
                     reg_req = urllib.request.Request(
                         req_url,
                         data=payload,
-                        headers={"Content-Type": "application/json"},
+                        headers={
+                            "Content-Type": "application/json",
+                            "X-Admin-Key": admin_key,
+                        },
                     )
                     with urllib.request.urlopen(reg_req, timeout=10) as reg_resp:
                         res_body = json.loads(reg_resp.read().decode("utf-8"))

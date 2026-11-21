@@ -1,17 +1,38 @@
 use crate::adapters::driving::web::auth::{
-    is_admin_session_or_key_authorized, is_api_authorized,
+    constant_time_str_eq, extract_client_ip, is_admin_session_or_key_authorized, is_api_authorized,
 };
 use crate::adapters::driving::web::state::WebhookServerState;
+use crate::adapters::driving::web::ui::chrono_now_secs;
 use axum::{
-    extract::{Query, State},
-    http::{HeaderMap, StatusCode},
-    response::IntoResponse,
+    extract::{ConnectInfo, Extension, State},
+    http::{header, HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
     Json,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::net::SocketAddr;
 use std::sync::Arc;
-use tracing::{error, info};
+use tracing::{error, info, warn};
+
+const ADMIN_UNAUTHORIZED_MSG: &str = "Akses ditolak. Berikan Admin Key yang valid via header (X-Admin-Key / Authorization: Bearer) atau sesi SSO admin.";
+
+fn too_many_requests_response(retry_after_secs: u64) -> Response {
+    let mut resp_headers = HeaderMap::new();
+    if let Ok(val) = retry_after_secs.to_string().parse() {
+        resp_headers.insert(header::RETRY_AFTER, val);
+    }
+    (
+        StatusCode::TOO_MANY_REQUESTS,
+        resp_headers,
+        Json(json!({
+            "success": false,
+            "error": format!("Terlalu banyak percobaan autentikasi gagal. Coba lagi dalam {} detik.", retry_after_secs),
+            "retry_after_secs": retry_after_secs,
+        })),
+    )
+        .into_response()
+}
 
 #[derive(Debug, Serialize)]
 struct ApiStatusResponse {
@@ -91,10 +112,18 @@ pub async fn api_get_models_handler(
     let available: Vec<ModelOption> = discovery
         .models
         .into_iter()
-        .map(|e| ModelOption { id: e.id, name: e.name, category: e.category })
+        .map(|e| ModelOption {
+            id: e.id,
+            name: e.name,
+            category: e.category,
+        })
         .collect();
 
-    Json(ApiModelsResponse { current, available, source })
+    Json(ApiModelsResponse {
+        current,
+        available,
+        source,
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -109,7 +138,11 @@ pub async fn api_set_model_handler(
     Json(payload): Json<SetModelRequest>,
 ) -> impl IntoResponse {
     let authorized = is_admin_session_or_key_authorized(&headers, &state)
-        || payload.admin_key.as_deref().map(|k| k.trim() == state.setup_code.trim()).unwrap_or(false);
+        || payload
+            .admin_key
+            .as_deref()
+            .map(|k| constant_time_str_eq(k, &state.setup_code))
+            .unwrap_or(false);
 
     if !authorized {
         return (
@@ -134,18 +167,15 @@ pub async fn api_set_model_handler(
                 })),
             )
         }
-        Err(e) => {
-            (
-                StatusCode::BAD_REQUEST,
-                Json(json!({
-                    "success": false,
-                    "error": format!("{}", e)
-                })),
-            )
-        }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "error": format!("{}", e)
+            })),
+        ),
     }
 }
-
 
 #[derive(Debug, Deserialize)]
 pub struct SetupRequest {
@@ -155,31 +185,64 @@ pub struct SetupRequest {
 
 pub async fn api_setup_handler(
     State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
     Json(payload): Json<SetupRequest>,
-) -> impl IntoResponse {
+) -> Response {
     info!("Received token configuration request via /api/setup");
 
-    // Industry-Standard Security Check: Verify Setup Code / Admin Key
-    if payload.setup_code.trim() != state.setup_code.trim() {
+    let client_ip = extract_client_ip(
+        &headers,
+        peer.map(|Extension(ConnectInfo(addr))| addr),
+        state.trust_proxy_headers,
+    );
+    let now = chrono_now_secs();
+
+    if let Some(retry_after) = state.auth_attempt_limiter.check_locked(client_ip, now).await {
+        warn!(
+            "Rate-limited /api/setup request from {} (retry_after={}s)",
+            client_ip, retry_after
+        );
+        return too_many_requests_response(retry_after);
+    }
+
+    // Fail-closed constant-time verification of Setup Code / Admin Key (or valid OIDC admin session)
+    let authorized = is_admin_session_or_key_authorized(&headers, &state)
+        || constant_time_str_eq(&payload.setup_code, &state.setup_code);
+
+    if !authorized {
+        if let Some(retry_after) = state
+            .auth_attempt_limiter
+            .record_failure(client_ip, now)
+            .await
+        {
+            warn!(
+                "IP {} locked out on /api/setup after repeated failures ({}s)",
+                client_ip, retry_after
+            );
+            return too_many_requests_response(retry_after);
+        }
         return (
             StatusCode::UNAUTHORIZED,
             Json(json!({
                 "success": false,
                 "message": "Kode Setup / Admin Key salah! Masukkan kode yang tertera di log deployment server atau ADMIN_KEY Anda."
             })),
-        );
+        )
+            .into_response();
     }
-    
+
+    state.auth_attempt_limiter.record_success(client_ip).await;
+
     match state.agent_engine.save_auth_token(&payload.token).await {
-        Ok(_) => {
-            (
-                StatusCode::OK,
-                Json(json!({
-                    "success": true,
-                    "message": "Token berhasil diverifikasi dan disimpan! Aina sekarang aktif."
-                })),
-            )
-        }
+        Ok(_) => (
+            StatusCode::OK,
+            Json(json!({
+                "success": true,
+                "message": "Token berhasil diverifikasi dan disimpan! Aina sekarang aktif."
+            })),
+        )
+            .into_response(),
         Err(e) => {
             error!("Setup token verification failed: {}", e);
             (
@@ -189,6 +252,7 @@ pub async fn api_setup_handler(
                     "message": format!("Verifikasi token gagal: {}", e)
                 })),
             )
+                .into_response()
         }
     }
 }
@@ -201,7 +265,18 @@ pub struct AddTokenApiRequest {
 
 pub async fn api_get_accounts_handler(
     State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
 ) -> impl IntoResponse {
+    if !is_api_authorized(&headers, &state) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "success": false,
+                "error": ADMIN_UNAUTHORIZED_MSG,
+            })),
+        );
+    }
+
     let accounts = state.agent_engine.get_account_pool_status().await;
     (
         StatusCode::OK,
@@ -216,20 +291,21 @@ pub async fn api_get_accounts_handler(
 pub async fn api_add_token_handler(
     State(state): State<Arc<WebhookServerState>>,
     headers: HeaderMap,
-    Query(query): Query<std::collections::HashMap<String, String>>,
     Json(payload): Json<AddTokenApiRequest>,
 ) -> impl IntoResponse {
-    let key_candidate = query.get("key")
-        .or_else(|| query.get("api_key"))
-        .map(|s| s.as_str())
-        .or(payload.setup_code.as_deref());
+    let authorized = is_api_authorized(&headers, &state)
+        || payload
+            .setup_code
+            .as_deref()
+            .map(|k| constant_time_str_eq(k, &state.setup_code))
+            .unwrap_or(false);
 
-    if !is_api_authorized(&headers, key_candidate, &state) {
+    if !authorized {
         return (
             StatusCode::UNAUTHORIZED,
             Json(json!({
                 "success": false,
-                "error": "Akses ditolak. Berikan API Key atau Admin Key yang valid."
+                "error": ADMIN_UNAUTHORIZED_MSG
             })),
         );
     }
@@ -264,14 +340,30 @@ pub struct VerifyAdminRequest {
 
 pub async fn api_verify_admin_handler(
     State(state): State<Arc<WebhookServerState>>,
+    headers: HeaderMap,
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
     Json(payload): Json<VerifyAdminRequest>,
-) -> impl IntoResponse {
-    let key = payload.admin_key.trim();
-    let is_valid = (!state.setup_code.trim().is_empty() && key == state.setup_code.trim())
-        || (!state.whatsmeow_api_key.trim().is_empty() && key == state.whatsmeow_api_key.trim())
-        || state.companion_api_key.as_deref().map(|k| !k.trim().is_empty() && key == k.trim()).unwrap_or(false);
+) -> Response {
+    let client_ip = extract_client_ip(
+        &headers,
+        peer.map(|Extension(ConnectInfo(addr))| addr),
+        state.trust_proxy_headers,
+    );
+    let now = chrono_now_secs();
+
+    if let Some(retry_after) = state.auth_attempt_limiter.check_locked(client_ip, now).await {
+        warn!(
+            "Rate-limited /api/auth/verify request from {} (retry_after={}s)",
+            client_ip, retry_after
+        );
+        return too_many_requests_response(retry_after);
+    }
+
+    // Fail-closed constant-time verification strictly against setup_code (gateway keys cannot grant admin)
+    let is_valid = constant_time_str_eq(&payload.admin_key, &state.setup_code);
 
     if is_valid {
+        state.auth_attempt_limiter.record_success(client_ip).await;
         (
             StatusCode::OK,
             Json(json!({
@@ -279,7 +371,19 @@ pub async fn api_verify_admin_handler(
                 "message": "Autentikasi admin berhasil!"
             })),
         )
+            .into_response()
     } else {
+        if let Some(retry_after) = state
+            .auth_attempt_limiter
+            .record_failure(client_ip, now)
+            .await
+        {
+            warn!(
+                "IP {} locked out on /api/auth/verify after repeated failures ({}s)",
+                client_ip, retry_after
+            );
+            return too_many_requests_response(retry_after);
+        }
         (
             StatusCode::UNAUTHORIZED,
             Json(json!({
@@ -287,25 +391,21 @@ pub async fn api_verify_admin_handler(
                 "message": "Admin Key / Setup Code salah! Periksa log server Anda."
             })),
         )
+            .into_response()
     }
 }
 
 pub async fn api_remove_account_handler(
     State(state): State<Arc<WebhookServerState>>,
     headers: HeaderMap,
-    Query(query): Query<std::collections::HashMap<String, String>>,
     axum::extract::Path(id): axum::extract::Path<usize>,
 ) -> impl IntoResponse {
-    let key_candidate = query.get("key")
-        .or_else(|| query.get("api_key"))
-        .map(|s| s.as_str());
-
-    if !is_api_authorized(&headers, key_candidate, &state) {
+    if !is_api_authorized(&headers, &state) {
         return (
             StatusCode::UNAUTHORIZED,
             Json(json!({
                 "success": false,
-                "error": "Akses ditolak. Berikan API Key atau Admin Key yang valid."
+                "error": ADMIN_UNAUTHORIZED_MSG
             })),
         );
     }
@@ -343,18 +443,13 @@ pub async fn api_remove_account_handler(
 pub async fn api_clear_accounts_handler(
     State(state): State<Arc<WebhookServerState>>,
     headers: HeaderMap,
-    Query(query): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    let key_candidate = query.get("key")
-        .or_else(|| query.get("api_key"))
-        .map(|s| s.as_str());
-
-    if !is_api_authorized(&headers, key_candidate, &state) {
+    if !is_api_authorized(&headers, &state) {
         return (
             StatusCode::UNAUTHORIZED,
             Json(json!({
                 "success": false,
-                "error": "Akses ditolak. Berikan API Key atau Admin Key yang valid."
+                "error": ADMIN_UNAUTHORIZED_MSG
             })),
         );
     }
@@ -392,18 +487,13 @@ pub struct OAuthExchangeRequest {
 pub async fn api_oauth_init_handler(
     State(state): State<Arc<WebhookServerState>>,
     headers: HeaderMap,
-    Query(query): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    let key_candidate = query.get("key")
-        .or_else(|| query.get("api_key"))
-        .map(|s| s.as_str());
-
-    if !is_api_authorized(&headers, key_candidate, &state) {
+    if !is_api_authorized(&headers, &state) {
         return (
             StatusCode::UNAUTHORIZED,
             Json(json!({
                 "success": false,
-                "error": "Akses ditolak. Berikan API Key atau Admin Key yang valid."
+                "error": ADMIN_UNAUTHORIZED_MSG
             })),
         );
     }
@@ -430,25 +520,30 @@ pub async fn api_oauth_init_handler(
 pub async fn api_oauth_exchange_handler(
     State(state): State<Arc<WebhookServerState>>,
     headers: HeaderMap,
-    Query(query): Query<std::collections::HashMap<String, String>>,
     Json(payload): Json<OAuthExchangeRequest>,
 ) -> impl IntoResponse {
-    let key_candidate = query.get("key")
-        .or_else(|| query.get("api_key"))
-        .map(|s| s.as_str())
-        .or(payload.setup_code.as_deref());
+    let authorized = is_api_authorized(&headers, &state)
+        || payload
+            .setup_code
+            .as_deref()
+            .map(|k| constant_time_str_eq(k, &state.setup_code))
+            .unwrap_or(false);
 
-    if !is_api_authorized(&headers, key_candidate, &state) {
+    if !authorized {
         return (
             StatusCode::UNAUTHORIZED,
             Json(json!({
                 "success": false,
-                "error": "Akses ditolak. Berikan API Key atau Admin Key yang valid."
+                "error": ADMIN_UNAUTHORIZED_MSG
             })),
         );
     }
 
-    match state.agent_engine.exchange_oauth_code(&payload.session_id, &payload.code).await {
+    match state
+        .agent_engine
+        .exchange_oauth_code(&payload.session_id, &payload.code)
+        .await
+    {
         Ok(email) => {
             let accounts = state.agent_engine.get_account_pool_status().await;
             (

@@ -81,7 +81,8 @@ pub fn get_scripts() -> &'static str {
             if (!listEl) return;
             const key = localStorage.getItem('aina_admin_key') || '';
             try {
-                const res = await fetch('/api/auth/accounts?key=' + encodeURIComponent(key));
+                const headers = key ? { 'X-Admin-Key': key } : {};
+                const res = await fetch('/api/auth/accounts', { headers });
                 const data = await res.json();
                 if (res.ok && data.success && data.accounts) {
                     if (data.accounts.length === 0) {
@@ -158,7 +159,7 @@ pub fn get_scripts() -> &'static str {
 
             let key = (keyInput ? keyInput.value.trim() : '') || localStorage.getItem('aina_admin_key') || '';
             if (!key) {
-                alertEl.innerText = 'Harap masukkan Admin Key atau WHATSMEOW_API_KEY terlebih dahulu di kolom atas.';
+                alertEl.innerText = 'Harap masukkan Admin Key / Setup Code terlebih dahulu di kolom atas.';
                 alertEl.style.color = '#ef4444';
                 alertEl.style.display = 'block';
                 return;
@@ -179,8 +180,10 @@ pub fn get_scripts() -> &'static str {
             alertEl.style.display = 'none';
 
             try {
-                const res = await fetch('/api/auth/oauth/init?key=' + encodeURIComponent(key), {
-                    method: 'POST'
+                const headers = key ? { 'X-Admin-Key': key } : {};
+                const res = await fetch('/api/auth/oauth/init', {
+                    method: 'POST',
+                    headers
                 });
                 const data = await res.json();
                 if (res.ok && data.success && data.auth_url) {
@@ -284,9 +287,11 @@ pub fn get_scripts() -> &'static str {
             const timeoutId = setTimeout(() => controller.abort(), 20000);
 
             try {
-                const res = await fetch('/api/auth/oauth/exchange?key=' + encodeURIComponent(key), {
+                const headers = { 'Content-Type': 'application/json' };
+                if (key) headers['X-Admin-Key'] = key;
+                const res = await fetch('/api/auth/oauth/exchange', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers,
                     signal: controller.signal,
                     body: JSON.stringify({
                         session_id: currentOAuthSessionId,
@@ -332,8 +337,10 @@ pub fn get_scripts() -> &'static str {
             if (!confirm('Yakin ingin menghapus Akun #' + id + ' dari pool?')) return;
             const key = localStorage.getItem('aina_admin_key') || '';
             try {
-                const res = await fetch('/api/auth/accounts/' + id + '?key=' + encodeURIComponent(key), {
-                    method: 'DELETE'
+                const headers = key ? { 'X-Admin-Key': key } : {};
+                const res = await fetch('/api/auth/accounts/' + id, {
+                    method: 'DELETE',
+                    headers
                 });
                 const data = await res.json();
                 if (res.ok && data.success) {
@@ -370,7 +377,7 @@ pub fn get_scripts() -> &'static str {
             const tokenVal = tokenInput.value.trim();
 
             if (!key) {
-                alertEl.innerText = 'Harap masukkan Admin Key atau WHATSMEOW_API_KEY Anda pada kolom di atas.';
+                alertEl.innerText = 'Harap masukkan Admin Key / Setup Code Anda pada kolom di atas.';
                 alertEl.style.color = '#ef4444';
                 alertEl.style.display = 'block';
                 return;
@@ -388,9 +395,11 @@ pub fn get_scripts() -> &'static str {
             alertEl.style.display = 'none';
 
             try {
-                const res = await fetch('/api/auth/token?key=' + encodeURIComponent(key), {
+                const headers = { 'Content-Type': 'application/json' };
+                if (key) headers['X-Admin-Key'] = key;
+                const res = await fetch('/api/auth/token', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers,
                     body: JSON.stringify({ token: tokenVal, setup_code: key })
                 });
                 const data = await res.json();
@@ -558,7 +567,9 @@ pub fn get_scripts() -> &'static str {
             listEl.innerHTML = '';
 
             try {
-                const res = await fetch(`/api/models?key=${encodeURIComponent(key)}`);
+                const res = await fetch('/api/models', {
+                    headers: key ? { 'X-Admin-Key': key } : {}
+                });
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
 
@@ -660,7 +671,9 @@ pub fn get_scripts() -> &'static str {
             }
 
             try {
-                const res = await fetch(`/api/models?key=${encodeURIComponent(key)}`);
+                const res = await fetch('/api/models', {
+                    headers: key ? { 'X-Admin-Key': key } : {}
+                });
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
 
@@ -1118,10 +1131,10 @@ pub fn get_scripts() -> &'static str {
             if (!usecasesEl || !toolsEl) return;
 
             const key = localStorage.getItem('aina_admin_key') || '';
-            const url = '/api/audit/summary' + (key ? ('?key=' + encodeURIComponent(key)) : '');
+            const headers = key ? { 'X-Admin-Key': key } : {};
 
             try {
-                const res = await fetch(url);
+                const res = await fetch('/api/audit/summary', { headers });
                 const data = await res.json();
                 if (res.ok && data.success && data.summary) {
                     const s = data.summary;
