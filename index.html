@@ -1795,6 +1795,22 @@
     letter-spacing:.02em;
   }
 
+  /* ============ Slide 15 Layer Brand Emblems (WhatsApp / Sakura / AGY CLI) ============ */
+  .layer-emblem{
+    width:min(3.8vw,6.8vh);
+    height:min(3.8vw,6.8vh);
+    margin-bottom:2vh;
+    display:flex;align-items:center;justify-content:flex-start;
+    flex-shrink:0;
+  }
+  .layer-emblem svg{
+    width:100%;height:100%;display:block;
+  }
+  .layer-emblem img{
+    width:100%;height:100%;object-fit:contain;display:block;
+    image-rendering:pixelated;
+  }
+
   /* ============ Click-to-Zoom Lightbox (Screenshots & Mermaid) ============ */
   #wa-lightbox{
     position:fixed;inset:0;z-index:9999;
@@ -2619,15 +2635,31 @@ flowchart LR
       <div class="stack-row" style="margin-top:1vh">
         <div class="stack-block b-grey">
           <div class="layer-nb">LAYER 01 · INTERFACE &amp; GUARD</div>
-          <i data-lucide="webhook"></i>
+          <div class="layer-emblem" aria-label="Logo WhatsApp">
+            <svg viewBox="0 0 32 32" fill="currentColor" aria-hidden="true">
+              <path d="M16.01 3C8.84 3 3.01 8.82 3.01 16c0 2.53.72 4.89 1.98 6.89L3 29l6.31-1.95A12.92 12.92 0 0 0 16.01 29C23.18 29 29 23.18 29 16S23.18 3 16.01 3zm0 23.62c-2.16 0-4.27-.63-6.08-1.82l-.44-.29-3.74 1.16 1.2-3.65-.31-.47A10.56 10.56 0 0 1 5.4 16c0-5.85 4.76-10.61 10.61-10.61S26.62 10.15 26.62 16s-4.76 10.62-10.61 10.62zm5.82-7.95c-.32-.16-1.88-.93-2.17-1.03-.29-.11-.5-.16-.71.16-.21.32-.82 1.03-1.01 1.25-.18.21-.37.24-.69.08-.32-.16-1.35-.5-2.57-1.59-.95-.85-1.59-1.9-1.78-2.22-.18-.32-.02-.49.14-.65.14-.14.32-.37.48-.56.16-.18.21-.32.32-.53.11-.21.05-.4-.03-.56-.08-.16-.71-1.72-.98-2.36-.26-.62-.52-.54-.71-.55h-.61c-.21 0-.56.08-.85.4-.29.32-1.11 1.09-1.11 2.65s1.14 3.07 1.3 3.28c.16.21 2.24 3.42 5.43 4.8.76.33 1.35.52 1.81.67.76.24 1.45.21 2 .13.61-.09 1.88-.77 2.15-1.51.26-.74.26-1.38.18-1.51-.08-.13-.29-.21-.61-.37z"/>
+            </svg>
+          </div>
           <div class="layer-ttl">Gerbang WhatsApp &amp; Zero-Trust</div>
           <div class="layer-desc">Whatsmeow Webhook (IF-01/02), verifikasi peran 4 tingkat (Admin, Staf, Mitra, Tamu), penjadwal otonom (IF-08), dan Web Setup OIDC (IF-05).</div>
           <div class="layer-tag">90 RUANG CHAT · ZERO APP INSTALL</div>
         </div>
 
         <div class="stack-block b-accent">
-          <div class="layer-nb">LAYER 02 · RUST CORE DAEMON</div>
-          <i data-lucide="shield-check"></i>
+          <div class="layer-nb">LAYER 02 · AINA CORE (RUST)</div>
+          <div class="layer-emblem" aria-label="Logo Bunga Sakura Aina">
+            <svg viewBox="0 0 64 64" fill="none" aria-hidden="true">
+              <g fill="currentColor">
+                <path d="M32 28 C25 22 22 12 27 6 C29.5 3.5 31 6.5 32 9.5 C33 6.5 34.5 3.5 37 6 C42 12 39 22 32 28 Z"/>
+                <path d="M32 28 C25 22 22 12 27 6 C29.5 3.5 31 6.5 32 9.5 C33 6.5 34.5 3.5 37 6 C42 12 39 22 32 28 Z" transform="rotate(72 32 32)"/>
+                <path d="M32 28 C25 22 22 12 27 6 C29.5 3.5 31 6.5 32 9.5 C33 6.5 34.5 3.5 37 6 C42 12 39 22 32 28 Z" transform="rotate(144 32 32)"/>
+                <path d="M32 28 C25 22 22 12 27 6 C29.5 3.5 31 6.5 32 9.5 C33 6.5 34.5 3.5 37 6 C42 12 39 22 32 28 Z" transform="rotate(216 32 32)"/>
+                <path d="M32 28 C25 22 22 12 27 6 C29.5 3.5 31 6.5 32 9.5 C33 6.5 34.5 3.5 37 6 C42 12 39 22 32 28 Z" transform="rotate(288 32 32)"/>
+              </g>
+              <circle cx="32" cy="32" r="5" fill="var(--accent)"/>
+              <circle cx="32" cy="32" r="2.2" fill="currentColor"/>
+            </svg>
+          </div>
           <div class="layer-ttl">Aina Core &amp; Penyimpanan Lokal</div>
           <div class="layer-desc">Dibangun dengan Rust (hemat RAM di ThinkStation P320 24/7), SQLite WAL kebal mati lampu (IF-04), Infisical Secret Vault (IF-06), &amp; rolling update zero-downtime.</div>
           <div class="layer-tag">HEXAGONAL CORE · ZERO HARDCODED SECRET</div>
@@ -2635,7 +2667,9 @@ flowchart LR
 
         <div class="stack-block b-ink">
           <div class="layer-nb">LAYER 03 · AGENTIC SANDBOX</div>
-          <i data-lucide="terminal"></i>
+          <div class="layer-emblem" aria-label="Logo Google Antigravity CLI">
+            <img src="images/15-agy-cli-logo.png" data-image-slot="s05-layer-badge" alt="Logo resmi Google Antigravity CLI (agy)">
+          </div>
           <div class="layer-ttl">Antigravity CLI &amp; Ekosistem Tool</div>
           <div class="layer-desc">Google Antigravity CLI (<code style="font-family:var(--mono)">agy</code>) dengan Web Search bawaan (IF-09) &amp; Canary Auto-Update, Typst PDF, Patchright HiDPI, Dokter V, &amp; Google Suite (IF-07).</div>
           <div class="layer-tag">26 CUSTOM SKILLS · 1.042 TOOL RUNS</div>
