@@ -52,6 +52,11 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     rm -rf src build.rs target/release/deps/aina* target/release/aina* target/release/build/aina*
 
 # Copy compilation inputs (source code, build script, and compile-time baseline configuration)
+# Declared after dependency cache layer so changing commit SHA never invalidates cargo deps cache
+ARG AINA_GIT_COMMIT=""
+ARG AINA_GIT_BRANCH=""
+ARG SOURCE_COMMIT=""
+ARG COOLIFY_BRANCH=""
 COPY build.rs ./
 COPY src/ ./src/
 COPY config/activities.default.json ./config/activities.default.json

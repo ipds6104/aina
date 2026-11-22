@@ -21,9 +21,13 @@ fn main() {
     println!("cargo:rustc-env=AINA_GIT_BRANCH={}", git_branch);
     println!("cargo:rustc-env=AINA_BUILD_TIME={}", build_time);
 
-    // Re-run build script if git HEAD changes
+    // Re-run build script if git HEAD or build metadata env vars change
     println!("cargo:rerun-if-changed=.git/HEAD");
     println!("cargo:rerun-if-changed=.git/refs");
+    println!("cargo:rerun-if-env-changed=AINA_GIT_COMMIT");
+    println!("cargo:rerun-if-env-changed=SOURCE_COMMIT");
+    println!("cargo:rerun-if-env-changed=AINA_GIT_BRANCH");
+    println!("cargo:rerun-if-env-changed=COOLIFY_BRANCH");
 }
 
 fn format_timestamp_rfc3339(secs: u64) -> String {
@@ -48,16 +52,25 @@ fn format_timestamp_rfc3339(secs: u64) -> String {
     format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", final_y, m, d, hh, mm, ss)
 }
 
+fn normalize_short_commit(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("unknown") {
+        return None;
+    }
+    let short: String = trimmed.chars().take(7).collect();
+    Some(short)
+}
+
 fn get_git_commit() -> String {
-    // 1. Env vars
+    // 1. Env vars (GitHub Actions / Docker build-arg / Coolify SOURCE_COMMIT)
     if let Ok(c) = std::env::var("AINA_GIT_COMMIT") {
-        if !c.trim().is_empty() {
-            return c.trim().to_string();
+        if let Some(short) = normalize_short_commit(&c) {
+            return short;
         }
     }
     if let Ok(c) = std::env::var("SOURCE_COMMIT") {
-        if !c.trim().is_empty() {
-            return c.trim().to_string();
+        if let Some(short) = normalize_short_commit(&c) {
+            return short;
         }
     }
 

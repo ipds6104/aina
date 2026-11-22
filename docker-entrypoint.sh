@@ -61,12 +61,13 @@ ln -sfn /app/data/activities "${AGENT_WORKSPACE:-/app/workspaces/default}/data/a
 
 for cfg in persona.md character.md activities.md organization.md activities.default.json; do
     # 1. Always keep pristine default template from image available for factory reset
-    if [ -f "/app/config/${cfg}.default.md" ]; then
-        cp "/app/config/${cfg}.default.md" "/app/data/config/${cfg}.default.md" 2>/dev/null || true
-    elif [ -f "/app/config/${cfg}.default" ]; then
-        cp "/app/config/${cfg}.default" "/app/data/config/${cfg}.default.md" 2>/dev/null || true
-    elif [ -f "/app/config/${cfg}" ] && [ ! -f "/app/data/config/${cfg}.default.md" ]; then
-        cp "/app/config/${cfg}" "/app/data/config/${cfg}.default.md" 2>/dev/null || true
+    if [[ "$cfg" == *.md ]]; then
+        stem="${cfg%.md}"
+        if [ -f "/app/config/${stem}.default.md" ]; then
+            cp "/app/config/${stem}.default.md" "/app/data/config/${stem}.default.md" 2>/dev/null || true
+        elif [ -f "/app/config/${cfg}" ] && [ ! -f "/app/data/config/${stem}.default.md" ]; then
+            cp "/app/config/${cfg}" "/app/data/config/${stem}.default.md" 2>/dev/null || true
+        fi
     fi
 
     # 2. Initialize active config in persistent volume on first deployment if not yet present
