@@ -414,6 +414,48 @@ impl SessionStorePort for SqliteSessionStore {
         session::purge_expired_turn_capabilities(&conn, now)
     }
 
+    async fn create_turn_progress_session(
+        &self,
+        progress_session: &crate::core::domain::TurnProgressSession,
+    ) -> anyhow::Result<()> {
+        let conn = self.conn.lock().await;
+        session::create_turn_progress_session(&conn, progress_session)
+    }
+
+    async fn get_turn_progress_session(
+        &self,
+        turn_token: &str,
+    ) -> anyhow::Result<Option<crate::core::domain::TurnProgressSession>> {
+        let conn = self.conn.lock().await;
+        session::get_turn_progress_session(&conn, turn_token)
+    }
+
+    async fn get_active_turn_progress_for_chat(
+        &self,
+        chat_jid: &str,
+    ) -> anyhow::Result<Option<crate::core::domain::TurnProgressSession>> {
+        let conn = self.conn.lock().await;
+        session::get_active_turn_progress_for_chat(&conn, chat_jid)
+    }
+
+    async fn take_pending_progress_messages(
+        &self,
+        turn_token: &str,
+    ) -> anyhow::Result<Vec<crate::core::domain::PendingProgressMessage>> {
+        let conn = self.conn.lock().await;
+        session::take_pending_progress_messages(&conn, turn_token)
+    }
+
+    async fn complete_turn_progress_session(&self, turn_token: &str) -> anyhow::Result<()> {
+        let conn = self.conn.lock().await;
+        session::complete_turn_progress_session(&conn, turn_token)
+    }
+
+    async fn complete_active_turn_progress_for_chat(&self, chat_jid: &str) -> anyhow::Result<()> {
+        let conn = self.conn.lock().await;
+        session::complete_active_turn_progress_for_chat(&conn, chat_jid)
+    }
+
     async fn record_experience(&self, exp: &crate::core::domain::NewExperienceRecord) -> anyhow::Result<String> {
         let conn = self.conn.lock().await;
         experience::record_experience(&conn, exp)
@@ -855,6 +897,105 @@ mod tests {
         assert!(verify_result.is_err(), "Verification should fail when audit trail is tampered");
         let err_msg = verify_result.unwrap_err().to_string();
         assert!(err_msg.contains("Integritas data termanipulasi pada audit ID 2"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_turn_progress_session_atomic_outbox_and_completion() {
+        use crate::core::domain::{ProgressDecision, ProgressPolicy, TurnProgressSession};
+
+        let dir = std::env::temp_dir().join(format!("aina_test_progress_{}", rand::random::<u32>()));
+        let db_file = dir.join("test_progress.db");
+        let store = SqliteSessionStore::new(&db_file).unwrap();
+
+        let sess = TurnProgressSession {
+            turn_token: "tok_prog_abc123".to_string(),
+            chat_jid: "6281234567890@s.whatsapp.net".to_string(),
+            chat_type: "direct".to_string(),
+            message_id: "msg_prog_1".to_string(),
+            started_at_epoch: 1_700_000_000,
+            last_progress_at_epoch: None,
+            last_progress_text: None,
+            progress_count: 0,
+            is_active: true,
+        };
+        store.create_turn_progress_session(&sess).await.unwrap();
+
+        let policy = ProgressPolicy::default();
+
+        // Enqueue via raw connection (simulating `aina progress` CLI subprocess)
+        {
+            let conn = rusqlite::Connection::open(&db_file).unwrap();
+            let (dec1, _) = session::try_enqueue_turn_progress_update(
+                &conn,
+                "tok_prog_abc123",
+                "Ketemu EPUB di katalog, lagi Aina download dari mirror yaa.",
+                &policy,
+                1_700_000_030,
+            )
+            .unwrap()
+            .expect("session must exist");
+            assert!(matches!(dec1, ProgressDecision::Allow { .. }));
+
+            // Immediate second call within 90s cooldown must be atomically denied
+            let (dec2, _) = session::try_enqueue_turn_progress_update(
+                &conn,
+                "tok_prog_abc123",
+                "Update terlalu cepat",
+                &policy,
+                1_700_000_060,
+            )
+            .unwrap()
+            .expect("session must exist");
+            assert!(matches!(dec2, ProgressDecision::Deny { code: "cooldown_active", .. }));
+        }
+
+        // Active lookup by chat reflects latest real progress text
+        let active = store
+            .get_active_turn_progress_for_chat("6281234567890@s.whatsapp.net")
+            .await
+            .unwrap()
+            .expect("active session expected");
+        assert_eq!(active.progress_count, 1);
+        assert_eq!(
+            active.last_progress_text.as_deref(),
+            Some("Ketemu EPUB di katalog, lagi Aina download dari mirror yaa.")
+        );
+
+        // Daemon drains outbox once (second drain is empty)
+        let pending = store.take_pending_progress_messages("tok_prog_abc123").await.unwrap();
+        assert_eq!(pending.len(), 1);
+        assert!(pending[0].text.contains("Ketemu EPUB"));
+        let empty = store.take_pending_progress_messages("tok_prog_abc123").await.unwrap();
+        assert!(empty.is_empty());
+
+        // Enqueue second message after cooldown, then complete session BEFORE drain:
+        // undelivered stale message MUST be discarded so it never races past final answer
+        {
+            let conn = rusqlite::Connection::open(&db_file).unwrap();
+            let (dec3, _) = session::try_enqueue_turn_progress_update(
+                &conn,
+                "tok_prog_abc123",
+                "Konversi selesai, lagi upload ke Drive yaa.",
+                &policy,
+                1_700_000_200,
+            )
+            .unwrap()
+            .unwrap();
+            assert!(matches!(dec3, ProgressDecision::Allow { .. }));
+        }
+        store.complete_turn_progress_session("tok_prog_abc123").await.unwrap();
+        assert!(store
+            .take_pending_progress_messages("tok_prog_abc123")
+            .await
+            .unwrap()
+            .is_empty());
+        assert!(store
+            .get_active_turn_progress_for_chat("6281234567890@s.whatsapp.net")
+            .await
+            .unwrap()
+            .is_none());
 
         let _ = std::fs::remove_dir_all(&dir);
     }

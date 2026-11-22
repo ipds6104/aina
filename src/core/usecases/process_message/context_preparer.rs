@@ -203,6 +203,22 @@ impl ContextPreparer {
             persona_engine.build_prompt_full(msg, Some(&profile), &user_groups)
         };
 
+        // 3b. Stale Queued Follow-Up Awareness: if this message waited >= 45s behind a previous
+        // long-running turn, tell Aina so she doesn't duplicate a reply/link she just sent.
+        if msg.timestamp > 0 {
+            let msg_ts_secs = if msg.timestamp > 10_000_000_000 {
+                msg.timestamp / 1000
+            } else {
+                msg.timestamp
+            };
+            let wait_secs = chrono::Utc::now().timestamp().saturating_sub(msg_ts_secs);
+            if let Some(stale_hint) = crate::core::domain::format_stale_queued_message_hint(wait_secs) {
+                prompt.push_str("\n\n---\n");
+                prompt.push_str(&stale_hint);
+                prompt.push('\n');
+            }
+        }
+
         // Per-turn randomized 64-bit hex nonce for XML data isolation boundaries (Phase 20)
         let turn_nonce = crate::core::domain::persona::generate_turn_nonce();
 

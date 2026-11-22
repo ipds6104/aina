@@ -11,6 +11,7 @@ pub mod metacognition;
 pub mod persona;
 pub mod persona_lifecycle;
 pub mod profiler;
+pub mod progress;
 pub mod rate_limiter;
 pub mod retrospective_detector;
 pub mod scheduler;
@@ -43,6 +44,11 @@ pub use metacognition::*;
 pub use persona::PersonaEngine;
 pub use persona_lifecycle::*;
 pub use profiler::*;
+pub use progress::{
+    format_elapsed_indonesian, format_in_flight_status_reply, format_stale_queued_message_hint,
+    is_in_flight_progress_inquiry, PendingProgressMessage, ProgressDecision, ProgressPolicy,
+    TurnProgressSession,
+};
 pub use rate_limiter::{IngressRateLimiter, RateLimitConfig, ThrottleDecision};
 pub use retrospective_detector::*;
 pub use scheduler::*;

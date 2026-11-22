@@ -25,19 +25,7 @@ pub fn is_kill_or_cancel_command(text: &str) -> bool {
 }
 
 pub fn is_status_or_inquiry_command(text: &str) -> bool {
-    let lower = text.trim().to_lowercase();
-    lower == "status"
-        || lower == "lagi apa"
-        || lower == "lagi apa?"
-        || lower == "sedang apa"
-        || lower == "sedang apa?"
-        || lower == "apakah ada task"
-        || lower == "apakah ada task?"
-        || lower == "cek task"
-        || lower == "progress"
-        || lower == "/status"
-        || lower.contains("lagi apa")
-        || lower.contains("sedang apa")
+    crate::core::domain::is_in_flight_progress_inquiry(text)
 }
 
 pub async fn dispatch_message_to_queue(state: &Arc<WebhookServerState>, msg: IncomingMessage) {
@@ -56,7 +44,11 @@ pub async fn dispatch_message_to_queue(state: &Arc<WebhookServerState>, msg: Inc
                 msg.chat_jid, msg.text
             );
 
-            // 1a. Immediately dismiss typing presence on WhatsApp
+            // 1a. Immediately dismiss typing presence and close active progress session
+            let _ = state
+                .session_store
+                .complete_active_turn_progress_for_chat(&msg.chat_jid)
+                .await;
             let _ = state
                 .usecase
                 .whatsapp()
@@ -144,27 +136,38 @@ pub async fn dispatch_message_to_queue(state: &Arc<WebhookServerState>, msg: Inc
         }
     }
 
-    // 2. Intercept Status / Inquiry commands if a task is actively running
+    // 2. Intercept Status / Natural In-Flight Progress Inquiry while a task is actively running
     if is_status_or_inquiry_command(&msg.text) {
-        let active = state.active_tasks.lock().await;
-        if let Some(task_info) = active.get(&msg.chat_jid) {
-            let elapsed = (now_epoch - task_info.started_at_epoch).max(0);
-            let preview = if task_info.input_text.len() > 80 {
-                format!("{}...", &task_info.input_text[..80])
-            } else {
-                task_info.input_text.clone()
-            };
-            let reply = format!(
-                "Saat ini Aina sedang memproses tugas:\n_{}_\n\n⏱️ *Durasi berjalan:* {} detik.\n\n💡 _Ketik *'batal'* atau *'kill'* kapan pun jika ingin menghentikan tugas ini._",
-                preview, elapsed
+        let active_started = {
+            let active = state.active_tasks.lock().await;
+            active.get(&msg.chat_jid).map(|t| t.started_at_epoch)
+        };
+        if let Some(started_at) = active_started {
+            let elapsed = (now_epoch - started_at).max(0);
+            let last_progress = state
+                .session_store
+                .get_active_turn_progress_for_chat(&msg.chat_jid)
+                .await
+                .ok()
+                .flatten()
+                .and_then(|s| s.last_progress_text);
+            let reply = crate::core::domain::format_in_flight_status_reply(
+                elapsed,
+                last_progress.as_deref(),
             );
-            drop(active);
-            let _ = state.session_store.record_message(&msg.chat_jid, &state.bot_jid, &reply, true).await;
+            let _ = state
+                .session_store
+                .record_message(&msg.chat_jid, &state.bot_jid, &reply, true)
+                .await;
             let quote_id = match msg.chat_type {
                 crate::core::domain::ChatType::Group => Some(msg.id.as_str()),
                 crate::core::domain::ChatType::DirectMessage => None,
             };
-            let _ = state.usecase.whatsapp().send_text_with_session(&msg.chat_jid, &reply, quote_id, msg.session_role).await;
+            let _ = state
+                .usecase
+                .whatsapp()
+                .send_text_with_session(&msg.chat_jid, &reply, quote_id, msg.session_role)
+                .await;
             return;
         }
     }
@@ -179,7 +182,6 @@ pub async fn dispatch_message_to_queue(state: &Arc<WebhookServerState>, msg: Inc
         async move {
             let chat_jid = m.chat_jid.clone();
             let session_role = m.session_role;
-            let text_preview = m.text.clone();
             let started_epoch = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
@@ -193,7 +195,6 @@ pub async fn dispatch_message_to_queue(state: &Arc<WebhookServerState>, msg: Inc
                     ActiveTaskInfo {
                         abort_handle: join_handle.abort_handle(),
                         started_at_epoch: started_epoch,
-                        input_text: text_preview,
                     },
                 );
             }

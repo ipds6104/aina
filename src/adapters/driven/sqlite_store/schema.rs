@@ -332,6 +332,47 @@ pub fn init_schema(conn: &Connection) -> anyhow::Result<()> {
         [],
     )?;
 
+    // Active turn progress sessions & SQLite outbox for human-like, rate-limited
+    // in-flight updates (`aina progress`) mediated by the daemon without exposing
+    // WhatsApp API secrets to least-privilege agent subprocesses.
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS turn_progress_sessions (
+            turn_token TEXT PRIMARY KEY,
+            chat_jid TEXT NOT NULL,
+            chat_type TEXT NOT NULL,
+            message_id TEXT NOT NULL,
+            started_at_epoch INTEGER NOT NULL,
+            last_progress_at_epoch INTEGER,
+            last_progress_text TEXT,
+            progress_count INTEGER NOT NULL DEFAULT 0,
+            is_active BOOLEAN NOT NULL DEFAULT 1
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_turn_progress_chat_active
+         ON turn_progress_sessions(chat_jid, is_active, started_at_epoch DESC)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS turn_progress_outbox (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            turn_token TEXT NOT NULL,
+            text TEXT NOT NULL,
+            created_at_epoch INTEGER NOT NULL,
+            delivered BOOLEAN NOT NULL DEFAULT 0
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_turn_progress_outbox_pending
+         ON turn_progress_outbox(turn_token, delivered, id ASC)",
+        [],
+    )?;
+
     // Experience Records Table (Harness² Experience Reflection format: cue, lesson, evidence)
     conn.execute(
         "CREATE TABLE IF NOT EXISTS experience_records (

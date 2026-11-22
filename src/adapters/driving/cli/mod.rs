@@ -272,6 +272,14 @@ PENGGUNAAN:
                               Options:
                                 --json                  Output format JSON terstruktur
 
+    progress status           Cek durasi berjalan tur aktif & sisa cooldown kabar progres
+                              Options:
+                                --json                  Output format JSON terstruktur
+
+    progress "<pesan>"        Kirim update progres singkat (1-2 kalimat) ke chat aktif (anti-spam)
+                              Options:
+                                --json                  Output format JSON terstruktur
+
     help, --help, -h          Tampilkan panduan ini
 "#
         );
@@ -308,6 +316,7 @@ PENGGUNAAN:
             "user" | "profile" => commands::handle_user(&args[2..]),
             "group" | "groups" => commands::handle_group(&args[2..]),
             "policy" => commands::handle_policy(&args[2..]),
+            "progress" => commands::handle_progress(&args[2..]),
             "activity" | "act" => commands::handle_activity(&args[2..]).await,
             "schedule" | "cron" => commands::handle_schedule(&args[2..]).await,
             "persona" => commands::handle_persona(&args[2..]).await,

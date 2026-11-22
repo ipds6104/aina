@@ -477,19 +477,41 @@ impl ProcessIncomingMessageUseCase {
                 };
 
                 // Persist the scoped capability so `aina policy` can validate it,
+                // register active turn progress session for `aina progress`,
                 // and sweep stale rows to keep the table small.
                 if let Err(e) = self.session_store.create_turn_capability(&capability).await {
                     warn!("Failed to persist turn capability: {}", e);
+                }
+                let progress_session = crate::core::domain::TurnProgressSession {
+                    turn_token: capability.token.clone(),
+                    chat_jid: capability.chat_jid.clone(),
+                    chat_type: capability.chat_type.clone(),
+                    message_id: capability.message_id.clone(),
+                    started_at_epoch: capability.issued_at,
+                    last_progress_at_epoch: None,
+                    last_progress_text: None,
+                    progress_count: 0,
+                    is_active: true,
+                };
+                if let Err(e) = self
+                    .session_store
+                    .create_turn_progress_session(&progress_session)
+                    .await
+                {
+                    warn!("Failed to persist turn progress session: {}", e);
                 }
                 let _ = self
                     .session_store
                     .purge_expired_turn_capabilities(chrono::Utc::now().timestamp())
                     .await;
 
-                // 6. Background typing presence heartbeat + progressive reassurance
+                // 6. Background typing presence heartbeat, agent progress outbox deliverer & dead-man-switch safety net
                 let mut heartbeat_guard = start_presence_heartbeat(
                     Arc::clone(&self.whatsapp),
+                    Arc::clone(&self.session_store),
+                    self.bot_jid.clone(),
                     msg.chat_jid.clone(),
+                    capability.token.clone(),
                     msg.session_role,
                     quote_id.map(|s| s.to_string()),
                 );
@@ -503,6 +525,10 @@ impl ProcessIncomingMessageUseCase {
                     Ok(res) => {
                         heartbeat_guard.dismiss();
                         let _ = self
+                            .session_store
+                            .complete_turn_progress_session(&capability.token)
+                            .await;
+                        let _ = self
                             .whatsapp
                             .send_presence_with_session(
                                 &msg.chat_jid,
@@ -514,6 +540,10 @@ impl ProcessIncomingMessageUseCase {
                     }
                     Err(e) => {
                         heartbeat_guard.dismiss();
+                        let _ = self
+                            .session_store
+                            .complete_turn_progress_session(&capability.token)
+                            .await;
                         let _ = self
                             .whatsapp
                             .send_presence_with_session(

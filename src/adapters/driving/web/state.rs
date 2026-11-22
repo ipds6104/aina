@@ -63,7 +63,6 @@ pub struct SimulationJob {
 pub struct ActiveTaskInfo {
     pub abort_handle: tokio::task::AbortHandle,
     pub started_at_epoch: i64,
-    pub input_text: String,
 }
 
 /// Default bounded capacity for each per-chat FIFO message queue (Phase 19).

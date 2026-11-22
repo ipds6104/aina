@@ -187,6 +187,7 @@ impl AntigravityCliAdapter {
         prompt: &str,
         model_override: Option<&str>,
         turn_token: Option<&str>,
+        turn_started_epoch: Option<i64>,
         authority: Authority,
     ) -> anyhow::Result<AgentResponse> {
         let active_model = match model_override {
@@ -268,6 +269,7 @@ impl AntigravityCliAdapter {
             cmd.env_remove("WHATSMEOW_COMPANION_URL");
             cmd.env_remove("WHATSMEOW_COMPANION_API_KEY");
             cmd.env_remove("AINA_TURN_TOKEN");
+            cmd.env_remove("AINA_TURN_STARTED_EPOCH");
 
             match authority {
                 Authority::Guest => {
@@ -292,9 +294,13 @@ impl AntigravityCliAdapter {
                 }
             }
             // Scoped, short-lived authorization proof for agent-proposed policy
-            // changes (`aina policy ...`). Absent token => guest-level actions only.
+            // changes (`aina policy ...`) and rate-limited progress updates (`aina progress`).
+            // Absent token => guest-level actions only.
             if let Some(token) = turn_token {
                 cmd.env("AINA_TURN_TOKEN", token);
+            }
+            if let Some(started_epoch) = turn_started_epoch {
+                cmd.env("AINA_TURN_STARTED_EPOCH", started_epoch.to_string());
             }
 
             let start_instant = std::time::Instant::now();
@@ -493,7 +499,7 @@ impl AgentEnginePort for AntigravityCliAdapter {
     ) -> anyhow::Result<AgentResponse> {
         // Internal daemon callers (scheduled tasks / admin simulator) get primary bot access
         // without exposing personal Companion credentials.
-        self.run_agent(conversation_id, prompt, model_override, None, Authority::Staff)
+        self.run_agent(conversation_id, prompt, model_override, None, None, Authority::Staff)
             .await
     }
 
@@ -511,6 +517,7 @@ impl AgentEnginePort for AntigravityCliAdapter {
             prompt,
             None,
             capability.map(|c| c.token.as_str()),
+            capability.map(|c| c.issued_at),
             authority,
         )
         .await
@@ -670,12 +677,13 @@ pub mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let script_path = dir.join("fake_agy_env.sh");
         let script = r#"#!/bin/sh
-printf '{"conversation_id":"env_test","status":"DONE","response":"BASE=%s|API=%s|COMP_URL=%s|COMP_KEY=%s|TOK=%s"}\n' \
+printf '{"conversation_id":"env_test","status":"DONE","response":"BASE=%s|API=%s|COMP_URL=%s|COMP_KEY=%s|TOK=%s|STARTED=%s"}\n' \
   "${WHATSMEOW_BASE_URL:-NONE}" \
   "${WHATSMEOW_API_KEY:-NONE}" \
   "${WHATSMEOW_COMPANION_URL:-NONE}" \
   "${WHATSMEOW_COMPANION_KEY:-NONE}" \
-  "${AINA_TURN_TOKEN:-NONE}"
+  "${AINA_TURN_TOKEN:-NONE}" \
+  "${AINA_TURN_STARTED_EPOCH:-NONE}"
 "#;
         std::fs::write(&script_path, script).unwrap();
         std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755)).unwrap();
@@ -708,7 +716,7 @@ printf '{"conversation_id":"env_test","status":"DONE","response":"BASE=%s|API=%s
             .unwrap();
         assert_eq!(
             guest_res.response_text,
-            format!("BASE=NONE|API=NONE|COMP_URL=NONE|COMP_KEY=NONE|TOK={}", guest_cap.token)
+            format!("BASE=NONE|API=NONE|COMP_URL=NONE|COMP_KEY=NONE|TOK={}|STARTED={}", guest_cap.token, now)
         );
 
         // 2. Missing capability (None): fail-closed to Guest (ZERO credentials)
@@ -718,7 +726,7 @@ printf '{"conversation_id":"env_test","status":"DONE","response":"BASE=%s|API=%s
             .unwrap();
         assert_eq!(
             none_res.response_text,
-            "BASE=NONE|API=NONE|COMP_URL=NONE|COMP_KEY=NONE|TOK=NONE"
+            "BASE=NONE|API=NONE|COMP_URL=NONE|COMP_KEY=NONE|TOK=NONE|STARTED=NONE"
         );
 
         // 3. Staff turn: primary gateway key ONLY, ZERO Companion credentials
@@ -730,8 +738,8 @@ printf '{"conversation_id":"env_test","status":"DONE","response":"BASE=%s|API=%s
         assert_eq!(
             staff_res.response_text,
             format!(
-                "BASE=http://127.0.0.1:8080|API=PRIMARY_SECRET_XYZ|COMP_URL=NONE|COMP_KEY=NONE|TOK={}",
-                staff_cap.token
+                "BASE=http://127.0.0.1:8080|API=PRIMARY_SECRET_XYZ|COMP_URL=NONE|COMP_KEY=NONE|TOK={}|STARTED={}",
+                staff_cap.token, now
             )
         );
 
@@ -744,8 +752,8 @@ printf '{"conversation_id":"env_test","status":"DONE","response":"BASE=%s|API=%s
         assert_eq!(
             admin_res.response_text,
             format!(
-                "BASE=http://127.0.0.1:8080|API=PRIMARY_SECRET_XYZ|COMP_URL=http://127.0.0.1:8081|COMP_KEY=COMPANION_SECRET_ABC|TOK={}",
-                admin_cap.token
+                "BASE=http://127.0.0.1:8080|API=PRIMARY_SECRET_XYZ|COMP_URL=http://127.0.0.1:8081|COMP_KEY=COMPANION_SECRET_ABC|TOK={}|STARTED={}",
+                admin_cap.token, now
             )
         );
 

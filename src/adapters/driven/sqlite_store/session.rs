@@ -683,3 +683,252 @@ pub fn purge_expired_turn_capabilities(conn: &Connection, now: i64) -> anyhow::R
     )?;
     Ok(removed)
 }
+
+// ---------------------------------------------------------------------------
+// Turn progress sessions & daemon-mediated outbox (`aina progress`)
+// ---------------------------------------------------------------------------
+
+pub fn create_turn_progress_session(
+    conn: &Connection,
+    session: &crate::core::domain::TurnProgressSession,
+) -> anyhow::Result<()> {
+    conn.execute(
+        "INSERT OR REPLACE INTO turn_progress_sessions
+            (turn_token, chat_jid, chat_type, message_id, started_at_epoch,
+             last_progress_at_epoch, last_progress_text, progress_count, is_active)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        params![
+            session.turn_token,
+            session.chat_jid,
+            session.chat_type,
+            session.message_id,
+            session.started_at_epoch,
+            session.last_progress_at_epoch,
+            session.last_progress_text,
+            session.progress_count,
+            session.is_active,
+        ],
+    )?;
+    // Opportunistic cleanup of old finished sessions (> 24h)
+    let cutoff = session.started_at_epoch - 86_400;
+    let _ = conn.execute(
+        "DELETE FROM turn_progress_outbox WHERE turn_token IN (
+            SELECT turn_token FROM turn_progress_sessions WHERE is_active = 0 AND started_at_epoch < ?1
+         )",
+        params![cutoff],
+    );
+    let _ = conn.execute(
+        "DELETE FROM turn_progress_sessions WHERE is_active = 0 AND started_at_epoch < ?1",
+        params![cutoff],
+    );
+    Ok(())
+}
+
+pub fn get_turn_progress_session(
+    conn: &Connection,
+    turn_token: &str,
+) -> anyhow::Result<Option<crate::core::domain::TurnProgressSession>> {
+    if turn_token.trim().is_empty() {
+        return Ok(None);
+    }
+    let mut stmt = conn.prepare(
+        "SELECT turn_token, chat_jid, chat_type, message_id, started_at_epoch,
+                last_progress_at_epoch, last_progress_text, progress_count, is_active
+         FROM turn_progress_sessions WHERE turn_token = ?1 LIMIT 1",
+    )?;
+    let mut rows = stmt.query(params![turn_token])?;
+    if let Some(row) = rows.next()? {
+        Ok(Some(crate::core::domain::TurnProgressSession {
+            turn_token: row.get(0)?,
+            chat_jid: row.get(1)?,
+            chat_type: row.get(2)?,
+            message_id: row.get(3)?,
+            started_at_epoch: row.get(4)?,
+            last_progress_at_epoch: row.get(5)?,
+            last_progress_text: row.get(6)?,
+            progress_count: row.get(7)?,
+            is_active: row.get(8)?,
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn get_active_turn_progress_for_chat(
+    conn: &Connection,
+    chat_jid: &str,
+) -> anyhow::Result<Option<crate::core::domain::TurnProgressSession>> {
+    let mut stmt = conn.prepare(
+        "SELECT turn_token, chat_jid, chat_type, message_id, started_at_epoch,
+                last_progress_at_epoch, last_progress_text, progress_count, is_active
+         FROM turn_progress_sessions
+         WHERE chat_jid = ?1 AND is_active = 1
+         ORDER BY started_at_epoch DESC LIMIT 1",
+    )?;
+    let mut rows = stmt.query(params![chat_jid])?;
+    if let Some(row) = rows.next()? {
+        Ok(Some(crate::core::domain::TurnProgressSession {
+            turn_token: row.get(0)?,
+            chat_jid: row.get(1)?,
+            chat_type: row.get(2)?,
+            message_id: row.get(3)?,
+            started_at_epoch: row.get(4)?,
+            last_progress_at_epoch: row.get(5)?,
+            last_progress_text: row.get(6)?,
+            progress_count: row.get(7)?,
+            is_active: row.get(8)?,
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Atomically evaluates `ProgressPolicy` and enqueues an approved progress update into the
+/// outbox inside a `BEGIN IMMEDIATE` transaction so concurrent tool calls cannot bypass cooldowns.
+pub fn try_enqueue_turn_progress_update(
+    conn: &Connection,
+    turn_token: &str,
+    raw_text: &str,
+    policy: &crate::core::domain::ProgressPolicy,
+    now_epoch: i64,
+) -> anyhow::Result<Option<(crate::core::domain::ProgressDecision, crate::core::domain::TurnProgressSession)>> {
+    conn.execute_batch("BEGIN IMMEDIATE")?;
+    let outcome = (|| -> anyhow::Result<Option<(crate::core::domain::ProgressDecision, crate::core::domain::TurnProgressSession)>> {
+        let Some(mut session) = get_turn_progress_session(conn, turn_token)? else {
+            return Ok(None);
+        };
+        let decision = policy.evaluate_update(&session, raw_text, now_epoch);
+        if let crate::core::domain::ProgressDecision::Allow { ref sanitized_text, .. } = decision {
+            session.progress_count += 1;
+            session.last_progress_at_epoch = Some(now_epoch);
+            session.last_progress_text = Some(sanitized_text.clone());
+
+            conn.execute(
+                "UPDATE turn_progress_sessions
+                 SET last_progress_at_epoch = ?1, last_progress_text = ?2, progress_count = ?3
+                 WHERE turn_token = ?4",
+                params![now_epoch, sanitized_text, session.progress_count, turn_token],
+            )?;
+            conn.execute(
+                "INSERT INTO turn_progress_outbox (turn_token, text, created_at_epoch, delivered)
+                 VALUES (?1, ?2, ?3, 0)",
+                params![turn_token, sanitized_text, now_epoch],
+            )?;
+        }
+        Ok(Some((decision, session)))
+    })();
+
+    match outcome {
+        Ok(val) => {
+            conn.execute_batch("COMMIT")?;
+            Ok(val)
+        }
+        Err(e) => {
+            let _ = conn.execute_batch("ROLLBACK");
+            Err(e)
+        }
+    }
+}
+
+pub fn take_pending_progress_messages(
+    conn: &Connection,
+    turn_token: &str,
+) -> anyhow::Result<Vec<crate::core::domain::PendingProgressMessage>> {
+    conn.execute_batch("BEGIN IMMEDIATE")?;
+    let outcome = (|| -> anyhow::Result<Vec<crate::core::domain::PendingProgressMessage>> {
+        let mut stmt = conn.prepare(
+            "SELECT id, turn_token, text, created_at_epoch
+             FROM turn_progress_outbox
+             WHERE turn_token = ?1 AND delivered = 0
+             ORDER BY id ASC",
+        )?;
+        let rows = stmt.query_map(params![turn_token], |row| {
+            Ok(crate::core::domain::PendingProgressMessage {
+                id: row.get(0)?,
+                turn_token: row.get(1)?,
+                text: row.get(2)?,
+                created_at_epoch: row.get(3)?,
+            })
+        })?;
+        let mut items = Vec::new();
+        for r in rows {
+            items.push(r?);
+        }
+        drop(stmt);
+
+        if !items.is_empty() {
+            conn.execute(
+                "UPDATE turn_progress_outbox SET delivered = 1
+                 WHERE turn_token = ?1 AND delivered = 0",
+                params![turn_token],
+            )?;
+        }
+        Ok(items)
+    })();
+
+    match outcome {
+        Ok(items) => {
+            conn.execute_batch("COMMIT")?;
+            Ok(items)
+        }
+        Err(e) => {
+            let _ = conn.execute_batch("ROLLBACK");
+            Err(e)
+        }
+    }
+}
+
+pub fn complete_turn_progress_session(conn: &Connection, turn_token: &str) -> anyhow::Result<()> {
+    conn.execute_batch("BEGIN IMMEDIATE")?;
+    let res = (|| -> anyhow::Result<()> {
+        conn.execute(
+            "UPDATE turn_progress_sessions SET is_active = 0 WHERE turn_token = ?1",
+            params![turn_token],
+        )?;
+        // Discard any undelivered progress messages so they never race past the final response
+        conn.execute(
+            "DELETE FROM turn_progress_outbox WHERE turn_token = ?1 AND delivered = 0",
+            params![turn_token],
+        )?;
+        Ok(())
+    })();
+    match res {
+        Ok(()) => {
+            conn.execute_batch("COMMIT")?;
+            Ok(())
+        }
+        Err(e) => {
+            let _ = conn.execute_batch("ROLLBACK");
+            Err(e)
+        }
+    }
+}
+
+pub fn complete_active_turn_progress_for_chat(conn: &Connection, chat_jid: &str) -> anyhow::Result<()> {
+    conn.execute_batch("BEGIN IMMEDIATE")?;
+    let res = (|| -> anyhow::Result<()> {
+        conn.execute(
+            "DELETE FROM turn_progress_outbox
+             WHERE delivered = 0 AND turn_token IN (
+                SELECT turn_token FROM turn_progress_sessions WHERE chat_jid = ?1 AND is_active = 1
+             )",
+            params![chat_jid],
+        )?;
+        conn.execute(
+            "UPDATE turn_progress_sessions SET is_active = 0
+             WHERE chat_jid = ?1 AND is_active = 1",
+            params![chat_jid],
+        )?;
+        Ok(())
+    })();
+    match res {
+        Ok(()) => {
+            conn.execute_batch("COMMIT")?;
+            Ok(())
+        }
+        Err(e) => {
+            let _ = conn.execute_batch("ROLLBACK");
+            Err(e)
+        }
+    }
+}

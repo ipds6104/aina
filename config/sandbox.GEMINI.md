@@ -88,11 +88,12 @@
    - Bila tugas memiliki banyak sub-komponen independen (contoh: 9 kecamatan berbeda, beberapa sheet terpisah, atau beberapa file publikasi):
      * Anda dapat mendelegasikan analisis per bagian ke subagent (menggunakan tool `invoke_subagent` atau menjalankan background worker script Python) agar eksekusi lebih cepat, terisolasi, dan terstruktur.
      * Kumpulkan dan gabungkan hasil dari masing-masing subagent ke dalam file data utama di `workspace/`.
-3. **Kabar Progres Berbobot & Kuantitatif (Milestone Checkpoints)**:
-   - Jangan biarkan rekan kerja menunggu dalam ketidakpastian saat proses berjalan lebih dari 3 menit.
-   - Setiap kali menyelesaikan sebuah tonggak capaian penting (milestone), kirimkan kabar progres kuantitatif dan nyata ke ruang obrolan pemohon menggunakan:
-     `python3 skills/whatsmeow/scripts/wa_tool.py send-text --to <chat_jid> --text "Update progres: 3 dari 9 kecamatan (Sungai Raya, Ambawang, Terentang) sudah selesai direkap, sekarang lanjut ke kecamatan berikutnya..."`
-   - Sebutkan angka progres riil (misal: "X dari Y kecamatan selesai", "draf tabel Google Sheets sudah terbentuk", dsb.) agar rekan kerja mengetahui persentase capaian secara transparan.
+3. **Kabar Progres Manusiawi, Berbobot & Sadar Durasi (`aina progress`)**:
+   - Jangan biarkan rekan kerja menunggu dalam ketidakpastian saat proses berjalan panjang (> 1–2 menit) atau menemui hambatan nyata (mirror lambat, format berkas berbeda, fase konversi/upload).
+   - Cek durasi berjalan kapan saja dengan `aina progress status --json` (atau env `$AINA_TURN_STARTED_EPOCH`).
+   - Setiap kali mencapai tonggak nyata atau berpindah fase kerja, kirimkan kabar singkat 1–2 kalimat yang alami melalui kanal resmi (anti-spam & otomatis mereset timer fallback):
+     `aina progress "Update dikit yaa, 3 dari 9 berkas sudah selesai direkap, sekarang lanjut ke tahap berikutnya..."`
+   - DILARANG menggunakan `wa_tool.py send-text` untuk mengirim kabar progres ke chat aktif saat ini (wajib lewat `aina progress`), dan DILARANG mengklaim *"tahap akhir"* tanpa dasar nyata atau menaruh jawaban akhir di dalam `aina progress`.
 4. **Penyampaian Hasil Akhir yang Komprehensif**:
    - Setelah seluruh tahapan tuntas, sajikan ringkasan hasil akhir, tautan Google Drive / Google Sheets yang telah dibuat, atau berkas Excel yang siap diunduh di pesan penutup akhir.
 

@@ -371,6 +371,48 @@ pub trait SessionStorePort: Send + Sync {
     /// Deletes expired capabilities and returns how many rows were removed.
     async fn purge_expired_turn_capabilities(&self, now: i64) -> anyhow::Result<usize>;
 
+    /// Registers an active turn progress session bound to the turn's unforgeable token.
+    async fn create_turn_progress_session(
+        &self,
+        _session: &crate::core::domain::TurnProgressSession,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    /// Looks up a turn progress session by its turn token.
+    async fn get_turn_progress_session(
+        &self,
+        _turn_token: &str,
+    ) -> anyhow::Result<Option<crate::core::domain::TurnProgressSession>> {
+        Ok(None)
+    }
+
+    /// Looks up the latest active turn progress session for a given chat JID.
+    async fn get_active_turn_progress_for_chat(
+        &self,
+        _chat_jid: &str,
+    ) -> anyhow::Result<Option<crate::core::domain::TurnProgressSession>> {
+        Ok(None)
+    }
+
+    /// Atomically retrieves and marks delivered all pending outbox progress messages for a turn.
+    async fn take_pending_progress_messages(
+        &self,
+        _turn_token: &str,
+    ) -> anyhow::Result<Vec<crate::core::domain::PendingProgressMessage>> {
+        Ok(Vec::new())
+    }
+
+    /// Marks a turn progress session inactive and drops any undelivered outbox messages.
+    async fn complete_turn_progress_session(&self, _turn_token: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    /// Marks any active turn progress sessions for a chat inactive (e.g. on user kill/cancel).
+    async fn complete_active_turn_progress_for_chat(&self, _chat_jid: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
+
     /// Records a new experience reflection (Harness² format: cue, lesson, evidence).
     async fn record_experience(&self, exp: &crate::core::domain::NewExperienceRecord) -> anyhow::Result<String>;
 
