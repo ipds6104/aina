@@ -541,6 +541,7 @@ impl PersonaEngine {
                  - EMOJI & EMOTICON MINIMALIS: MINIMALKAN atau HINDARI penggunaan emoji/emoticon (dilarang menabur emoji robot, jam pasir, roket, tangan melambai, dsb.). Komunikasi kerja modern lebih bersih, dewasa, dan profesional tanpa banjir emoji.\n\
                  - GAYA TEXTING INDONESIA NATURAL: Gunakan kebiasaan texting WhatsApp Indonesia yang ramah dengan pemanjangan huruf halus di akhir kata umum sebagai pelunak nada bicara / tone softener (contoh: 'okee sebentarr...', 'iyaa...', 'siaapp...', 'gimana gimanaa..', 'otw dicek yaa...'). Jangan kaku/jutek, namun tetap proporsional (cukup 1-2 huruf tambahan).\n\
                  - PANJANG PESAN: BINCANG-BINCANG SANTAI / KASUAL / SAPAAN: SEBISA MUNGKIN MAKSIMAL 1 PARAGRAF PENDEK (1-3 kalimat). JANGAN SAMPAI 2 PARAGRAF! Jawab santai, luwes, to-the-point, dan hangat selayaknya rekan kerja texting di WhatsApp. Balasan baru boleh 2 paragraf atau lebih HANYA JIKA MEMANG PERLU (misal analisis data berbutir, instruksi troubleshooting, atau laporan teknis). Dilarang membuat 'wall of text' yang melelahkan di layar smartphone.\n\
+                 - TRANSPARANSI SUMBER INFO (NATURAL & SELEKTIF): Untuk pertanyaan data, progres/jadwal, SOP, fakta eksternal terkini, atau gabungan beberapa sumber, selipkan asal infonya secara santai menyatu dalam kalimat (contoh: 'Barusan Aina cek di sheet rekapnya...', '...sesuai catatan internal kita, terus pas cek di dokumentasi resminya...', atau '...info ini Aina cek dari internet sama catatan/knowledge base Aina yaa'). Posisinya fleksibel (awal, tengah, atau akhir) mengikuti alur bicara—DILARANG footer kaku ala bot ('Sumber: ...'), jangan sebut nama tool/DB mentah, dan TIDAK perlu disebut untuk obrolan santai, sintaks/pengetahuan umum, atau file yang baru dikirim user. Di grup publik, tetap jaga privasi (dilarang membocorkan sumber DM/Companion/aset terbatas) dan jangan masukkan keterangan sumber ke balon draf siap-forward (<<<SPLIT_CHAT>>>).\n\
                  - FORMAT WA NATIVE: Gunakan *tebal* (bintang tunggal, BUKAN **ganda**), _miring_ (garis bawah tunggal), ~coret~, `inline monospace`, dan ```blok kode```.\n\
                  - CARA MEN-TAG / MENTION KONTAK DI WA: Jika ingin men-tag atau me-mention seseorang (terutama di obrolan grup), selalu gunakan tanda @ diikuti nomor telepon atau ID mereka (contoh: @6281234567890 atau @87097809592405). Gateway otomatis mengonversinya menjadi tag native WhatsApp interaktif (berwarna biru dan mengirim notifikasi prioritas ke pengguna tersebut). Jangan gunakan nama polos seperti '@Budi' karena WhatsApp tidak mengenalinya sebagai tag nomor.\n\
                  - ATURAN TERLARANG WA:\n\
@@ -892,6 +893,7 @@ impl PersonaEngine {
              [Instruksi Respons]:\n\
              - Tetap konsisten dengan persona Aina yang ramah, santai, cekatan, dan hangat sesama rekan kerja (hindari basa-basi panjang & frasa robotik CS).\n\
              - Gunakan format teks WhatsApp yang sesuai (*tebal*, _miring_, ```kode```, dilarang tabel/heading markdown).\n\
+             - Jika menjawab data, progres/SOP, atau hasil cek internet, selipkan asal infonya secara natural & fleksibel (awal/tengah/akhir, tanpa footer bot) sesuai kebutuhan; tidak perlu untuk obrolan/pengetahuan umum, dan jangan bocorkan sumber privat/DM di grup.\n\
              </USER_REQUEST>\n\
              <ADDITIONAL_METADATA>\n\
              The current local time is: {current_time_str}.\n\
@@ -1245,6 +1247,53 @@ mod tests {
             None,
         );
         assert_eq!(empty_engine.primary_admin_jid(), None);
+    }
+
+    #[test]
+    fn test_build_prompt_whatsapp_and_resumed_include_selective_source_attribution() {
+        let engine = PersonaEngine::new(
+            "Persona".into(),
+            "Org".into(),
+            "6281234567890@s.whatsapp.net".into(),
+            "Asia/Jakarta".into(),
+            7,
+            "id-ID".into(),
+            "https://aina-wa.test".into(),
+            "628999888777@s.whatsapp.net".into(),
+            None,
+        );
+
+        let msg = IncomingMessage {
+            id: "msg_src_attr".to_string(),
+            platform: Platform::WhatsApp,
+            session_role: SessionRole::PrimaryBot,
+            chat_jid: "12036300112233@g.us".to_string(),
+            chat_type: ChatType::Group,
+            sender: Sender {
+                jid: "628111222333@s.whatsapp.net".to_string(),
+                name: Some("Rekan".to_string()),
+            },
+            text: "Aina, progres kegiatan bulan ini udah berapa persen?".to_string(),
+            timestamp: 1726000000,
+            quoted_message: None,
+            mentioned_jids: vec![],
+            is_bot_mentioned: true,
+            bot_lid: None,
+            is_from_me: false,
+            has_media: false,
+            media_type: None,
+            media_path: None,
+        };
+
+        let full_prompt = engine.build_prompt(&msg, None);
+        assert!(full_prompt.contains("TRANSPARANSI SUMBER INFO (NATURAL & SELEKTIF)"));
+        assert!(full_prompt.contains("awal, tengah, atau akhir"));
+        assert!(full_prompt.contains("DILARANG footer kaku ala bot"));
+        assert!(full_prompt.contains("<<<SPLIT_CHAT>>>"));
+
+        let resumed_prompt = engine.build_prompt_resumed(&msg, None);
+        assert!(resumed_prompt.contains("selipkan asal infonya secara natural & fleksibel"));
+        assert!(resumed_prompt.contains("tanpa footer bot"));
     }
 }
 
