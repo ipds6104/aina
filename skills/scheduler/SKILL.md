@@ -29,9 +29,8 @@ CLI `aina schedule` secara deterministik memverifikasi otoritas pengirim tur akt
 - **`STAFF` / `ATASAN` Terverifikasi**:
   - **Boleh langsung** mendaftarkan jadwal (`aina schedule add`) ke:
     1. DM pengirim sendiri (`--target <sender_jid>`), ATAU
-    2. Grup WhatsApp (`@g.us`) yang merupakan **grup aktif tempat pesan dikirim**, **grup terverifikasi (`trusted`)**, atau **grup tempat pengirim tercatat sebagai anggota**.
+    2. Grup WhatsApp (`@g.us`) mana pun yang Aina tergabung di dalamnya (meski diminta lewat japri/DM).
   - **Tetap dibatasi (anti-spam & keamanan)**: tidak boleh menarget `status@broadcast` atau DM orang lain; interval berulang minimal 30 menit; maks 10 jadwal aktif per staf; dan hanya boleh menghapus jadwal buatannya sendiri (bukan `baseline` atau milik Admin/rekan lain).
-  - Bila staf meminta dari DM untuk grup baru yang belum terverifikasi dan belum ada catatan keanggotaan, arahkan untuk meminta langsung dari dalam grup tujuan atau minta Admin memverifikasi grupnya.
 - **`ADMIN`**: Akses penuh (termasuk `status@broadcast`, DM pihak lain, dan penghapusan jadwal apa pun).
 
 > [!CAUTION]

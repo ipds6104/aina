@@ -412,8 +412,6 @@ pub enum ScheduleAction {
         target_jid: String,
         schedule_type: String,
         interval_secs: Option<i64>,
-        is_target_group_trusted: bool,
-        is_sender_member_of_target_group: bool,
         active_tasks_by_sender: usize,
         max_tasks_for_staff: usize,
     },
@@ -469,8 +467,7 @@ pub fn extract_schedule_creator(metadata: Option<&str>) -> Option<String> {
 ///   - May read schedules (`list`, `get`, `runs`, `diag`).
 ///   - May add schedules targeting:
 ///     1. Their own DM (`target_jid` matches `principal_jid`), OR
-///     2. A WhatsApp group (`@g.us`) that is either the active turn's group (`chat_jid`),
-///        a Companion-trusted group, or a group where the sender is a recorded member.
+///     2. Any valid WhatsApp group (`@g.us`), even when requested via DM.
 ///   - May NEVER target `status@broadcast` / `status` / `self` / `internal` or another person's DM.
 ///   - Subject to minimum interval (`STAFF_MIN_INTERVAL_SECS` = 30m) and active quota (`max_tasks_for_staff`).
 ///   - May ONLY delete non-baseline, non-status schedules that they created themselves.
@@ -498,8 +495,6 @@ pub fn evaluate_schedule(
             target_jid,
             schedule_type,
             interval_secs,
-            is_target_group_trusted,
-            is_sender_member_of_target_group,
             active_tasks_by_sender,
             max_tasks_for_staff,
         } => {
@@ -515,15 +510,9 @@ pub fn evaluate_schedule(
                 return PolicyDecision::deny("only_admin_may_schedule_status_or_system");
             }
 
-            if target_lower.ends_with("@g.us") {
-                let same_active_group =
-                    capability.chat_type.eq_ignore_ascii_case("group")
-                        && capability.chat_jid.trim().eq_ignore_ascii_case(target);
-                if !(same_active_group
-                    || *is_target_group_trusted
-                    || *is_sender_member_of_target_group)
-                {
-                    return PolicyDecision::deny("staff_group_scope_not_verified");
+            if let Some(group_local) = target_lower.strip_suffix("@g.us") {
+                if group_local.trim().is_empty() {
+                    return PolicyDecision::deny("invalid_group_jid");
                 }
             } else if !is_admin_identity(&capability.principal_jid, target) {
                 return PolicyDecision::deny("staff_may_not_schedule_other_user_dm");
@@ -826,8 +815,6 @@ mod tests {
                     target_jid: "628111@s.whatsapp.net".into(),
                     schedule_type: "daily".into(),
                     interval_secs: None,
-                    is_target_group_trusted: true,
-                    is_sender_member_of_target_group: true,
                     active_tasks_by_sender: 0,
                     max_tasks_for_staff: 10,
                 },
@@ -847,8 +834,6 @@ mod tests {
                 target_jid: "628111@s.whatsapp.net".into(),
                 schedule_type: "daily".into(),
                 interval_secs: None,
-                is_target_group_trusted: false,
-                is_sender_member_of_target_group: false,
                 active_tasks_by_sender: 0,
                 max_tasks_for_staff: 10,
             },
@@ -863,8 +848,6 @@ mod tests {
                     target_jid: "628999@s.whatsapp.net".into(),
                     schedule_type: "daily".into(),
                     interval_secs: None,
-                    is_target_group_trusted: false,
-                    is_sender_member_of_target_group: false,
                     active_tasks_by_sender: 0,
                     max_tasks_for_staff: 10,
                 },
@@ -881,8 +864,6 @@ mod tests {
                     target_jid: "status@broadcast".into(),
                     schedule_type: "daily".into(),
                     interval_secs: None,
-                    is_target_group_trusted: false,
-                    is_sender_member_of_target_group: false,
                     active_tasks_by_sender: 0,
                     max_tasks_for_staff: 10,
                 },
@@ -891,55 +872,36 @@ mod tests {
             .reason,
             "only_admin_may_schedule_status_or_system"
         );
-        // 5. Staff targeting group from DM: allowed if member or trusted, denied if foreign unverified
+        // 5. Staff targeting ANY valid WhatsApp group from DM (Option B): allowed!
         assert!(evaluate_schedule(
             &staff_dm,
             &ScheduleAction::Add {
-                target_jid: "120363001@g.us".into(),
+                target_jid: "120363999@g.us".into(),
                 schedule_type: "daily".into(),
                 interval_secs: None,
-                is_target_group_trusted: false,
-                is_sender_member_of_target_group: true,
                 active_tasks_by_sender: 2,
                 max_tasks_for_staff: 10,
             },
             1_001,
         )
         .allowed);
+        // Malformed empty group JID denied
         assert_eq!(
             evaluate_schedule(
                 &staff_dm,
                 &ScheduleAction::Add {
-                    target_jid: "120363999@g.us".into(),
+                    target_jid: "@g.us".into(),
                     schedule_type: "daily".into(),
                     interval_secs: None,
-                    is_target_group_trusted: false,
-                    is_sender_member_of_target_group: false,
                     active_tasks_by_sender: 0,
                     max_tasks_for_staff: 10,
                 },
                 1_001,
             )
             .reason,
-            "staff_group_scope_not_verified"
+            "invalid_group_jid"
         );
-        // 6. Staff targeting current active group directly from within that group: allowed!
-        let staff_in_grp = cap(Authority::Staff, "120363999@g.us", "group");
-        assert!(evaluate_schedule(
-            &staff_in_grp,
-            &ScheduleAction::Add {
-                target_jid: "120363999@g.us".into(),
-                schedule_type: "daily".into(),
-                interval_secs: None,
-                is_target_group_trusted: false,
-                is_sender_member_of_target_group: false,
-                active_tasks_by_sender: 0,
-                max_tasks_for_staff: 10,
-            },
-            1_001,
-        )
-        .allowed);
-        // 7. Staff interval < 30 min denied; >= 30 min allowed
+        // 6. Staff interval < 30 min denied; >= 30 min allowed
         assert_eq!(
             evaluate_schedule(
                 &staff_dm,
@@ -947,8 +909,6 @@ mod tests {
                     target_jid: "628111@s.whatsapp.net".into(),
                     schedule_type: "interval".into(),
                     interval_secs: Some(300),
-                    is_target_group_trusted: false,
-                    is_sender_member_of_target_group: false,
                     active_tasks_by_sender: 0,
                     max_tasks_for_staff: 10,
                 },
@@ -957,7 +917,7 @@ mod tests {
             .reason,
             "interval_too_frequent_for_staff"
         );
-        // 8. Staff quota guard
+        // 7. Staff quota guard
         assert_eq!(
             evaluate_schedule(
                 &staff_dm,
@@ -965,8 +925,6 @@ mod tests {
                     target_jid: "628111@s.whatsapp.net".into(),
                     schedule_type: "daily".into(),
                     interval_secs: None,
-                    is_target_group_trusted: false,
-                    is_sender_member_of_target_group: false,
                     active_tasks_by_sender: 10,
                     max_tasks_for_staff: 10,
                 },
@@ -975,7 +933,7 @@ mod tests {
             .reason,
             "staff_schedule_quota_exceeded"
         );
-        // 9. Staff deletion rules: own task allowed, baseline & others denied
+        // 8. Staff deletion rules: own task allowed, baseline & others denied
         assert!(evaluate_schedule(
             &staff_dm,
             &ScheduleAction::Delete {
@@ -1012,7 +970,7 @@ mod tests {
             .reason,
             "staff_may_only_delete_own_schedule"
         );
-        // 10. Admin has unrestricted access (including status@broadcast & short intervals)
+        // 9. Admin has unrestricted access (including status@broadcast & short intervals)
         let admin = cap(Authority::Admin, "628111@s.whatsapp.net", "direct");
         assert!(evaluate_schedule(
             &admin,
@@ -1020,8 +978,6 @@ mod tests {
                 target_jid: "status@broadcast".into(),
                 schedule_type: "interval".into(),
                 interval_secs: Some(60),
-                is_target_group_trusted: false,
-                is_sender_member_of_target_group: false,
                 active_tasks_by_sender: 99,
                 max_tasks_for_staff: 10,
             },

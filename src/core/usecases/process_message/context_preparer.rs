@@ -72,7 +72,7 @@ pub fn authorization_guidance(authority: Authority) -> String {
         Authority::Staff | Authority::Atasan => format!(
             "\n\n---\n[KAPABILITAS OTORISASI TUR INI]\n\
              - Otoritas terverifikasi pengirim: *{}*.\n\
-             - Kamu BERWENANG melayani penjadwalan tugas/pengingat kerja untuk pengguna ini via `aina schedule add|list|delete` (target: DM pengirim sendiri, grup aktif saat ini, grup terverifikasi, atau grup tempat pengirim tercatat sebagai anggota; bukan `status@broadcast` dan bukan DM orang lain). Validasi wewenang, kuota, & interval ditegakkan otomatis oleh CLI.\n\
+             - Kamu BERWENANG melayani penjadwalan tugas/pengingat kerja untuk pengguna ini via `aina schedule add|list|delete` (target: DM pengirim sendiri maupun grup WhatsApp kerja mana pun yang Aina tergabung di dalamnya, meski diminta lewat DM; bukan `status@broadcast` dan bukan DM orang lain). Validasi wewenang, kuota, & interval ditegakkan otomatis oleh CLI.\n\
              - Kamu TIDAK berwenang mengubah izin/otorisasi siapa pun (`aina policy trust-group` / `grant-user`). Jika diminta mengubah otorisasi, jelaskan dengan santun bahwa keputusan ada pada Admin/Companion, lalu tawarkan untuk diteruskan.\n",
             authority.as_str().to_uppercase()
         ),

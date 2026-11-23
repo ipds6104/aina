@@ -19,8 +19,8 @@ pub async fn handle_schedule(args: &[String]) -> anyhow::Result<()> {
 
 Wewenang (deterministik via AINA_TURN_TOKEN; operator lokal gunakan `--operator`):
     • GUEST          : Tidak diizinkan membaca atau mengubah jadwal.
-    • STAFF / ATASAN : Diizinkan memasang jadwal ke DM sendiri, grup saat ini, grup terverifikasi,
-                       atau grup tempat pengirim terdaftar sebagai anggota (interval >= 30m,
+    • STAFF / ATASAN : Diizinkan memasang jadwal ke DM sendiri maupun grup WhatsApp (`@g.us`)
+                       mana pun yang Aina tergabung di dalamnya (interval >= 30m,
                        maks 10 jadwal aktif per staf), dan menghapus jadwal buatannya sendiri.
     • ADMIN          : Akses penuh termasuk `status@broadcast`, DM pihak lain, dan jadwal sistem.
 
@@ -209,21 +209,6 @@ Pilihan --when & --time:
                 std::process::exit(1);
             }
 
-            let is_group_target = target_jid.trim().to_ascii_lowercase().ends_with("@g.us");
-            let is_target_group_trusted = if is_group_target {
-                store.is_group_trusted(target_jid.trim()).await.unwrap_or(false)
-            } else {
-                false
-            };
-            let is_sender_member_of_target_group = if is_group_target {
-                store
-                    .is_user_in_group(&capability.principal_jid, target_jid.trim())
-                    .await
-                    .unwrap_or(false)
-            } else {
-                false
-            };
-
             let active_tasks_by_sender = if capability.authority != Authority::Admin {
                 let active_tasks = store.list_scheduled_tasks(true).await.unwrap_or_default();
                 active_tasks
@@ -261,8 +246,6 @@ Pilihan --when & --time:
                     target_jid: target_jid.clone(),
                     schedule_type: schedule_type.clone(),
                     interval_secs,
-                    is_target_group_trusted,
-                    is_sender_member_of_target_group,
                     active_tasks_by_sender,
                     max_tasks_for_staff,
                 },
@@ -593,8 +576,8 @@ fn human_denial_hint(reason: &str) -> String {
         "staff_may_not_schedule_other_user_dm" => {
             "Staf hanya dapat memasang jadwal DM untuk nomornya sendiri (bukan nomor pribadi orang lain).".to_string()
         }
-        "staff_group_scope_not_verified" => {
-            "Untuk memasang jadwal ke grup tujuan tersebut dari DM, grup harus sudah diverifikasi (`trusted`) atau kamu harus sudah tercatat sebagai anggota di grup itu. Solusi cepat: minta langsung dari dalam grup tujuan tersebut, atau minta Admin memverifikasi grupnya.".to_string()
+        "invalid_group_jid" => {
+            "Format JID grup tujuan tidak valid (contoh yang benar: `120363xxxx@g.us`).".to_string()
         }
         "interval_too_frequent_for_staff" => {
             "Untuk staf, interval pengulangan minimal 30 menit (atau gunakan `daily`/`workdays`/`monthly`) agar tidak memicu spam.".to_string()
