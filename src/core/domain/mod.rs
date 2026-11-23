@@ -33,8 +33,10 @@ pub use archive::{ArchiveEngine, ArchiveSearchFilter};
 pub use audit::*;
 #[allow(unused_imports)]
 pub use capability::{
-    evaluate as evaluate_policy, Authority, PolicyAction, PolicyDecision, TurnCapability,
-    CAPABILITY_TTL_SECS,
+    evaluate as evaluate_policy, evaluate_schedule, extract_schedule_creator,
+    parse_interval_seconds, Authority, PolicyAction, PolicyDecision, ScheduleAction,
+    TurnCapability, CAPABILITY_TTL_SECS, DEFAULT_STAFF_MAX_ACTIVE_SCHEDULES,
+    STAFF_MIN_INTERVAL_SECS,
 };
 pub use conversation_heuristics::*;
 pub use gatekeeper::Gatekeeper;

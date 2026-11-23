@@ -286,7 +286,25 @@ impl TaskExecutor {
         };
         let _ = session_store.record_metacognitive_prediction(&pred).await;
 
-        match agent.execute(None, &prompt).await {
+        let sched_chat_type = if task.target_jid.ends_with("@g.us") {
+            "group"
+        } else {
+            "direct"
+        };
+        let sched_cap = crate::core::domain::TurnCapability::mint(
+            "system:scheduler",
+            crate::core::domain::Authority::Admin,
+            task.target_jid.clone(),
+            sched_chat_type,
+            format!("sched_{}", task.id),
+            now_epoch,
+        );
+        let _ = session_store.create_turn_capability(&sched_cap).await;
+
+        match agent
+            .execute_with_capability(None, &prompt, Some(&sched_cap))
+            .await
+        {
             Ok(res) => {
                 let duration = start_instant.elapsed().as_secs_f64();
                 let clean_res = res.response_text.trim();

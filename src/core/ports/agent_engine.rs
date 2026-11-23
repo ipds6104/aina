@@ -124,9 +124,22 @@ pub trait AgentEnginePort: Send + Sync {
         &self,
         conversation_id: Option<&str>,
         prompt: &str,
+        capability: Option<&crate::core::domain::capability::TurnCapability>,
+    ) -> anyhow::Result<AgentResponse> {
+        self.execute_with_model_and_capability(conversation_id, prompt, None, capability)
+            .await
+    }
+
+    /// Executes a prompt with both an optional model override and a verified turn capability.
+    async fn execute_with_model_and_capability(
+        &self,
+        conversation_id: Option<&str>,
+        prompt: &str,
+        model_override: Option<&str>,
         _capability: Option<&crate::core::domain::capability::TurnCapability>,
     ) -> anyhow::Result<AgentResponse> {
-        self.execute_with_model(conversation_id, prompt, None).await
+        self.execute_with_model(conversation_id, prompt, model_override)
+            .await
     }
 
     /// Gets the current active default model name.

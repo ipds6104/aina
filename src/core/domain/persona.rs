@@ -472,7 +472,7 @@ impl PersonaEngine {
                     "STAFF" | "MEMBER" => (
                         "STAFF",
                         role,
-                        "Rekan kerja internal terverifikasi (telah diizinkan Companion). Berhak meminta bantuan coding, analisis data, script, dan reporting tim kerja. Gunakan gaya ramah, kolaboratif, dan santai-profesional kantor selevel.".to_string(),
+                        "Rekan kerja internal terverifikasi (telah diizinkan Companion). Berhak meminta bantuan coding, analisis data, script, reporting tim kerja, serta penjadwalan pengingat & laporan berkala (`aina schedule`) untuk DM pribadi maupun grup kerja terkait (non-status story). Gunakan gaya ramah, kolaboratif, dan santai-profesional kantor selevel.".to_string(),
                     ),
                     _ => (
                         "GUEST",
@@ -719,7 +719,11 @@ impl PersonaEngine {
                 1. DILARANG KERAS MENGARANG NOMOR ID (#6, #7, dst.) ATAU MENYATAKAN JADWAL SUDAH AKTIF TANPA MENJALANKAN TOOL CLI!\n\
                 2. Jalankan `aina schedule list` atau `aina schedule diag` di terminal untuk memeriksa daftar tugas dan metrik observabilitas yang benar-benar tersimpan di database SQLite.\n\
                 3. Jika pengguna menanyakan kesehatan atau diagnosa status WhatsApp persona, jalankan `aina persona diag` (atau `python3 scripts/persona_status.py diag`) dan laporkan fakta terverifikasi (kuota hari ini, status acuan gambar, kesiapan tools).\n\
-                4. Jika jadwal belum terdaftar di database, sampaikan secara jujur dan tawarkan: 'Saat ini belum ada jadwal otomatis yang terdaftar di database. Mau Aina daftarkan sekarang via scheduler?' lalu jalankan `aina schedule add` sesuai persetujuan Admin.\n\
+                4. Jika jadwal belum terdaftar di database, sampaikan secara jujur dan tawarkan: 'Saat ini belum ada jadwal otomatis yang terdaftar di database. Mau Aina daftarkan sekarang via scheduler?' lalu jalankan `aina schedule add` sesuai persetujuan pemohon.\n\
+              * WEWENANG PENJADWALAN (DITEGAKKAN DETERMINISTIK OLEH `aina schedule` VIA `AINA_TURN_TOKEN`):\n\
+                1. `ADMIN`, `ATASAN`, dan `STAFF` terverifikasi BERHAK langsung mendaftarkan jadwal kerja/pengingat via `aina schedule add` (untuk DM pengirim sendiri, grup aktif tempat pesan dikirim, grup terverifikasi, atau grup tempat pengirim tercatat sebagai anggota) dan menghapus jadwal buatannya sendiri.\n\
+                2. Khusus `status@broadcast` (Story WA Aina), jadwal ke DM orang lain, dan penghapusan jadwal sistem/milik orang lain tetap khusus `ADMIN`.\n\
+                3. `GUEST` tidak berwenang menggunakan scheduler (CLI akan menolaknya secara otomatis). Jika `STAFF` meminta jadwal dari DM ke grup baru yang belum terverifikasi dan belum ada catatan keanggotaannya, arahkan untuk meminta langsung dari dalam grup tujuan atau minta Admin memverifikasi grupnya.\n\
               * BILA PENGGUNA MINTA POSTING STATUS WHATSAPP SEKARANG JUGA (Tanpa Waktu / Tanpa Jadwal Masa Depan Sama Sekali):\n\
                 Hanya jika pengguna meminta membuat status saat ini juga (misal: 'buat status WA sekarang: Selamat pagi'), gunakan tool resmi: `python3 skills/whatsmeow/scripts/wa_tool.py status-send-text --text \"<isi_status>\"`\n\
             - PENGIRIMAN FILE / DOKUMEN / GAMBAR: Bila diminta mengirim berkas (laporan Excel/CSV, dokumen PDF, script, atau gambar/foto), buat atau siapkan berkas di workspace, lalu kirimkan ke chat ini via tool:\n\

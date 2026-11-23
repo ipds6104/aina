@@ -9,7 +9,7 @@ mod response_deliverer;
 
 pub use audit_tracker::AuditTracker;
 pub use builtin_commands::try_handle_builtin_command;
-pub use context_preparer::{ContextPreparation, ContextPreparer};
+pub use context_preparer::{resolve_authority, ContextPreparation, ContextPreparer};
 pub use error_handler::ErrorHandler;
 pub use heartbeat::start_presence_heartbeat;
 pub use response_deliverer::ResponseDeliverer;

@@ -503,10 +503,11 @@ impl AgentEnginePort for AntigravityCliAdapter {
             .await
     }
 
-    async fn execute_with_capability(
+    async fn execute_with_model_and_capability(
         &self,
         conversation_id: Option<&str>,
         prompt: &str,
+        model_override: Option<&str>,
         capability: Option<&crate::core::domain::capability::TurnCapability>,
     ) -> anyhow::Result<AgentResponse> {
         // The token and gateway env vars are scoped strictly to this turn's verified authority.
@@ -515,7 +516,7 @@ impl AgentEnginePort for AntigravityCliAdapter {
         self.run_agent(
             conversation_id,
             prompt,
-            None,
+            model_override,
             capability.map(|c| c.token.as_str()),
             capability.map(|c| c.issued_at),
             authority,

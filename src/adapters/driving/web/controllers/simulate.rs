@@ -376,6 +376,27 @@ pub async fn simulate_handler(
                 );
             }
 
+            let sim_authority = crate::core::usecases::process_message::resolve_authority(
+                &msg.sender.jid,
+                state.persona_engine.admin_jid(),
+                profile
+                    .as_ref()
+                    .map(|p| p.authority_level.as_str())
+                    .unwrap_or("guest"),
+            );
+            let sim_cap = crate::core::domain::TurnCapability::mint(
+                msg.sender.jid.clone(),
+                sim_authority,
+                msg.chat_jid.clone(),
+                match msg.chat_type {
+                    crate::core::domain::ChatType::Group => "group",
+                    _ => "direct",
+                },
+                msg.id.clone(),
+                now,
+            );
+            let _ = state.session_store.create_turn_capability(&sim_cap).await;
+
             let state_clone = Arc::clone(&state);
             let job_id_clone = job_id.clone();
             let msg_chat_jid = msg.chat_jid.clone();
@@ -386,7 +407,12 @@ pub async fn simulate_handler(
                 info!("Starting async agent execution for job {} (model override: {:?})", job_id_clone, model_override);
                 let exec_res = state_clone
                     .agent_engine
-                    .execute_with_model(conv_id.as_deref(), &prompt, model_override.as_deref())
+                    .execute_with_model_and_capability(
+                        conv_id.as_deref(),
+                        &prompt,
+                        model_override.as_deref(),
+                        Some(&sim_cap),
+                    )
                     .await;
                 let fin_time = chrono_now_secs();
 

@@ -69,13 +69,19 @@ pub fn authorization_guidance(authority: Authority) -> String {
                 grant.kind()
             )
         }
-        other => format!(
+        Authority::Staff | Authority::Atasan => format!(
             "\n\n---\n[KAPABILITAS OTORISASI TUR INI]\n\
              - Otoritas terverifikasi pengirim: *{}*.\n\
-             - Kamu TIDAK berwenang memberikan, memperluas, atau mencabut akses siapa pun. Jangan pernah menjalankan `aina policy trust-group` / `grant-user` untuk pengguna ini; tool akan menolaknya.\n\
-             - Jika diminta mengubah otorisasi, jelaskan dengan santun bahwa keputusan ada pada Admin/Companion, lalu tawarkan untuk diteruskan.\n",
-            other.as_str().to_uppercase()
-        )
+             - Kamu BERWENANG melayani penjadwalan tugas/pengingat kerja untuk pengguna ini via `aina schedule add|list|delete` (target: DM pengirim sendiri, grup aktif saat ini, grup terverifikasi, atau grup tempat pengirim tercatat sebagai anggota; bukan `status@broadcast` dan bukan DM orang lain). Validasi wewenang, kuota, & interval ditegakkan otomatis oleh CLI.\n\
+             - Kamu TIDAK berwenang mengubah izin/otorisasi siapa pun (`aina policy trust-group` / `grant-user`). Jika diminta mengubah otorisasi, jelaskan dengan santun bahwa keputusan ada pada Admin/Companion, lalu tawarkan untuk diteruskan.\n",
+            authority.as_str().to_uppercase()
+        ),
+        Authority::Guest => format!(
+            "\n\n---\n[KAPABILITAS OTORISASI TUR INI]\n\
+             - Otoritas terverifikasi pengirim: *GUEST*.\n\
+             - Kamu TIDAK berwenang memberikan, memperluas, atau mencabut akses siapa pun (`aina policy`) maupun mendaftarkan jadwal otomatis (`aina schedule`); tool akan menolaknya.\n\
+             - Jika diminta mengubah otorisasi atau memasang jadwal otomatis, jelaskan dengan santun bahwa keputusan ada pada Admin/Companion, lalu tawarkan untuk diteruskan.\n"
+        ),
     }
 }
 
