@@ -165,6 +165,7 @@ async fn handle_list(store: &dyn SessionStorePort, args: &[String]) -> anyhow::R
             let type_str = match a.task_type {
                 ScheduledTaskType::AgentAction => "Riset / Tindakan Agentik",
                 ScheduledTaskType::DirectNotification => "Pesan Pengingat Langsung",
+                ScheduledTaskType::DirectCommand => "Perintah Skrip Deterministik (Bypass LLM)",
             };
 
             let next_run_str = a.next_run_epoch
@@ -443,7 +444,7 @@ async fn handle_edit(
 
     if let Some(ref add_text) = append_payload {
         let current_p = payload.as_deref().unwrap_or(&task.payload);
-        payload = Some(format!("{}\n\n{}", current_p, add_text));
+        payload = Some(merge_appended_payload(current_p, add_text));
     }
 
     let next_run = if schedule_expr.is_some() || schedule_type.is_some() {
@@ -694,6 +695,18 @@ async fn handle_run(
             println!("Pesan:\n{}", task.payload);
             println!("✅ Eksekusi selesai.");
         }
+        ScheduledTaskType::DirectCommand => {
+            println!("[EKSEKUSI PERINTAH SKRIP DETERMINISTIK]");
+            let status = std::process::Command::new("bash")
+                .arg("-lc")
+                .arg(&task.payload)
+                .status();
+            match status {
+                Ok(s) => println!("Status command exit code: {:?}", s.code()),
+                Err(e) => println!("Gagal mengeksekusi command: {}", e),
+            }
+            println!("Eksekusi selesai.");
+        }
         ScheduledTaskType::AgentAction => {
             println!("🤖 [EKSEKUSI TINDAKAN AGENTIK]");
             if task.payload.contains("scripts/persona_status.py") {
@@ -781,8 +794,9 @@ async fn handle_runs(store: &dyn SessionStorePort, args: &[String]) -> anyhow::R
             }
             if let Some(ref prev) = r.output_preview {
                 let clean_prev = prev.trim().replace('\n', " ");
-                let truncated_prev = if clean_prev.len() > 100 {
-                    format!("{}...", &clean_prev[..100])
+                let truncated_prev = if clean_prev.chars().count() > 100 {
+                    let prefix: String = clean_prev.chars().take(100).collect();
+                    format!("{}...", prefix)
                 } else {
                     clean_prev
                 };
@@ -792,4 +806,81 @@ async fn handle_runs(store: &dyn SessionStorePort, args: &[String]) -> anyhow::R
         }
     }
     Ok(())
+}
+
+/// Idempotently merges `--append` notes into an activity payload.
+///
+/// Prevents unbounded repetition (e.g. daily weather/adaptation notes appended 6+ times)
+/// by stripping prior `[Konteks Harian]` or legacy weather adaptation blocks before
+/// appending the new note, and skipping exact duplicate paragraphs.
+fn merge_appended_payload(current: &str, addition: &str) -> String {
+    let add_trimmed = addition.trim();
+    if add_trimmed.is_empty() {
+        return current.to_string();
+    }
+
+    let is_daily_context = add_trimmed.starts_with("[Konteks Harian]")
+        || add_trimmed.starts_with("Cuaca Pontianak ")
+        || add_trimmed.starts_with("Kondisi cuaca Pontianak ")
+        || add_trimmed.starts_with("Suasana malam khatulistiwa");
+
+    let mut blocks: Vec<&str> = current
+        .split("\n\n")
+        .map(str::trim)
+        .filter(|b| !b.is_empty())
+        .collect();
+
+    if is_daily_context {
+        blocks.retain(|b| {
+            !b.starts_with("[Konteks Harian]")
+                && !b.starts_with("Cuaca Pontianak ")
+                && !b.starts_with("Kondisi cuaca Pontianak ")
+                && !b.starts_with("Suasana malam khatulistiwa")
+        });
+    } else if blocks.iter().any(|b| *b == add_trimmed) {
+        return blocks.join("\n\n");
+    }
+
+    blocks.push(add_trimmed);
+    blocks.join("\n\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::merge_appended_payload;
+
+    #[test]
+    fn merge_appended_payload_replaces_daily_context_idempotently() {
+        let base = "Eksekusi engine status harian Aina slot siang.";
+        let first = merge_appended_payload(
+            base,
+            "[Konteks Harian] Cuaca Pontianak siang ini terik (28.5°C).",
+        );
+        let second = merge_appended_payload(
+            &first,
+            "[Konteks Harian] Cuaca Pontianak siang ini terik (31.0°C).",
+        );
+        assert_eq!(
+            second,
+            "Eksekusi engine status harian Aina slot siang.\n\n[Konteks Harian] Cuaca Pontianak siang ini terik (31.0°C)."
+        );
+
+        // Also cleans up legacy duplicated weather paragraphs from earlier runs
+        let legacy = "Base prompt.\n\nCuaca Pontianak siang ini terik (28.5°C).\n\nCuaca Pontianak siang ini terik (26.1°C).";
+        let cleaned = merge_appended_payload(
+            legacy,
+            "[Konteks Harian] Cuaca Pontianak siang ini terik (29.0°C).",
+        );
+        assert_eq!(
+            cleaned,
+            "Base prompt.\n\n[Konteks Harian] Cuaca Pontianak siang ini terik (29.0°C)."
+        );
+    }
+
+    #[test]
+    fn merge_appended_payload_skips_exact_duplicate_notes() {
+        let first = merge_appended_payload("Base prompt.", "Tambahan khusus.");
+        let second = merge_appended_payload(&first, "Tambahan khusus.");
+        assert_eq!(second, "Base prompt.\n\nTambahan khusus.");
+    }
 }

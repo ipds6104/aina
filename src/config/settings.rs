@@ -140,6 +140,12 @@ pub struct SchedulerConfig {
     pub enabled: bool,
     #[serde(default = "default_scheduler_interval")]
     pub interval_seconds: u64,
+    #[serde(default = "default_scheduler_task_timeout")]
+    pub task_timeout_seconds: u64,
+    #[serde(default = "default_scheduler_command_timeout")]
+    pub command_timeout_seconds: u64,
+    #[serde(default = "default_scheduler_max_concurrent")]
+    pub max_concurrent_tasks: usize,
 }
 
 fn default_scheduler_enabled() -> bool {
@@ -148,6 +154,18 @@ fn default_scheduler_enabled() -> bool {
 
 fn default_scheduler_interval() -> u64 {
     60
+}
+
+fn default_scheduler_task_timeout() -> u64 {
+    600 // 10 minutes hard ceiling per scheduled agent task (prevents 24h idle wait hangs)
+}
+
+fn default_scheduler_command_timeout() -> u64 {
+    180 // 3 minutes hard ceiling per direct deterministic command
+}
+
+fn default_scheduler_max_concurrent() -> usize {
+    3 // Up to 3 concurrent scheduled tasks; direct notifications never block behind agents
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -248,6 +266,9 @@ impl Default for AppConfig {
             scheduler: SchedulerConfig {
                 enabled: default_scheduler_enabled(),
                 interval_seconds: default_scheduler_interval(),
+                task_timeout_seconds: default_scheduler_task_timeout(),
+                command_timeout_seconds: default_scheduler_command_timeout(),
+                max_concurrent_tasks: default_scheduler_max_concurrent(),
             },
             database: DatabaseConfig {
                 path: default_db_path(),
@@ -423,6 +444,21 @@ impl AppConfig {
         if let Ok(val) = env::var("SCHEDULER_INTERVAL_SECONDS") {
             if let Ok(i) = val.parse::<u64>() {
                 self.scheduler.interval_seconds = i;
+            }
+        }
+        if let Ok(val) = env::var("SCHEDULER_TASK_TIMEOUT_SECONDS") {
+            if let Ok(t) = val.parse::<u64>() {
+                self.scheduler.task_timeout_seconds = t.max(30);
+            }
+        }
+        if let Ok(val) = env::var("SCHEDULER_COMMAND_TIMEOUT_SECONDS") {
+            if let Ok(t) = val.parse::<u64>() {
+                self.scheduler.command_timeout_seconds = t.max(10);
+            }
+        }
+        if let Ok(val) = env::var("SCHEDULER_MAX_CONCURRENT_TASKS") {
+            if let Ok(c) = val.parse::<usize>() {
+                self.scheduler.max_concurrent_tasks = c.clamp(1, 16);
             }
         }
 

@@ -250,3 +250,19 @@ Bab ini mencatat keputusan-keputusan arsitektur penting (*Architecture Decision 
 - **Konsekuensi Positif**:
   Mencegah DoS kuota/disk/RAM dan risiko ban WhatsApp sembari menjaga kemurnian domain `ADR-001`, serta membentengi wewenang Admin dan kredensial gateway secara deterministik terhadap *indirect prompt injection*.
 - **Risiko yang Muncul**: RISK-17, RISK-18
+
+---
+
+### ADR-019: Non-Blocking Concurrent Scheduler, Process-Group Hard Timeout, `DirectCommand`, & Persistent Browser/CLI Runtime (Fase 22)
+
+- **Status**: Diterima (*Accepted*)
+- **Konteks**:
+  Pada loop scheduler sebelumnya, `TaskExecutor::execute_due_tasks` mengeksekusi tugas jatuh tempo secara sekuensial (`for task in due_tasks`), sedangkan `AntigravityCliAdapter` menggunakan default `timeout_seconds = 0` (`--print-timeout 24h`). Ketika satu tugas terjadwal menggantung (misalnya `root agent idle; waiting up to 24h0m0s for 1 background task(s)` selama 73 menit), seluruh antrean scheduler termasuk notifikasi cepat `DirectNotification` ikut lumpuh (*head-of-line blocking*). Selain itu, tugas skrip deterministik 1 baris terpaksa melewati LLM `agy`, cache Patchright (`/root/.cache/ms-playwright`) dan symlink CLI custom skill (`/usr/local/bin/`) masih berada di layer kontainer ephemeral, serta `cp -r` pada `docker-entrypoint.sh` menimbulkan direktori bersarang rekursif saat target `.agents/skills/<name>` berupa symlink.
+- **Keputusan**:
+  1. **Non-Blocking Concurrent Scheduler & Anti-Overlap Guard**: `SchedulerRunner` memanggil `ScheduledTickUseCase::execute_non_blocking()` yang men-spawn tiap tugas jatuh tempo secara paralel dengan bounded semaphore (`SCHEDULER_MAX_CONCURRENT_TASKS`, default `3`), jalur cepat tanpa antre untuk `DirectNotification`, dan guard `in_flight_tasks` anti-tumpang-tindih.
+  2. **Per-Task Hard Timeout & Process-Group Termination**: Memisahkan batas waktu chat interaktif (tetap unlimited) dari tugas cron otomatis melalui `SCHEDULER_TASK_TIMEOUT_SECONDS` (default `600s`) dan `SCHEDULER_COMMAND_TIMEOUT_SECONDS` (default `180s`), dijalankan dalam dedicated Unix process group (`process_group(0)`) dengan terminasi menyeluruh via POSIX `kill(-pgid, SIGKILL)` saat timeout (tanpa retry berlapis pada timeout terjadwal).
+  3. **Tipe Tugas `DirectCommand` Khusus Admin**: Menambahkan varian `ScheduledTaskType::DirectCommand` (bypass LLM) yang dikunci secara fail-closed hanya untuk `Authority::Admin` di `evaluate_schedule()`, dengan laporan kegagalan eksklusif ke Admin DM.
+  4. **Persistensi Runtime & Atomic Symlink**: Menetapkan `PLAYWRIGHT_BROWSERS_PATH=/app/data/ms-playwright`, `UV_CACHE_DIR=/app/data/cache/uv`, dan memasukkan `/app/data/bin` di `PATH` pada `Dockerfile` serta `docker-entrypoint.sh`; mengganti `cp -r` custom skills menjadi atomic symlink `ln -sfn`; serta menjadikan `--append` refleksi harian idempotent melalui marker `[Konteks Harian]`.
+- **Konsekuensi Positif**:
+  Menghilangkan *head-of-line blocking* dan subproses yatim piatu pada scheduler, memangkas biaya token & latensi tugas skrip statis hingga >90%, serta menjamin 100% persistensi browser Patchright dan CLI custom skill lintas redeploy Coolify.
+- **Risiko yang Muncul**: RISK-19 (disiplin pemisahan perintah Admin pada `DirectCommand`, dimitigasi oleh gate fail-closed `only_admin_may_schedule_direct_command`)

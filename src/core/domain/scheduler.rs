@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 pub enum ScheduledTaskType {
     AgentAction,
     DirectNotification,
+    DirectCommand,
 }
 
 impl ScheduledTaskType {
@@ -12,12 +13,16 @@ impl ScheduledTaskType {
         match self {
             ScheduledTaskType::AgentAction => "agent_action",
             ScheduledTaskType::DirectNotification => "direct_notification",
+            ScheduledTaskType::DirectCommand => "direct_command",
         }
     }
 
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().trim() {
             "agent_action" | "agent" | "action" | "research" => ScheduledTaskType::AgentAction,
+            "direct_command" | "command" | "cmd" | "script" | "shell" => {
+                ScheduledTaskType::DirectCommand
+            }
             _ => ScheduledTaskType::DirectNotification,
         }
     }
@@ -483,6 +488,10 @@ mod tests {
         assert_eq!(ScheduledTaskType::from_str("agent"), ScheduledTaskType::AgentAction);
         assert_eq!(ScheduledTaskType::from_str("research"), ScheduledTaskType::AgentAction);
         assert_eq!(ScheduledTaskType::from_str("notify"), ScheduledTaskType::DirectNotification);
+        assert_eq!(ScheduledTaskType::from_str("command"), ScheduledTaskType::DirectCommand);
+        assert_eq!(ScheduledTaskType::from_str("direct_command"), ScheduledTaskType::DirectCommand);
+        assert_eq!(ScheduledTaskType::from_str("script"), ScheduledTaskType::DirectCommand);
+        assert_eq!(ScheduledTaskType::DirectCommand.as_str(), "direct_command");
     }
 
     #[test]

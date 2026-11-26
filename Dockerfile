@@ -97,7 +97,9 @@ ENV SERVER_HOST=0.0.0.0 \
     AGENT_ORGANIZATION_FILE=/app/config/organization.md \
     PYTHONUSERBASE=/app/data/python-packages \
     PIP_BREAK_SYSTEM_PACKAGES=1 \
-    PATH="/app/data/python-packages/bin:/app/scripts:/root/.local/bin:/usr/local/bin:${PATH}"
+    PLAYWRIGHT_BROWSERS_PATH=/app/data/ms-playwright \
+    UV_CACHE_DIR=/app/data/cache/uv \
+    PATH="/app/data/bin:/app/data/python-packages/bin:/app/scripts:/root/.local/bin:/usr/local/bin:${PATH}"
 
 EXPOSE 8090
 

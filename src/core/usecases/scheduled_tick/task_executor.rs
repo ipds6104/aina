@@ -1,26 +1,122 @@
-//! Scheduled task execution pipeline (DirectNotification and AgentAction).
+//! Scheduled task execution pipeline (DirectNotification, DirectCommand, and AgentAction).
+//!
+//! Designed for non-blocking concurrent dispatch so a slow or hung scheduled job
+//! can never head-of-line block fast notifications or unrelated scheduled tasks.
 
+use super::command_runner::{execute_direct_shell_command, CommandEnvConfig};
 use crate::core::domain::{
     ComplexityTier, NewMetacognitivePrediction, PersonaEngine, ScheduleParser, ScheduledTask,
     ScheduledTaskType, SessionRole, TaskDomainType,
 };
 use crate::core::ports::{AgentEnginePort, SessionStorePort, WhatsAppPort};
+use std::collections::HashSet;
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::{Mutex, Semaphore};
+use tokio::task::JoinSet;
 use tracing::{error, info, warn};
+
+/// Runtime dependencies and safety ceilings for executing due scheduled tasks.
+#[derive(Clone)]
+pub struct TaskExecutionContext {
+    pub session_store: Arc<dyn SessionStorePort>,
+    pub whatsapp: Arc<dyn WhatsAppPort>,
+    pub agent_engine: Option<Arc<dyn AgentEnginePort>>,
+    pub persona_engine: Option<Arc<PersonaEngine>>,
+    pub workspace_dir: Option<PathBuf>,
+    pub command_env: Option<CommandEnvConfig>,
+    pub timezone_offset_hours: i32,
+    pub task_timeout: Duration,
+    pub command_timeout: Duration,
+    pub agent_semaphore: Arc<Semaphore>,
+    pub in_flight_tasks: Arc<Mutex<HashSet<i64>>>,
+}
+
+/// Safe UTF-8 prefix truncation that never slices across multi-byte char boundaries.
+fn truncate_chars(text: &str, max_chars: usize) -> String {
+    text.chars().take(max_chars).collect()
+}
+
+/// Formats target description for private Admin failure reports.
+fn describe_target_kind(target_jid: &str, is_story: bool) -> String {
+    if is_story {
+        "Status / Story WhatsApp (`status@broadcast`)".to_string()
+    } else if target_jid.ends_with("@g.us") {
+        format!("Grup WhatsApp (`{}`)", target_jid)
+    } else {
+        format!("Obrolan Pribadi (`{}`)", target_jid)
+    }
+}
+
+/// Sends a scheduled task failure report exclusively to Admin DM (never leaking
+/// internal errors to groups or `status@broadcast`).
+async fn report_failure_to_admin(
+    task: &ScheduledTask,
+    whatsapp: &Arc<dyn WhatsAppPort>,
+    persona_engine: Option<&Arc<PersonaEngine>>,
+    now_epoch: i64,
+    duration: f64,
+    err_str: &str,
+) {
+    let is_story = task.target_jid == "status@broadcast" || task.target_jid == "status";
+    let admin_jid = persona_engine.and_then(|p| p.primary_admin_jid());
+    let time_str = persona_engine
+        .map(|p| p.current_local_time_string())
+        .unwrap_or_else(|| format!("Epoch: {}", now_epoch));
+    let target_kind = describe_target_kind(&task.target_jid, is_story);
+
+    let full_err_report = format!(
+        "*Laporan Kegagalan Tugas Terjadwal Aina*\n\n\
+         • *ID Tugas*: #{}\n\
+         • *Judul*: *{}*\n\
+         • *Tipe*: `{}`\n\
+         • *Target Asli*: {}\n\
+         • *Waktu Kejadian*: {}\n\
+         • *Durasi Eksekusi*: {:.2} detik\n\n\
+         *Rincian Lengkap Masalah / Error:*\n\
+         ```\n{}\n```\n\n\
+         _Sesuai kebijakan privasi sistem, pesan error kegagalan ini tidak dikirimkan ke grup ataupun status WhatsApp, melainkan hanya dilaporkan langsung ke WhatsApp Companion/Admin._",
+        task.id,
+        task.title,
+        task.task_type.as_str(),
+        target_kind,
+        time_str,
+        duration,
+        err_str.trim()
+    );
+
+    if let Some(admin) = admin_jid {
+        let _ = whatsapp
+            .send_text_with_session(admin, &full_err_report, None, SessionRole::PrimaryBot)
+            .await;
+    } else if !task.target_jid.ends_with("@g.us") && !task.target_jid.contains("@broadcast") {
+        let _ = whatsapp
+            .send_text_with_session(&task.target_jid, &full_err_report, None, SessionRole::PrimaryBot)
+            .await;
+    } else {
+        warn!(
+            "Suppressed failure notification to public target {} because admin_jid is not configured",
+            task.target_jid
+        );
+    }
+}
 
 pub struct TaskExecutor;
 
 impl TaskExecutor {
-    /// Executes all scheduled tasks that are currently due.
+    /// Queries and dispatches all scheduled tasks that are currently due.
+    ///
+    /// - When `wait_for_completion` is `false` (production daemon tick), each due task is
+    ///   spawned onto Tokio so the scheduler loop returns in milliseconds and never blocks.
+    /// - When `wait_for_completion` is `true` (deterministic tests), due tasks still run
+    ///   concurrently via a `JoinSet` and this call awaits all of them before returning.
     pub async fn execute_due_tasks(
-        session_store: &Arc<dyn SessionStorePort>,
-        whatsapp: &Arc<dyn WhatsAppPort>,
-        agent_engine: Option<&Arc<dyn AgentEnginePort>>,
-        persona_engine: Option<&Arc<PersonaEngine>>,
-        timezone_offset_hours: i32,
+        ctx: TaskExecutionContext,
         now_epoch: i64,
+        wait_for_completion: bool,
     ) {
-        let due_tasks = match session_store.get_due_scheduled_tasks(now_epoch).await {
+        let due_tasks = match ctx.session_store.get_due_scheduled_tasks(now_epoch).await {
             Ok(tasks) => tasks,
             Err(e) => {
                 error!("Scheduler failed to query due tasks: {}", e);
@@ -30,33 +126,50 @@ impl TaskExecutor {
 
         if !due_tasks.is_empty() {
             info!(
-                "Scheduler found {} due task(s) to execute at epoch {}",
+                "Scheduler found {} due task(s) to dispatch at epoch {} (wait={})",
                 due_tasks.len(),
-                now_epoch
+                now_epoch,
+                wait_for_completion
             );
         }
 
+        let mut join_set = JoinSet::new();
+
         for task in due_tasks {
+            // Anti-overlap guard: never run two instances of the exact same task ID concurrently.
+            {
+                let mut active = ctx.in_flight_tasks.lock().await;
+                if active.contains(&task.id) {
+                    warn!(
+                        "Skipping scheduled task #{} ('{}'): previous run is still in-flight",
+                        task.id, task.title
+                    );
+                    continue;
+                }
+                active.insert(task.id);
+            }
+
             info!(
-                "Executing scheduled task #{}: '{}' (Type: {:?}, Target: {})",
+                "Dispatching scheduled task #{}: '{}' (Type: {:?}, Target: {})",
                 task.id, task.title, task.task_type, task.target_jid
             );
 
-            // 1. Lock/update the task state immediately to prevent duplicate burst execution
+            // 1. Lock/advance next_run_epoch immediately to prevent duplicate burst execution
             let (next_run, is_active) = if task.schedule_type.eq_ignore_ascii_case("once") {
                 (None, false)
             } else {
                 let next = ScheduleParser::compute_next_run(
                     &task.schedule_type,
                     &task.schedule_expr,
-                    timezone_offset_hours,
+                    ctx.timezone_offset_hours,
                     now_epoch + 60,
                 )
                 .unwrap_or(now_epoch + 86400);
                 (Some(next), true)
             };
 
-            if let Err(e) = session_store
+            if let Err(e) = ctx
+                .session_store
                 .update_scheduled_task_run(task.id, now_epoch, next_run, is_active)
                 .await
             {
@@ -64,48 +177,71 @@ impl TaskExecutor {
                     "Failed to lock/update scheduled task #{} run state: {}",
                     task.id, e
                 );
+                ctx.in_flight_tasks.lock().await.remove(&task.id);
                 continue;
             }
 
-            // 2. Execute task payload
-            let start_instant = std::time::Instant::now();
-            match task.task_type {
-                ScheduledTaskType::DirectNotification => {
-                    Self::execute_direct_notification(
-                        &task,
-                        session_store,
-                        whatsapp,
-                        persona_engine,
-                        start_instant,
-                        now_epoch,
-                    )
-                    .await;
+            let task_ctx = ctx.clone();
+            let fut = async move {
+                let task_id = task.id;
+                Self::run_single_task(task, &task_ctx, now_epoch).await;
+                task_ctx.in_flight_tasks.lock().await.remove(&task_id);
+            };
+
+            if wait_for_completion {
+                join_set.spawn(fut);
+            } else {
+                tokio::spawn(fut);
+            }
+        }
+
+        if wait_for_completion {
+            while let Some(res) = join_set.join_next().await {
+                if let Err(e) = res {
+                    error!("Scheduled task panicked during concurrent execution: {:?}", e);
                 }
-                ScheduledTaskType::AgentAction => {
-                    Self::execute_agent_action(
-                        &task,
-                        session_store,
-                        whatsapp,
-                        agent_engine,
-                        persona_engine,
-                        start_instant,
-                        now_epoch,
-                    )
-                    .await;
-                }
+            }
+        }
+    }
+
+    async fn run_single_task(task: ScheduledTask, ctx: &TaskExecutionContext, now_epoch: i64) {
+        let start_instant = std::time::Instant::now();
+        match task.task_type {
+            // Fast path: DirectNotification NEVER waits behind heavy agent/script semaphore permits.
+            ScheduledTaskType::DirectNotification => {
+                Self::execute_direct_notification(&task, ctx, start_instant, now_epoch).await;
+            }
+            ScheduledTaskType::DirectCommand => {
+                let _permit = match ctx.agent_semaphore.clone().acquire_owned().await {
+                    Ok(p) => p,
+                    Err(e) => {
+                        error!("Scheduler semaphore closed for DirectCommand #{}: {}", task.id, e);
+                        return;
+                    }
+                };
+                Self::execute_direct_command(&task, ctx, start_instant, now_epoch).await;
+            }
+            ScheduledTaskType::AgentAction => {
+                let _permit = match ctx.agent_semaphore.clone().acquire_owned().await {
+                    Ok(p) => p,
+                    Err(e) => {
+                        error!("Scheduler semaphore closed for AgentAction #{}: {}", task.id, e);
+                        return;
+                    }
+                };
+                Self::execute_agent_action(&task, ctx, start_instant, now_epoch).await;
             }
         }
     }
 
     async fn execute_direct_notification(
         task: &ScheduledTask,
-        session_store: &Arc<dyn SessionStorePort>,
-        whatsapp: &Arc<dyn WhatsAppPort>,
-        persona_engine: Option<&Arc<PersonaEngine>>,
+        ctx: &TaskExecutionContext,
         start_instant: std::time::Instant,
         now_epoch: i64,
     ) {
-        if let Err(e) = whatsapp
+        if let Err(e) = ctx
+            .whatsapp
             .send_text_with_session(&task.target_jid, &task.payload, None, SessionRole::PrimaryBot)
             .await
         {
@@ -115,10 +251,12 @@ impl TaskExecutor {
                 "Failed to deliver direct notification for task #{}: {}",
                 task.id, e
             );
-            let _ = session_store
+            let _ = ctx
+                .session_store
                 .update_scheduled_task_result(task.id, "failed", Some(&err_str), duration)
                 .await;
-            let _ = session_store
+            let _ = ctx
+                .session_store
                 .record_scheduled_task_run(
                     task.id,
                     &task.title,
@@ -130,28 +268,17 @@ impl TaskExecutor {
                 )
                 .await;
 
-            if let Some(admin) = persona_engine.and_then(|p| p.primary_admin_jid()) {
+            if let Some(admin) = ctx.persona_engine.as_ref().and_then(|p| p.primary_admin_jid()) {
                 if admin != task.target_jid {
-                    let time_str = persona_engine
-                        .map(|p| p.current_local_time_string())
-                        .unwrap_or_else(|| format!("Epoch: {}", now_epoch));
-                    let notif_report = format!(
-                        "🚨 *Laporan Kegagalan Notifikasi Terjadwal Aina*\n\n\
-                         • *ID Tugas*: #{}\n\
-                         • *Judul*: *{}*\n\
-                         • *Target Asli*: `{}`\n\
-                         • *Waktu Kejadian*: {}\n\n\
-                         📋 *Rincian Error:*\n\
-                         ```\n{}\n```",
-                        task.id,
-                        task.title,
-                        task.target_jid,
-                        time_str,
-                        err_str.trim()
-                    );
-                    let _ = whatsapp
-                        .send_text_with_session(admin, &notif_report, None, SessionRole::PrimaryBot)
-                        .await;
+                    report_failure_to_admin(
+                        task,
+                        &ctx.whatsapp,
+                        ctx.persona_engine.as_ref(),
+                        now_epoch,
+                        duration,
+                        &err_str,
+                    )
+                    .await;
                 }
             }
         } else {
@@ -160,13 +287,16 @@ impl TaskExecutor {
                 "Delivered scheduled notification for task #{} to {}",
                 task.id, task.target_jid
             );
-            let _ = session_store
+            let _ = ctx
+                .session_store
                 .record_message(&task.target_jid, "bot", &task.payload, true)
                 .await;
-            let _ = session_store
+            let _ = ctx
+                .session_store
                 .update_scheduled_task_result(task.id, "success", None, duration)
                 .await;
-            let _ = session_store
+            let _ = ctx
+                .session_store
                 .record_scheduled_task_run(
                     task.id,
                     &task.title,
@@ -180,16 +310,109 @@ impl TaskExecutor {
         }
     }
 
-    async fn execute_agent_action(
+    async fn execute_direct_command(
         task: &ScheduledTask,
-        session_store: &Arc<dyn SessionStorePort>,
-        whatsapp: &Arc<dyn WhatsAppPort>,
-        agent_engine: Option<&Arc<dyn AgentEnginePort>>,
-        persona_engine: Option<&Arc<PersonaEngine>>,
+        ctx: &TaskExecutionContext,
         start_instant: std::time::Instant,
         now_epoch: i64,
     ) {
-        let agent = match agent_engine {
+        let sched_chat_type = if task.target_jid.ends_with("@g.us") {
+            "group"
+        } else {
+            "direct"
+        };
+        let sched_cap = crate::core::domain::TurnCapability::mint(
+            "system:scheduler:direct_command",
+            crate::core::domain::Authority::Admin,
+            task.target_jid.clone(),
+            sched_chat_type,
+            format!("sched_cmd_{}", task.id),
+            now_epoch,
+        );
+        let _ = ctx.session_store.create_turn_capability(&sched_cap).await;
+
+        match execute_direct_shell_command(
+            &task.payload,
+            ctx.workspace_dir.as_deref(),
+            ctx.command_env.as_ref(),
+            Some(&sched_cap.token),
+            Some(sched_cap.issued_at),
+            ctx.command_timeout,
+        )
+        .await
+        {
+            Ok(stdout_out) => {
+                let duration = start_instant.elapsed().as_secs_f64();
+                let preview = truncate_chars(stdout_out.trim(), 300);
+                let preview_opt = if preview.is_empty() {
+                    None
+                } else {
+                    Some(preview.as_str())
+                };
+                info!(
+                    "Successfully executed DirectCommand task #{} ('{}') in {:.2}s",
+                    task.id, task.title, duration
+                );
+                let _ = ctx
+                    .session_store
+                    .update_scheduled_task_result(task.id, "success", None, duration)
+                    .await;
+                let _ = ctx
+                    .session_store
+                    .record_scheduled_task_run(
+                        task.id,
+                        &task.title,
+                        &task.target_jid,
+                        "success",
+                        duration,
+                        None,
+                        preview_opt,
+                    )
+                    .await;
+            }
+            Err(e) => {
+                let duration = start_instant.elapsed().as_secs_f64();
+                let err_str = e.to_string();
+                error!(
+                    "DirectCommand task #{} ('{}') failed after {:.2}s: {}",
+                    task.id, task.title, duration, err_str
+                );
+                let _ = ctx
+                    .session_store
+                    .update_scheduled_task_result(task.id, "failed", Some(&err_str), duration)
+                    .await;
+                let _ = ctx
+                    .session_store
+                    .record_scheduled_task_run(
+                        task.id,
+                        &task.title,
+                        &task.target_jid,
+                        "failed",
+                        duration,
+                        Some(&err_str),
+                        None,
+                    )
+                    .await;
+                report_failure_to_admin(
+                    task,
+                    &ctx.whatsapp,
+                    ctx.persona_engine.as_ref(),
+                    now_epoch,
+                    duration,
+                    &err_str,
+                )
+                .await;
+            }
+        }
+    }
+
+    async fn execute_agent_action(
+        task: &ScheduledTask,
+        ctx: &TaskExecutionContext,
+        start_instant: std::time::Instant,
+        now_epoch: i64,
+    ) {
+        let agent = match ctx.agent_engine.as_ref() {
             Some(a) => a,
             None => {
                 warn!(
@@ -200,7 +423,9 @@ impl TaskExecutor {
             }
         };
 
-        let current_time_str = persona_engine
+        let current_time_str = ctx
+            .persona_engine
+            .as_ref()
             .map(|p| p.current_local_time_string())
             .unwrap_or_else(|| format!("Epoch: {}", now_epoch));
 
@@ -223,7 +448,7 @@ impl TaskExecutor {
 
         let prompt = if is_internal_silent {
             format!(
-                "🔔 [TUGAS TERJADWAL OTOMATIS - WAKE UP CALL (INTERNAL BACKGROUND WORKER)]\n\
+                "[TUGAS TERJADWAL OTOMATIS - WAKE UP CALL (INTERNAL BACKGROUND WORKER)]\n\
                 Judul Tugas: {}\n\
                 Waktu Eksekusi: {}\n\
                 Tipe Tugas: Pemeliharaan & Adaptasi Internal (Silent)\n\
@@ -238,7 +463,7 @@ impl TaskExecutor {
             )
         } else {
             format!(
-                "🔔 [TUGAS TERJADWAL OTOMATIS - WAKE UP CALL]\n\
+                "[TUGAS TERJADWAL OTOMATIS - WAKE UP CALL]\n\
                 Judul Tugas: {}\n\
                 Waktu Eksekusi: {}\n\
                 Target Pengiriman: WhatsApp ({})\n\
@@ -284,7 +509,7 @@ impl TaskExecutor {
             },
             fallback_strategy: Some("Report failure to admin".to_string()),
         };
-        let _ = session_store.record_metacognitive_prediction(&pred).await;
+        let _ = ctx.session_store.record_metacognitive_prediction(&pred).await;
 
         let sched_chat_type = if task.target_jid.ends_with("@g.us") {
             "group"
@@ -299,10 +524,10 @@ impl TaskExecutor {
             format!("sched_{}", task.id),
             now_epoch,
         );
-        let _ = session_store.create_turn_capability(&sched_cap).await;
+        let _ = ctx.session_store.create_turn_capability(&sched_cap).await;
 
         match agent
-            .execute_with_capability(None, &prompt, Some(&sched_cap))
+            .execute_with_capability_and_timeout(None, &prompt, Some(&sched_cap), Some(ctx.task_timeout))
             .await
         {
             Ok(res) => {
@@ -313,7 +538,8 @@ impl TaskExecutor {
                         || clean_res.contains("503")
                         || clean_res.contains("quota");
                     let actual_target = if is_story && is_error_output {
-                        persona_engine
+                        ctx.persona_engine
+                            .as_ref()
                             .and_then(|p| p.primary_admin_jid())
                             .unwrap_or(&task.target_jid)
                     } else {
@@ -326,15 +552,13 @@ impl TaskExecutor {
                         ("success", None)
                     };
 
-                    let preview = if clean_res.len() > 300 {
-                        &clean_res[..300]
-                    } else {
-                        clean_res
-                    };
-                    let _ = session_store
+                    let preview = truncate_chars(clean_res, 300);
+                    let _ = ctx
+                        .session_store
                         .update_scheduled_task_result(task.id, status, err_msg, duration)
                         .await;
-                    let _ = session_store
+                    let _ = ctx
+                        .session_store
                         .record_scheduled_task_run(
                             task.id,
                             &task.title,
@@ -342,12 +566,13 @@ impl TaskExecutor {
                             status,
                             duration,
                             err_msg,
-                            Some(preview),
+                            Some(&preview),
                         )
                         .await;
 
                     let actual_outcome = if is_error_output { 0.0 } else { 1.0 };
-                    let _ = session_store
+                    let _ = ctx
+                        .session_store
                         .resolve_metacognitive_prediction(
                             &pred_id,
                             actual_outcome,
@@ -368,7 +593,7 @@ impl TaskExecutor {
                         return;
                     }
 
-                    // Check for Internal Silent or Silent Skip / No-Op protocol: [NO_SEND], [SKIP], [SILENT], [SKIP_MESSAGE]
+                    // Check for Internal Silent or Silent Skip / No-Op protocol
                     let is_silent_skip = is_internal_silent
                         || clean_res.contains("[NO_SEND]")
                         || clean_res.contains("[SKIP]")
@@ -388,7 +613,8 @@ impl TaskExecutor {
                         return;
                     }
 
-                    if let Err(e) = whatsapp
+                    if let Err(e) = ctx
+                        .whatsapp
                         .send_text_with_session(
                             actual_target,
                             clean_res,
@@ -403,15 +629,18 @@ impl TaskExecutor {
                             "Successfully executed and delivered AgentAction task #{} to {}",
                             task.id, actual_target
                         );
-                        let _ = session_store
+                        let _ = ctx
+                            .session_store
                             .record_message(actual_target, "bot", clean_res, true)
                             .await;
                     }
                 } else {
-                    let _ = session_store
+                    let _ = ctx
+                        .session_store
                         .update_scheduled_task_result(task.id, "success", None, duration)
                         .await;
-                    let _ = session_store
+                    let _ = ctx
+                        .session_store
                         .record_scheduled_task_run(
                             task.id,
                             &task.title,
@@ -422,7 +651,8 @@ impl TaskExecutor {
                             None,
                         )
                         .await;
-                    let _ = session_store
+                    let _ = ctx
+                        .session_store
                         .resolve_metacognitive_prediction(&pred_id, 1.0, duration, None)
                         .await;
                 }
@@ -434,10 +664,12 @@ impl TaskExecutor {
                     "Agent failed to execute scheduled task #{}: {}",
                     task.id, e
                 );
-                let _ = session_store
+                let _ = ctx
+                    .session_store
                     .update_scheduled_task_result(task.id, "failed", Some(&err_str), duration)
                     .await;
-                let _ = session_store
+                let _ = ctx
+                    .session_store
                     .record_scheduled_task_run(
                         task.id,
                         &task.title,
@@ -449,7 +681,8 @@ impl TaskExecutor {
                     )
                     .await;
 
-                let _ = session_store
+                let _ = ctx
+                    .session_store
                     .resolve_metacognitive_prediction(
                         &pred_id,
                         0.0,
@@ -458,54 +691,15 @@ impl TaskExecutor {
                     )
                     .await;
 
-                let admin_jid = persona_engine.and_then(|p| p.primary_admin_jid());
-
-                let time_str = persona_engine
-                    .map(|p| p.current_local_time_string())
-                    .unwrap_or_else(|| format!("Epoch: {}", now_epoch));
-
-                let target_kind = if is_story {
-                    "Status / Story WhatsApp (`status@broadcast`)".to_string()
-                } else if task.target_jid.ends_with("@g.us") {
-                    format!("Grup WhatsApp (`{}`)", task.target_jid)
-                } else {
-                    format!("Obrolan Pribadi (`{}`)", task.target_jid)
-                };
-
-                let full_err_report = format!(
-                    "🚨 *Laporan Kegagalan Tugas Terjadwal Aina*\n\n\
-                     • *ID Tugas*: #{}\n\
-                     • *Judul*: *{}*\n\
-                     • *Target Asli*: {}\n\
-                     • *Waktu Kejadian*: {}\n\
-                     • *Durasi Eksekusi*: {:.2} detik\n\n\
-                     📋 *Rincian Lengkap Masalah / Error:*\n\
-                     ```\n{}\n```\n\n\
-                     💡 _Sesuai kebijakan privasi sistem, pesan error kegagalan ini tidak dikirimkan ke grup ataupun status WhatsApp, melainkan hanya dilaporkan langsung ke WhatsApp Companion/Admin._",
-                    task.id,
-                    task.title,
-                    target_kind,
-                    time_str,
+                report_failure_to_admin(
+                    task,
+                    &ctx.whatsapp,
+                    ctx.persona_engine.as_ref(),
+                    now_epoch,
                     duration,
-                    err_str.trim()
-                );
-
-                if let Some(admin) = admin_jid {
-                    let _ = whatsapp
-                        .send_text_with_session(admin, &full_err_report, None, SessionRole::PrimaryBot)
-                        .await;
-                } else if !task.target_jid.ends_with("@g.us")
-                    && !task.target_jid.contains("@broadcast")
-                {
-                    let _ = whatsapp
-                        .send_text_with_session(&task.target_jid, &full_err_report, None, SessionRole::PrimaryBot)
-                        .await;
-                } else {
-                    warn!(
-                        "Suppressed failure notification to public target {} because admin_jid is not configured",
-                        task.target_jid
-                    );
-                }
+                    &err_str,
+                )
+                .await;
             }
         }
     }

@@ -81,12 +81,21 @@ for cfg in persona.md character.md activities.md organization.md activities.defa
     fi
 done
 
-# Ensure persistent Python environment across Coolify redeployments
+# Ensure persistent Python environment, Patchright/Playwright browsers, and uv cache across Coolify redeployments
 export PYTHONUSERBASE="/app/data/python-packages"
 mkdir -p "$PYTHONUSERBASE/bin" "$PYTHONUSERBASE/lib/python3.11/site-packages"
-export PATH="$PYTHONUSERBASE/bin:$PATH"
+export PATH="/app/data/bin:$PYTHONUSERBASE/bin:$PATH"
 export PIP_BREAK_SYSTEM_PACKAGES="1"
 mkdir -p /etc/pip && printf "[global]\nbreak-system-packages = true\nuser = true\n" > /etc/pip.conf
+
+mkdir -p /app/data/ms-playwright /app/data/cache/uv /root/.cache
+if [ -d "/root/.cache/ms-playwright" ] && [ ! -L "/root/.cache/ms-playwright" ]; then
+    cp -rn /root/.cache/ms-playwright/* /app/data/ms-playwright/ 2>/dev/null || true
+    rm -rf /root/.cache/ms-playwright
+fi
+ln -sfn /app/data/ms-playwright /root/.cache/ms-playwright
+export PLAYWRIGHT_BROWSERS_PATH="/app/data/ms-playwright"
+export UV_CACHE_DIR="/app/data/cache/uv"
 
 # Setup default Git author identity and authentication if GH_TOKEN is present
 git config --global user.name "${GIT_AUTHOR_NAME:-Aina}" 2>/dev/null || true
@@ -148,13 +157,19 @@ if [ -d "/app/skills" ]; then
     ln -sf /app/skills/skill-builder/scripts/skill_scaffolder.py /usr/local/bin/custom-skill 2>/dev/null || true
 fi
 
-# Sync user custom skills into workspace discovery directory
+# Link user custom skills into workspace discovery directory (atomic symlink avoids recursive cp -r nesting and split-brain)
 if [ -d "/app/data/custom-skills" ]; then
+    WS_SKILLS_DIR="${AGENT_WORKSPACE:-/app/workspaces/default}/.agents/skills"
+    mkdir -p "$WS_SKILLS_DIR"
     for skill_dir in /app/data/custom-skills/*; do
         if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
             skill_name=$(basename "$skill_dir")
-            cp -r "$skill_dir" "${AGENT_WORKSPACE:-/app/workspaces/default}/.agents/skills/$skill_name" 2>/dev/null || true
-            chmod -R +x "${AGENT_WORKSPACE:-/app/workspaces/default}/.agents/skills/$skill_name/scripts" 2>/dev/null || true
+            target_link="$WS_SKILLS_DIR/$skill_name"
+            if [ -L "$target_link" ] || [ -e "$target_link" ]; then
+                rm -rf "$target_link"
+            fi
+            ln -sfn "$skill_dir" "$target_link"
+            chmod -R +x "$skill_dir/scripts" 2>/dev/null || true
         fi
     done
 fi

@@ -142,6 +142,21 @@ pub trait AgentEnginePort: Send + Sync {
             .await
     }
 
+    /// Executes a prompt with verified turn capability and an explicit per-call hard timeout.
+    /// Used by autonomous scheduled tasks so a hung subprocess cannot stall indefinitely
+    /// even when interactive chat turns run with unlimited timeout (`0`).
+    async fn execute_with_capability_and_timeout(
+        &self,
+        conversation_id: Option<&str>,
+        prompt: &str,
+        capability: Option<&crate::core::domain::capability::TurnCapability>,
+        timeout_override: Option<std::time::Duration>,
+    ) -> anyhow::Result<AgentResponse> {
+        let _ = timeout_override;
+        self.execute_with_capability(conversation_id, prompt, capability)
+            .await
+    }
+
     /// Gets the current active default model name.
     async fn get_model(&self) -> String;
 

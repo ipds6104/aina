@@ -414,6 +414,7 @@ pub enum ScheduleAction {
         interval_secs: Option<i64>,
         active_tasks_by_sender: usize,
         max_tasks_for_staff: usize,
+        is_direct_command: bool,
     },
     /// Deleting an existing scheduled task (`aina schedule delete|rm|remove`).
     Delete {
@@ -497,7 +498,12 @@ pub fn evaluate_schedule(
             interval_secs,
             active_tasks_by_sender,
             max_tasks_for_staff,
+            is_direct_command,
         } => {
+            if *is_direct_command {
+                return PolicyDecision::deny("only_admin_may_schedule_direct_command");
+            }
+
             let target = target_jid.trim();
             let target_lower = target.to_ascii_lowercase();
 
@@ -817,6 +823,7 @@ mod tests {
                     interval_secs: None,
                     active_tasks_by_sender: 0,
                     max_tasks_for_staff: 10,
+                    is_direct_command: false,
                 },
                 1_001,
             )
@@ -836,10 +843,28 @@ mod tests {
                 interval_secs: None,
                 active_tasks_by_sender: 0,
                 max_tasks_for_staff: 10,
+                is_direct_command: false,
             },
             1_001,
         )
         .allowed);
+        // 2b. Staff direct_command denied (prevents scheduled shell privilege escalation)
+        assert_eq!(
+            evaluate_schedule(
+                &staff_dm,
+                &ScheduleAction::Add {
+                    target_jid: "628111@s.whatsapp.net".into(),
+                    schedule_type: "daily".into(),
+                    interval_secs: None,
+                    active_tasks_by_sender: 0,
+                    max_tasks_for_staff: 10,
+                    is_direct_command: true,
+                },
+                1_001,
+            )
+            .reason,
+            "only_admin_may_schedule_direct_command"
+        );
         // 3. Staff other person's DM denied
         assert_eq!(
             evaluate_schedule(
@@ -850,6 +875,7 @@ mod tests {
                     interval_secs: None,
                     active_tasks_by_sender: 0,
                     max_tasks_for_staff: 10,
+                    is_direct_command: false,
                 },
                 1_001,
             )
@@ -866,6 +892,7 @@ mod tests {
                     interval_secs: None,
                     active_tasks_by_sender: 0,
                     max_tasks_for_staff: 10,
+                    is_direct_command: false,
                 },
                 1_001,
             )
@@ -881,6 +908,7 @@ mod tests {
                 interval_secs: None,
                 active_tasks_by_sender: 2,
                 max_tasks_for_staff: 10,
+                is_direct_command: false,
             },
             1_001,
         )
@@ -895,6 +923,7 @@ mod tests {
                     interval_secs: None,
                     active_tasks_by_sender: 0,
                     max_tasks_for_staff: 10,
+                    is_direct_command: false,
                 },
                 1_001,
             )
@@ -911,6 +940,7 @@ mod tests {
                     interval_secs: Some(300),
                     active_tasks_by_sender: 0,
                     max_tasks_for_staff: 10,
+                    is_direct_command: false,
                 },
                 1_001,
             )
@@ -927,6 +957,7 @@ mod tests {
                     interval_secs: None,
                     active_tasks_by_sender: 10,
                     max_tasks_for_staff: 10,
+                    is_direct_command: false,
                 },
                 1_001,
             )
@@ -970,7 +1001,7 @@ mod tests {
             .reason,
             "staff_may_only_delete_own_schedule"
         );
-        // 9. Admin has unrestricted access (including status@broadcast & short intervals)
+        // 9. Admin has unrestricted access (including status@broadcast, direct_command & short intervals)
         let admin = cap(Authority::Admin, "628111@s.whatsapp.net", "direct");
         assert!(evaluate_schedule(
             &admin,
@@ -980,6 +1011,7 @@ mod tests {
                 interval_secs: Some(60),
                 active_tasks_by_sender: 99,
                 max_tasks_for_staff: 10,
+                is_direct_command: true,
             },
             1_001,
         )

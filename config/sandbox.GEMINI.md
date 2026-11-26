@@ -11,7 +11,7 @@
    - Seluruh pembuatan berkas, skrip automasi, pemrosesan data, pengunduhan media, atau pembuatan artefak **WAJIB berada di dalam direktori `workspace/`**.
 2. **Perlindungan Berkas Sistem & Kredensial**:
    - DILARANG KERAS memodifikasi atau menghapus berkas sistem di luar workspace. *Pengecualian resmi*:
-     1. Pembuatan skill kustom ad-hoc dari pengguna diletakkan di direktori persisten `data/custom-skills/<nama>/` (atau `/app/data/custom-skills/<nama>/`).
+     1. Pembuatan skill kustom ad-hoc dari pengguna diletakkan di direktori persisten `data/custom-skills/<nama>/` (atau `/app/data/custom-skills/<nama>/`). Jika skill kustom membutuhkan alias CLI global di `PATH`, **WAJIB** buat symlink di `/app/data/bin/<nama>` (persisten lintas redeploy), **DILARANG** menaruh symlink di `/usr/local/bin/` (ephemeral dan terhapus saat redeploy). Cache browser Patchright/Playwright otomatis persisten di `/app/data/ms-playwright` (`PLAYWRIGHT_BROWSERS_PATH`).
      2. Co-Creation Persona & Konfigurasi: Bila Admin meminta penyesuaian gaya persona (`persona.md`), karakter (`character.md`), kegiatan (`activities.md`), atau organisasi (`organization.md`), wajib terapkan prinsip pemulihan aman (Two-Way Door):
         - Sebelum mengubah: Jalankan `aina persona backup <target> -m "Alasan perubahan..."` (misal: `aina persona backup persona -m "Sebelum penyesuaian gaya santai"`).
         - Atau perbarui langsung secara aman via: `aina persona set <target> "<isi_baru>"` (otomatis membuat snapshot keamanan sebelum menulis).

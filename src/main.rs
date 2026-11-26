@@ -110,14 +110,27 @@ async fn main() -> anyhow::Result<()> {
         config.whatsmeow.bot_lid.clone(),
     ));
 
-    let scheduled_tick_usecase = Arc::new(ScheduledTickUseCase::new(
-        Arc::clone(&session_store) as _,
-        Arc::clone(&whatsapp) as _,
-        Some(Arc::clone(&agent_engine) as _),
-        Some(Arc::clone(&persona_engine)),
-        Some(std::path::PathBuf::from(&config.agent.workspace_dir)),
-        config.app.timezone_offset_hours,
-    ));
+    let scheduled_tick_usecase = Arc::new(
+        ScheduledTickUseCase::new(
+            Arc::clone(&session_store) as _,
+            Arc::clone(&whatsapp) as _,
+            Some(Arc::clone(&agent_engine) as _),
+            Some(Arc::clone(&persona_engine)),
+            Some(std::path::PathBuf::from(&config.agent.workspace_dir)),
+            config.app.timezone_offset_hours,
+        )
+        .with_runtime_limits(
+            config.scheduler.task_timeout_seconds,
+            config.scheduler.command_timeout_seconds,
+            config.scheduler.max_concurrent_tasks,
+            Some(core::usecases::scheduled_tick::CommandEnvConfig {
+                whatsmeow_base_url: config.whatsmeow.base_url.clone(),
+                whatsmeow_api_key: config.whatsmeow.api_key.clone(),
+                companion_base_url: config.whatsmeow.companion_base_url.clone(),
+                companion_api_key: config.whatsmeow.companion_api_key.clone(),
+            }),
+        ),
+    );
 
     // 3.5 Auto-Reconcile Baseline & Custom Activities
     let baseline_defs = crate::core::domain::load_default_baseline();
@@ -275,24 +288,30 @@ async fn main() -> anyhow::Result<()> {
     .with_graceful_shutdown(shutdown_signal())
     .await?;
 
-    // Zero-downtime graceful drain: wait up to 45s for in-flight WhatsApp AI turns to finish
-    // delivering replies after SIGTERM (pairs with Coolify stop_grace_period=60s).
+    // Zero-downtime graceful drain: wait up to 45s for in-flight WhatsApp AI turns and scheduled jobs
+    // to finish cleanly after SIGTERM (pairs with Coolify stop_grace_period=60s).
     let drain_deadline = std::time::Instant::now() + std::time::Duration::from_secs(45);
     loop {
-        let remaining = state.active_tasks.lock().await.len();
+        let remaining_chat = state.active_tasks.lock().await.len();
+        let remaining_sched = scheduled_tick_usecase.in_flight_count().await;
+        let remaining = remaining_chat + remaining_sched;
         if remaining == 0 {
             break;
         }
         if std::time::Instant::now() >= drain_deadline {
             tracing::warn!(
-                "Graceful shutdown drain deadline reached with {} active task(s) still running; exiting.",
-                remaining
+                "Graceful shutdown drain deadline reached with {} active task(s) (chat={}, scheduled={}) still running; exiting.",
+                remaining,
+                remaining_chat,
+                remaining_sched
             );
             break;
         }
         info!(
-            "Graceful shutdown: waiting for {} in-flight agent task(s) to finish...",
-            remaining
+            "Graceful shutdown: waiting for {} in-flight task(s) (chat={}, scheduled={}) to finish...",
+            remaining,
+            remaining_chat,
+            remaining_sched
         );
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }

@@ -49,11 +49,12 @@ CLI `aina schedule` secara deterministik memverifikasi otoritas pengirim tur akt
 ### SOP 1: Menjadwalkan Pesan ke Chat / DM / Grup
 Gunakan sintaks native CLI `aina schedule add` (CUKUP 1 KALI, DILARANG DOUBLE ADD):
 ```bash
-aina schedule add --title "<judul>" --type <notify|agent> --target "<sender_jid>" --when <once|daily|workdays|monthly|last_workday|last_workday_minus_1|interval> --time "<waktu>" --payload "<pesan_atau_prompt>"
+aina schedule add --title "<judul>" --type <notify|agent|command> --target "<sender_jid>" --when <once|daily|workdays|monthly|last_workday|last_workday_minus_1|interval> --time "<waktu>" --payload "<pesan_atau_prompt_atau_perintah>"
 ```
 * **Pilihan `--type`**:
-  * `notify`: Mengirimkan pesan teks langsung persis seperti yang tertulis di `--payload` (0 beban komputasi/LLM). Sangat direkomendasikan untuk alarm/pengingat terjadwal.
-  * `agent`: Memicu LLM Aina untuk menganalisis dan berpikir pada jam tersebut sebelum mengirimkan hasilnya. Cocok untuk riset/rekapitulasi otomatis.
+  * `notify`: Mengirimkan pesan teks langsung persis seperti yang tertulis di `--payload` (0 beban komputasi/LLM, jalur cepat non-blocking). Sangat direkomendasikan untuk alarm/pengingat terjadwal.
+  * `command` *(Khusus Admin)*: Mengeksekusi perintah skrip shell deterministik langsung di workspace tanpa memanggil LLM (bypass `agy`, 0 token, hard timeout default 180 detik dengan process-group kill). Sangat direkomendasikan untuk tugas monitoring statis 1 perintah seperti screenshot Google Sheet berkala. Output kegagalan hanya dikirim ke Admin DM.
+  * `agent`: Memicu LLM Aina untuk menganalisis, mencari web, dan berpikir pada jam tersebut (dijalankan secara concurrent dengan hard timeout default 600 detik agar tidak pernah menyandera jadwal lain). Cocok untuk riset/kurasi konten dinamis.
 * **Pilihan `--when` & `--time` (Gunakan yang Paling Efisien Sesuai Kebutuhan)**:
   * `--when once --time "22:30"` (pukul 22:30 hari ini/terdekat).
   * `--when once --time "2026-10-30 08:00"` (spesifik tanggal dan jam tertentu di masa depan).

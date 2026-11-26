@@ -34,7 +34,7 @@ impl SchedulerRunner {
             ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             loop {
                 ticker.tick().await;
-                if let Err(e) = self.usecase.execute().await {
+                if let Err(e) = self.usecase.execute_non_blocking().await {
                     error!("Scheduler tick encountered error: {:?}", e);
                 }
             }

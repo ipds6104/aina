@@ -38,7 +38,10 @@ Activate this skill immediately whenever:
 > 2. **Wajib Simpan di `data/custom-skills/<nama_skill>/`**:
 >    Folder ini terhubung langsung ke persistent volume Docker `aina_data:/app/data/custom-skills/`. Data di sini **TIDAK AKAN HILANG** saat container di-redeploy, di-restart, atau di-rebuild di Coolify.
 > 3. **Discovery Otomatis AGY**:
->    Folder ini telah terdaftar secara bawaan di `.agents/skills.json` sehingga mesin Antigravity langsung mengenali skill baru tanpa perlu restart server!
+>    Folder ini telah terdaftar secara bawaan di `.agents/skills.json` dan di-symlink langsung ke `.agents/skills/<nama_skill>` (single source of truth) sehingga mesin Antigravity langsung mengenali skill baru tanpa perlu restart server!
+> 4. **Symlink CLI & Cache Browser Persisten**:
+>    - Jika custom skill menyediakan perintah CLI singkat (misal `frontier-ai-digest`, `youtube-transcript`), **WAJIB** buat symlink di `/app/data/bin/<nama_cli>` (persisten lintas redeploy dan otomatis di `PATH`), **DILARANG** membuat symlink di `/usr/local/bin/` (ephemeral).
+>    - Binary browser Patchright/Playwright otomatis persisten di `/app/data/ms-playwright` (`PLAYWRIGHT_BROWSERS_PATH`).
 
 ---
 

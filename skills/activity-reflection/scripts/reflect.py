@@ -609,9 +609,9 @@ def generate_adaptation_suggestions(
 
     suggestions = []
 
-    # 1. Modifikasi Status Senja / Sore
+    # 1. Modifikasi Status Senja / Sore (prefix [Konteks Harian] agar idempotent saat replace)
     senja_note = (
-        f"Kondisi cuaca Pontianak sore ini: {weather_cond} ({temp}°C). "
+        f"[Konteks Harian] Kondisi cuaca Pontianak sore ini: {weather_cond} ({temp}°C). "
         f"Jika santai sore, nikmati {food['name']} ({food['desc']}) atau mampir ke {dest['name']}. "
         f"Gunakan busana `{outfit['preset']}` agar serasi dengan suasana."
     )
@@ -625,7 +625,7 @@ def generate_adaptation_suggestions(
     # 2. Modifikasi Status Siang jika Terik
     if temp >= 30.0 or not is_rain:
         siang_note = (
-            f"Cuaca Pontianak siang ini terik ({temp}°C). Jangan lupa rehat sejenak dan hidrasi dengan {food['name']} dingin. "
+            f"[Konteks Harian] Cuaca Pontianak siang ini terik ({temp}°C). Jangan lupa rehat sejenak dan hidrasi dengan {food['name']} dingin. "
             f"Tetap sejuk dan semangat selesaikan tugas kawan-kawan."
         )
         suggestions.append({
@@ -637,7 +637,7 @@ def generate_adaptation_suggestions(
 
     # 3. Modifikasi Status Malam untuk Stargaze / Warkop
     malam_note = (
-        f"Suasana malam khatulistiwa: {weather_cond}. Refleksi tenang di {dest['name']} "
+        f"[Konteks Harian] Suasana malam khatulistiwa: {weather_cond}. Refleksi tenang di {dest['name']} "
         f"sambil mengenakan {outfit['preset']} ditemani aroma sedap Kopi Saring Pontianak."
     )
     suggestions.append({

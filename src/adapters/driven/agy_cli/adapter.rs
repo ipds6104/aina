@@ -2,6 +2,7 @@
 
 use crate::core::domain::capability::Authority;
 use crate::core::ports::{AgentEnginePort, AgentResponse};
+use crate::core::usecases::scheduled_tick::{run_command_with_pgroup_timeout, SubprocessOutcome};
 use async_trait::async_trait;
 use serde::Deserialize;
 use std::path::PathBuf;
@@ -180,7 +181,7 @@ impl AntigravityCliAdapter {
 }
 
 impl AntigravityCliAdapter {
-    /// Core execution path shared by both `AgentEnginePort` entry points.
+    /// Core execution path shared by all `AgentEnginePort` entry points.
     async fn run_agent(
         &self,
         conversation_id: Option<&str>,
@@ -189,6 +190,7 @@ impl AntigravityCliAdapter {
         turn_token: Option<&str>,
         turn_started_epoch: Option<i64>,
         authority: Authority,
+        timeout_override: Option<Duration>,
     ) -> anyhow::Result<AgentResponse> {
         let active_model = match model_override {
             Some(m) if !m.trim().is_empty() => resolve_model_name(m)?,
@@ -240,11 +242,12 @@ impl AntigravityCliAdapter {
                 None
             };
 
-            let is_unlimited = self.timeout_duration.is_zero() || self.timeout_duration.as_secs() >= 86400;
+            let effective_timeout = timeout_override.unwrap_or(self.timeout_duration);
+            let is_unlimited = effective_timeout.is_zero() || effective_timeout.as_secs() >= 86400;
             let print_timeout_str = if is_unlimited {
                 "24h".to_string()
             } else {
-                let print_timeout_sec = self.timeout_duration.as_secs().saturating_sub(5).max(30);
+                let print_timeout_sec = effective_timeout.as_secs().saturating_sub(5).max(15);
                 format!("{}s", print_timeout_sec)
             };
 
@@ -304,43 +307,49 @@ impl AntigravityCliAdapter {
             }
 
             let start_instant = std::time::Instant::now();
-            let output_res: Result<std::io::Result<std::process::Output>, tokio::time::error::Elapsed> =
-                if self.timeout_duration.is_zero() {
-                    Ok(cmd.output().await)
-                } else {
-                    tokio::time::timeout(self.timeout_duration, cmd.output()).await
-                };
-
-            let output = match output_res {
-                Ok(Ok(out)) => out,
-                Ok(Err(e)) => {
+            let timeout_opt = if effective_timeout.is_zero() {
+                None
+            } else {
+                Some(effective_timeout)
+            };
+            let outcome = match run_command_with_pgroup_timeout(&mut cmd, timeout_opt).await {
+                Ok(out) => out,
+                Err(e) => {
                     error!("Failed to spawn Antigravity CLI binary: {}", e);
                     anyhow::bail!("Failed to execute Antigravity CLI binary: {}", e);
                 }
-                Err(_) => {
+            };
+
+            let output = match outcome {
+                SubprocessOutcome::Completed(out) => out,
+                SubprocessOutcome::TimedOut { elapsed, .. } => {
                     let acc_desc = active_acc.as_ref()
                         .map(|a| format!("#{} ({})", a.id, a.masked_email().unwrap_or_else(|| a.label.clone())))
                         .unwrap_or_else(|| "unknown".to_string());
                     error!(
-                        "Antigravity CLI timed out after {}s on {} (attempt {}/{})",
-                        self.timeout_duration.as_secs(),
+                        "Antigravity CLI timed out after {}s on {} (attempt {}/{}; process group terminated)",
+                        elapsed.as_secs(),
                         acc_desc,
                         attempt + 1,
                         max_attempts
                     );
-                    if let Some(ref acc) = active_acc {
-                        self.pool_manager.mark_cooldown(acc.id, Duration::from_secs(300), Some("CLI Execution Timeout (300s)")).await;
-                    }
-                    if attempt + 1 < max_attempts {
-                        continue;
+                    if timeout_override.is_none() {
+                        if let Some(ref acc) = active_acc {
+                            self.pool_manager
+                                .mark_cooldown(acc.id, Duration::from_secs(300), Some("CLI Execution Timeout (300s)"))
+                                .await;
+                        }
+                        if attempt + 1 < max_attempts {
+                            continue;
+                        }
                     }
                     let acc_tag = active_acc.as_ref()
                         .map(|a| format!("[Akun #{} ({})] ", a.id, a.masked_email().unwrap_or_else(|| a.label.clone())))
                         .unwrap_or_default();
                     anyhow::bail!(
-                        "{}Agent engine timed out after {} seconds.",
+                        "{}Agent engine timed out after {} seconds (process group terminated).",
                         acc_tag,
-                        self.timeout_duration.as_secs()
+                        elapsed.as_secs()
                     );
                 }
             };
@@ -499,7 +508,7 @@ impl AgentEnginePort for AntigravityCliAdapter {
     ) -> anyhow::Result<AgentResponse> {
         // Internal daemon callers (scheduled tasks / admin simulator) get primary bot access
         // without exposing personal Companion credentials.
-        self.run_agent(conversation_id, prompt, model_override, None, None, Authority::Staff)
+        self.run_agent(conversation_id, prompt, model_override, None, None, Authority::Staff, None)
             .await
     }
 
@@ -520,6 +529,27 @@ impl AgentEnginePort for AntigravityCliAdapter {
             capability.map(|c| c.token.as_str()),
             capability.map(|c| c.issued_at),
             authority,
+            None,
+        )
+        .await
+    }
+
+    async fn execute_with_capability_and_timeout(
+        &self,
+        conversation_id: Option<&str>,
+        prompt: &str,
+        capability: Option<&crate::core::domain::capability::TurnCapability>,
+        timeout_override: Option<Duration>,
+    ) -> anyhow::Result<AgentResponse> {
+        let authority = capability.map(|c| c.authority).unwrap_or(Authority::Guest);
+        self.run_agent(
+            conversation_id,
+            prompt,
+            None,
+            capability.map(|c| c.token.as_str()),
+            capability.map(|c| c.issued_at),
+            authority,
+            timeout_override,
         )
         .await
     }

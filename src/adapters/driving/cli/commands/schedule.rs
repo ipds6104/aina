@@ -12,7 +12,7 @@ pub async fn handle_schedule(args: &[String]) -> anyhow::Result<()> {
             r#"Manajemen Tugas & Riset Terjadwal (Aina Scheduled Wake-up & Reminders):
     aina schedule list [--all] [--json]
     aina schedule get <id> [--json]
-    aina schedule add --title <judul> --type <agent|notify> --target <jid> --when <once|daily|workdays|monthly|last_workday|last_workday_minus_1|interval> --time <waktu> --payload <isi> [--json]
+    aina schedule add --title <judul> --type <agent|notify|command> --target <jid> --when <once|daily|workdays|monthly|last_workday|last_workday_minus_1|interval> --time <waktu> --payload <isi> [--json]
     aina schedule delete|rm|remove <id> [--json]
     aina schedule runs [--limit <n>] [--json]
     aina schedule diag [--json]
@@ -96,6 +96,7 @@ Pilihan --when & --time:
                     let type_str = match t.task_type {
                         crate::core::domain::ScheduledTaskType::AgentAction => "Riset / Tindakan Agentik",
                         crate::core::domain::ScheduledTaskType::DirectNotification => "Pesan Pengingat Langsung",
+                        crate::core::domain::ScheduledTaskType::DirectCommand => "Perintah Skrip Deterministik (Bypass LLM)",
                     };
                     println!("• [#ID: {}] {} ({})", t.id, t.title, status_str);
                     println!("  Tipe      : {}", type_str);
@@ -248,6 +249,7 @@ Pilihan --when & --time:
                     interval_secs,
                     active_tasks_by_sender,
                     max_tasks_for_staff,
+                    is_direct_command: task_type == crate::core::domain::ScheduledTaskType::DirectCommand,
                 },
                 now_epoch,
             );
@@ -572,6 +574,9 @@ fn human_denial_hint(reason: &str) -> String {
         }
         "only_admin_may_schedule_status_or_system" => {
             "Penjadwalan Status WhatsApp (`status@broadcast`) atau tugas internal sistem dikhususkan untuk Admin.".to_string()
+        }
+        "only_admin_may_schedule_direct_command" => {
+            "Penjadwalan tipe `command` (eksekusi skrip shell langsung) dikhususkan untuk Admin demi keamanan sistem.".to_string()
         }
         "staff_may_not_schedule_other_user_dm" => {
             "Staf hanya dapat memasang jadwal DM untuk nomornya sendiri (bukan nomor pribadi orang lain).".to_string()
