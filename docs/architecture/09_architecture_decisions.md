@@ -1,8 +1,8 @@
 # 9. Keputusan Arsitektur (Architecture Decisions)
 
 > [!INFO] **Architecture Provenance & Freshness**
-> - **Verified Commit**: `17f951a` (branch: `main`)
-> - **Verified Timestamp**: `2026-11-21T10:53:50+07:00`
+> - **Verified Commit**: `0401caa` (branch: `main`)
+> - **Verified Timestamp**: `2026-11-26T13:28:18+07:00`
 > - **Tracked Paths**: `src/core/domain/capability.rs`, `src/core/domain/audit/`, `src/adapters/driven/sqlite_store/audit.rs`
 > - **Drift Status**: `verified`
 
